@@ -15,9 +15,7 @@ public class SecurityConfig {
   public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
     http
       .authorizeHttpRequests(auth -> auth
-        .requestMatchers("/", "/login", "/webjars/**", "/css/**", "/js/**", "/images/**").permitAll()
-        .requestMatchers("/admin/**").authenticated()
-        .anyRequest().authenticated()
+        .requestMatchers("/", "/login", "/webjars/**", "/assets/**").permitAll().anyRequest().authenticated()
       )
       .formLogin(login -> login
         .loginPage("/login")                // GET: muestra la vista de login (pública)
