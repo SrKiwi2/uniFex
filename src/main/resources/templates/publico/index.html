@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>Página pública</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link th:href="@{/webjars/bootstrap/5.3.3/css/bootstrap.min.css}" rel="stylesheet"/>
+</head>
+<body class="bg-light">
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="m-0">Página pública</h3>
+    <a class="btn btn-outline-primary btn-sm" th:href="@{/login}">Ir al Login</a>
+  </div>
+
+  <div th:if="${ok}" class="alert alert-success" th:text="${ok}"></div>
+
+  <div class="card shadow-sm">
+    <div class="card-header">Formulario Persona (demo)</div>
+    <div class="card-body">
+      <form th:action="@{/persona}" method="post" th:object="${personaForm}">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Nombre</label>
+            <input class="form-control" th:field="*{nombre}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Paterno</label>
+            <input class="form-control" th:field="*{paterno}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Materno</label>
+            <input class="form-control" th:field="*{materno}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">CI</label>
+            <input class="form-control" th:field="*{ci}">
+          </div>
+          <div class="col-md-5">
+            <label class="form-label">Correo</label>
+            <input class="form-control" type="email" th:field="*{correo}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Celular</label>
+            <input class="form-control" th:field="*{celular}">
+          </div>
+        </div>
+        <div class="text-end mt-3">
+          <button class="btn btn-success">Enviar (demo)</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script th:src="@{/webjars/bootstrap/5.3.3/js/bootstrap.bundle.min.js}"></script>
+</body>
+</html>

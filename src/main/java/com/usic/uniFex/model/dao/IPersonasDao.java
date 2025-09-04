@@ -28,14 +28,5 @@ public interface IPersonasDao extends JpaRepository <Persona, Long>{
     @Query("SELECT p FROM Persona p WHERE p.nombre = ?1 AND p.estado = 'ACTIVO'")
     Persona buscarPersonaNombre(String nombre);
 
-    @Query("""
-        select p
-        from Persona p
-        left join fetch p.nacionalidad
-        left join fetch p.genero
-        where p.idPersona = :id
-    """)
-    Optional<Persona> findByIdWithNacionalidadGenero(@Param("id") Long id);
-
     Optional<Persona> findFirstByCi(String ci);
 }

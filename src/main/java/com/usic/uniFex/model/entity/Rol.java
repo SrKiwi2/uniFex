@@ -6,17 +6,12 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "persona")
-@Setter
-@Getter
-public class Persona extends AuditoriaConfig{
+@Table(name = "rol")
+@Setter @Getter
+public class Rol extends AuditoriaConfig{
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     private String nombre;
-    private String paterno;
-    private String materno;
-    private String ci;
-    private String correo;
-    private String celular;
+    private String descripcion;
 }

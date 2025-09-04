@@ -3,11 +3,13 @@ package com.usic.uniFex.model.IServiceImp;
 import java.util.*;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 import com.usic.uniFex.model.IService.IPersonaService;
 import com.usic.uniFex.model.dao.IPersonasDao;
 import com.usic.uniFex.model.entity.Persona;
 
+@Service
 public class PersonaServiceImpl implements IPersonaService {
     @Autowired
     private IPersonasDao personaDao;
@@ -60,11 +62,6 @@ public class PersonaServiceImpl implements IPersonaService {
     @Override
     public Persona buscarPersonaNombre(String nombre) {
         return personaDao.buscarPersonaNombre(nombre);
-    }
-
-    @Override
-    public Optional<Persona> findByIdWithNacionalidadGenero(Long id) {
-        return personaDao.findByIdWithNacionalidadGenero(id);
     }
 
     @Override
