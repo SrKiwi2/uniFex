@@ -22,6 +22,7 @@ public class SecurityConfig {
             .requestMatchers("/",
             "/admin/**",
             "/iniciar-sesion/**",
+            "/cerrar_sesion",
             "/assets/**")
             .permitAll()
             .anyRequest().authenticated()
