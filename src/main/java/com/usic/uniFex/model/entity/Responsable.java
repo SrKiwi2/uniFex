@@ -14,6 +14,6 @@ public class Responsable extends AuditoriaConfig{
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "id_responsable")
+    @JoinColumn(name = "id_persona")
     private Persona persona;
 }

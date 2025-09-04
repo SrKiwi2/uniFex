@@ -18,6 +18,6 @@ public class Entidad extends AuditoriaConfig{
     private String descripcion;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "id_responsable")
-    private Responsable responsable;
+    @JoinColumn(name = "id_tipo_entidad")
+    private TipoEntidad tipoEntidad;
 }

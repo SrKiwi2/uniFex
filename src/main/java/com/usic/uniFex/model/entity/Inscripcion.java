@@ -16,14 +16,13 @@ public class Inscripcion extends AuditoriaConfig{
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "id_feria")
-    private Feria feria;
+    @JoinColumn(name = "id_puesto")
+    private Puesto puesto;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "id_responsable")
+    @JoinColumn(name = "id_entidad")
     private Entidad entidad;
     
-    private LocalDateTime fechaRegistro;
-
+    private LocalDateTime fechaCompra;
     private String inscripcionEstado;
 }

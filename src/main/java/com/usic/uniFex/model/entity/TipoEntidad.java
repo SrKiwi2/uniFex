@@ -1,4 +1,5 @@
 package com.usic.uniFex.model.entity;
+import java.math.BigDecimal;
 
 import com.usic.uniFex.Config.AuditoriaConfig;
 
@@ -6,14 +7,14 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "categoria")
+@Table(name = "tipo_entidad")
 @Setter
 @Getter
-public class Categoria extends AuditoriaConfig{
+public class TipoEntidad extends AuditoriaConfig{
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String nombre;
-    private String descripcion;
-    private String color;
+    private String nombre; //microEmpresa macroEmpresa
+    private BigDecimal precio; //costo por tipo de entidad
+    
 }
