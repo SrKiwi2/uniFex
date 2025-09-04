@@ -1,0 +1,394 @@
+<div th:fragment="script">
+    <!-- Librerías Básicas -->
+    <script src="../../assets/vendor/libs/jquery/jquery.js"></script>
+    <!-- <script src="../../assets/vendor/libs/popper/popper.js"></script> -->
+
+    <!-- Bootstrap -->
+    <script src="../../assets/vendor/js/bootstrap.js"></script>
+
+    <!-- Otras Librerías y Plugins -->
+    <script src="../../assets/vendor/libs/node-waves/node-waves.js"></script>
+    <script src="../../assets/vendor/libs/perfect-scrollbar/perfect-scrollbar.js"></script>
+    <script src="../../assets/vendor/libs/hammer/hammer.js"></script>
+    <script src="../../assets/vendor/libs/i18n/i18n.js"></script>
+    <script src="../../assets/vendor/libs/typeahead-js/typeahead.js"></script>
+    <script src="../../assets/vendor/js/menu.js"></script>
+
+    <!-- Vendors JS -->
+    <script src="../../assets/vendor/libs/select2/select2.js"></script>
+    <script src="../../assets/vendor/libs/tagify/tagify.js"></script>
+    <script src="../../assets/vendor/libs/bootstrap-select/bootstrap-select.js"></script>
+    <script src="../../assets/vendor/libs/bloodhound/bloodhound.js"></script>
+    <script src="../../assets/vendor/libs/autosize/autosize.js"></script>
+    <script src="../../assets/vendor/libs/cleavejs/cleave.js"></script>
+    <script src="../../assets/vendor/libs/cleavejs/cleave-phone.js"></script>
+    <script src="../../assets/vendor/libs/bootstrap-maxlength/bootstrap-maxlength.js"></script>
+    <script src="../../assets/vendor/libs/jquery-repeater/jquery-repeater.js"></script>
+    <script src="../../assets/js/forms-extras.js"></script>
+
+    <!-- moment JS -->
+    <script src="../../assets/vendor/libs/moment/moment.js"></script>
+
+    <!-- Cleave.js -->
+    <script src="../../assets/vendor/libs/cleavejs/cleave.js"></script>
+    <script src="../../assets/vendor/libs/cleavejs/cleave-phone.js"></script>
+
+    <!-- form-validacion -->
+
+    <!-- <script src="../../assets/vendor/libs/@form-validation/popular.js"></script> -->
+    <script src="../../assets/vendor/libs/@form-validation/bootstrap5.js"></script>
+    <script src="../../assets/vendor/libs/@form-validation/auto-focus.js"></script>
+
+    <!-- Scripts Principales -->
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/forms-selects.js"></script>
+    <!-- <script src="../../assets/js/forms-tagify.js"></script> -->
+    <script src="../../assets/js/forms-typeahead.js"></script>
+    <!-- <script src="../../assets/js/form-validation.js"></script> -->
+    <script src="../../assets/js/form-layouts.js"></script>
+    <!-- <script src="../../assets/js/ui-modals.js"></script> -->
+
+    <!-- Scripts de Tablas y DataTables -->
+    <script src="../../assets/vendor/libs/datatables-bs5/datatables-bootstrap5.js"></script>
+    <!-- <script src="../../assets/js/tables-datatables-basic.js"></script> -->
+    <script src="../../assets/js/tables-datatables-extensions.js"></script>
+
+    <script src="../../assets/js/ui-popover.js"></script>
+
+    <script src="../../assets/js/sweetalert2.all.min.js"></script>
+    
+    <!-- Scripts de fragmentos de alert que se usa en los modulos -->
+    <script src="../../assets/vendor/js/fragment.js"></script>
+
+    <!-- SCRIPT CREADOS PROPIOS -->
+    <script src="../../assets/js/login_publico.js"></script>
+    <script src="../../assets/js/config_public.js"></script>
+    <script src="../../assets/js/p-asignacion.js"></script>
+    <script src="../../assets/js/p-transferencia.js"></script>
+    <script src="../../assets/js/p-ajeno.js"></script>
+    <script src="../../assets/js/p-baja.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <script src="../../assets/js/p-scanner.js"></script>
+
+
+
+    <!-- CONFIGURACIÓN SIDEBAR -->
+    <script>
+        $.ajaxSetup({
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+
+        
+        
+        var botonPulsado;
+        $(document).ready(function () {
+
+            // ventana por defecto al iniciar sesión
+            if (document.body.dataset.ctx === "admin" && $("#contenido").length) {
+                cargarContenido("/adm/vista-administrador");
+            }
+            botonPulsado = document.getElementById("opcion_admin");
+            botonPulsado.classList.add("active");
+
+            // menú de rol
+            $("#opcion_rol").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/rol/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_rol");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            // menú de usuario
+            $("#opcion_usuario").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/usuario/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_usuario");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            // menú de persona
+            $("#opcion_persona").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/persona/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_persona");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+
+            $("#opcion_nacionalidad").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/nacionalidad/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_nacionalidad");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            $("#opcion_genero").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/genero/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_genero");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            $("#opcion_entidad").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/entidad/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_entidad");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            $("#opcion_municipio").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/municipio/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_municipio");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            $("#opcion_predio").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/predio/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_predio");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            $("#opcion_oficina").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/oficina/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_oficina");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            $("#opcion_activo").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/activo/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_activo");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            $("#opcion_contable").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/grupoc/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_contable");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            $("#opcion_auxiliar").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/auxiliar/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_auxiliar");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            $("#opcion_of").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/organismo/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_of");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            $("#opcion_estadoA").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/estadoa/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_estadoA");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            $("#opcion_responsable").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/responsable/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_responsable");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            //seguimienos
+
+            $("#opcion_iaa").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/seguimiento-activo/vista_ingreso_ajeno");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_iaa");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            $("#opcion_aan").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/seguimiento-activo/vista_activos_nuevos");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_aan");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            $("#opcion_ta").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/seguimiento-activo/vista_transferencia_activos");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_ta");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            function cargarContenido(url) {
+
+                $.ajax({
+                    url: "/adm/cargar-datos",
+                    method: "GET",
+                    success: function () {
+
+                        $("#contenido").html(`
+                            <div class="d-flex justify-content-center">
+                                <div class="spinner-border m-5 text-secondary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>`);
+
+                        $.ajax({
+                            url: url,
+                            method: "GET",
+                            success: function (data) {
+                                $("#contenido").html(data);
+                            },
+                            error: function (xhr) {
+                                console.error('Error en la solicitud:', xhr);
+                            }
+                        });
+                    },
+                    error: function (xhr) {
+                        if (xhr.status === 401) {
+                            Swal.fire({
+                                title: 'Sesión expirada',
+                                text: 'Tu sesión ha expirado. Por favor, inicia sesión nuevamente.',
+                                icon: 'warning',
+                                confirmButtonText: 'Ir al login'
+                            }).then((result) => {
+                                if (result.isConfirmed) {
+                                    window.location.href = '/';
+                                }
+                            });
+                        }
+                    }
+                });
+            }
+        });
+    </script>
+</div>
