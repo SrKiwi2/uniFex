@@ -1,0 +1,231 @@
+/* ANIMACION DEL ENCABEZADO*/
+@keyframes fadeSlideIn {
+    0% {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Asegura que SweetAlert2 quede encima del modal de Bootstrap */
+.swal2-container {
+    z-index: 20000 !important;
+}
+
+
+.animated-card {
+    animation: fadeSlideIn 1s ease-out;
+}
+
+.logo-hover:hover {
+    transform: scale(1.08);
+}
+
+/* PARA LOS BOTONES DE R, T, I Y B*/
+.btn-section {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.btn-lg-custom {
+    font-size: 1.1rem;
+    font-weight: 600;
+    padding: 1rem 2rem;
+    border-radius: 12px;
+    color: #fff;
+    border: none;
+    transition: all 0.3s ease;
+    min-width: 260px;
+    text-align: center;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+}
+
+.btn-lg-custom i {
+    margin-right: 10px;
+    font-size: 1.3rem;
+}
+
+.btn-asignar {
+    background-color: #1e3a8a;
+}
+
+.btn-asignar:hover {
+    background-color: #162f6a;
+    transform: scale(1.03);
+}
+
+.btn-reporte {
+    background-color: #b91c1c;
+}
+
+.btn-reporte:hover {
+    background-color: #991b1b;
+    transform: scale(1.03);
+}
+
+.btn-importar {
+    background-color: #15803d;
+}
+
+.btn-importar:hover {
+    background-color: #166534;
+    transform: scale(1.03);
+}
+
+.btn-visualizar {
+    background-color: #0e7490;
+}
+
+.btn-visualizar:hover {
+    background-color: #155e75;
+    transform: scale(1.03);
+}
+
+/* ESTILO PARA SECCION DE INFORMACIÓN*/
+.transition-rotate {
+    transition: transform 0.3s ease;
+}
+
+.btn[aria-expanded="true"] .transition-rotate {
+    transform: rotate(180deg);
+}
+
+.legal-card {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.legal-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Responsividad */
+@media (max-width: 768px) {
+    .btn-section .btn {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+
+    .card-header h2 {
+        font-size: 1.2rem;
+    }
+}
+
+
+/*PARA VALIDAR LOS INPUTS*/
+.is-invalid {
+    border-color: #93000f !important;
+}
+
+.invalid-feedback {
+    display: none;
+    font-size: 0.875em;
+    color: #dc3545;
+}
+
+.titulo-sistema {
+    font-size: clamp(2rem, 6vw, 3.8rem);
+    font-weight: 900;
+    letter-spacing: 3px;
+    background: linear-gradient(90deg, #1e3a8a, #b91c1c, #1e3a8a);
+    background-size: 200% auto;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: brillo 4s linear infinite;
+    text-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
+}
+
+.titulo-sistema .version {
+    font-weight: 700;
+    color: #dc2626;
+    /* rojo fijo para destacar */
+    text-shadow: 0 2px 8px rgba(220, 38, 38, 0.4);
+}
+
+.slogan {
+    font-family: "Georgia", serif;
+    font-size: 1.1rem;
+    color: #374151;
+    opacity: 0;
+    animation: fadeInUp 1.8s ease forwards 1s;
+}
+
+/* Animaciones */
+@keyframes brillo {
+    0% {
+        background-position: 0% center;
+    }
+
+    100% {
+        background-position: 200% center;
+    }
+}
+
+@keyframes fadeInUp {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Hover sutil */
+.logo-hover {
+    transition: transform .4s ease;
+}
+
+.logo-hover:hover {
+    transform: scale(1.08) rotate(-2deg);
+}
+
+
+/* config tabla responsable */
+.table .badge {
+    font-weight: 600;
+}
+
+.table thead.sticky-top {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+
+.dt-button {
+    border-radius: .5rem !important;
+}
+
+.table thead.sticky-top {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+
+.details-row {
+    background: #f8fafc;
+}
+
+#exportMenu .dropdown-item i {
+    width: 18px;
+    text-align: center;
+}
+
+#colvisMenu .form-check {
+    margin-bottom: .35rem;
+}
+
+.toolbar-actions {
+    border-top: 1px dashed var(--bs-border-color);
+    padding-top: .5rem;
+    margin-top: .25rem;
+  }

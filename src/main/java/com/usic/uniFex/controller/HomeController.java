@@ -12,6 +12,7 @@ public class HomeController {
     @GetMapping("/")
   public String home(Model model) {
     model.addAttribute("personaForm", new PersonaForm());
+    System.out.println("publico mijo");
     return "publico/index"; // templates/publico/index.html
   }
 

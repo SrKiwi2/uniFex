@@ -7,31 +7,34 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 
-
 @Configuration
 public class SecurityConfig {
 
     @Bean
-  public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-    http
-      .authorizeHttpRequests(auth -> auth
-        .requestMatchers("/", "/login", "/webjars/**", "/assets/**").permitAll().anyRequest().authenticated()
-      )
-      .formLogin(login -> login
-        .loginPage("/login")                // GET: muestra la vista de login (pública)
-        .loginProcessingUrl("/login")       // POST: procesa credenciales
-        .defaultSuccessUrl("/admin", true)  // al loguear -> /admin
-        .failureUrl("/login?error")         // si falla, vuelve con ?error
-        .permitAll()
-      )
-      .logout(logout -> logout
-        .logoutUrl("/logout")
-        .logoutSuccessUrl("/login?logout")
-        .permitAll()
-      )
-      // déjalo deshabilitado por ahora; si luego lo habilitas, agrega el token al form
-      .csrf(csrf -> csrf.disable());
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
 
-    return http.build();
-  }
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+        .authorizeHttpRequests(auth -> auth
+            .requestMatchers("/",
+            "/admin/**",
+            "/iniciar-sesion/**",
+            "/assets/**")
+            .permitAll()
+            .anyRequest().authenticated()
+        )
+        .formLogin(login -> login
+            .loginPage("/")
+            .permitAll()
+        )
+        .headers(headers -> headers
+            .frameOptions(frame -> frame.sameOrigin())
+        )
+        .csrf(csrf -> csrf.disable());
+
+        return http.build();
+    }
 }

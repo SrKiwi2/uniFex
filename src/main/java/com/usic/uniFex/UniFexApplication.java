@@ -70,10 +70,7 @@ public class UniFexApplication {
 					usuario.setUsername(usuarios[i]);
 					usuario.setPassword(utilidadesService.encrypt(password[i]));
 					usuario.setPersona(persona);
-
-					Set<Rol> usuarioRoles = new HashSet<>();
-					usuarioRoles.add(rolObjects[i]);
-					usuario.setRoles(usuarioRoles);
+					usuario.setRol(rolObjects[i % roles.length]);
 					usuario.setEstado("ACTIVO");
 					usuarioService.save(usuario);
 				}

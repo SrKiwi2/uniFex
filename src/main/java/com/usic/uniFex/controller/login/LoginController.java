@@ -6,9 +6,4 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 public class LoginController {
 
-    @GetMapping(value = "/login")
-    public String inicioPublico() {
-        System.out.println("INGRESNADO CRJ");
-        return "login/login";
-    }
 }

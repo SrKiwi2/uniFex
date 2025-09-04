@@ -1,0 +1,199 @@
+/* Paleta y detalles comunes a todos los modales */
+.bg-gradient-primary {
+    background: linear-gradient(135deg, #4f46e5 0%, #2563eb 60%, #0ea5e9 100%);
+}
+
+.modal-content {
+    border-radius: 1rem;
+    /* rounded-4 look */
+}
+
+.modal-header {
+    border: 0;
+}
+
+.modal-footer {
+    border: 0;
+}
+
+.input-group-text i {
+    font-size: 1rem;
+    opacity: .85;
+}
+
+.form-label .text-danger {
+    font-weight: 600;
+}
+
+/* Focus elegante y consistente */
+.form-control:focus,
+.form-select:focus {
+    box-shadow: 0 0 0 .25rem rgba(37, 99, 235, .15);
+    border-color: #2563eb;
+}
+
+/* Helper text y validación homogénea */
+.form-text,
+.text-muted {
+    font-size: .825rem;
+}
+
+/* Botones */
+.btn-success {
+    background: linear-gradient(135deg, #10b981 0%, #0ea5e9 120%);
+    border: 0;
+}
+
+.btn-secondary {
+    border: 0;
+}
+
+
+
+/*estilo para el modal de login*/
+.btn-gradient {
+    background: linear-gradient(90deg, #0077b6, #00b4d8);
+    border: none;
+    color: #fff;
+    transition: all 0.3s ease;
+}
+
+.btn-gradient:hover {
+    background: linear-gradient(90deg, #0096c7, #48cae4);
+    transform: scale(1.02);
+}
+
+.input-group-text {
+    background-color: #f8f9fa;
+    border-color: #dee2e6;
+}
+
+input.form-control:focus {
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    border-color: #86b7fe;
+}
+
+.modal-content {
+    animation-duration: 0.5s;
+}
+
+/* Evita desbordes y solapes en el modal de confirmación de transferencia */
+#modalConfirmacionTransferencia .list-group-item span,
+#modalConfirmacionTransferencia .card-body,
+#modalConfirmacionTransferencia .table,
+#modalConfirmacionTransferencia .table td,
+#modalConfirmacionTransferencia .table th{
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+#modalConfirmacionTransferencia .list-group-item.d-flex > span:first-child{
+  flex: 0 0 auto;
+  max-width: 45%;
+  padding-right: .5rem;
+}
+#modalConfirmacionTransferencia .list-group-item.d-flex > span:last-child{
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+}
+@media (max-width: 576px){
+  #modalConfirmacionTransferencia .list-group-item.d-flex{ display:block !important; }
+  #modalConfirmacionTransferencia .list-group-item.d-flex > span:last-child{
+    display:block; text-align:left; margin-top:.25rem;
+  }
+}
+#modalConfirmacionTransferencia .card-header{
+  white-space: nowrap; text-overflow: ellipsis; overflow: hidden;
+}
+
+  /* Evitar desbordes en el modal de confirmación de ingreso */
+  #modalConfirmacionIngreso .list-group-item span,
+  #modalConfirmacionIngreso .card-body,
+  #modalConfirmacionIngreso .table,
+  #modalConfirmacionIngreso .table td,
+  #modalConfirmacionIngreso .table th{
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+  #modalConfirmacionIngreso .list-group-item.d-flex > span:first-child{
+    flex: 0 0 auto; max-width: 45%; padding-right: .5rem;
+  }
+  #modalConfirmacionIngreso .list-group-item.d-flex > span:last-child{
+    flex: 1 1 auto; min-width: 0; text-align: right;
+  }
+  @media (max-width: 576px){
+    #modalConfirmacionIngreso .list-group-item.d-flex{ display:block !important; }
+    #modalConfirmacionIngreso .list-group-item.d-flex > span:last-child{
+      display:block; text-align:left; margin-top:.25rem;
+    }
+  }
+  #modalConfirmacionIngreso .card-header{
+    white-space: nowrap; text-overflow: ellipsis; overflow: hidden;
+  }
+  #modalConfirmacionIngreso .table td,
+  #modalConfirmacionIngreso .table th {
+    white-space: normal;
+    word-break: break-word;
+    vertical-align: top;
+  }
+
+  @media (max-width: 576px) {
+  /* Título y encabezados más compactos */
+  .modal .modal-title { font-size: 1rem; }
+  .modal .card-header { font-size: .95rem; padding: .5rem .75rem; }
+
+  /* Texto y labels más pequeños */
+  .modal .form-label,
+  .modal small.text-muted,
+  .modal .list-group,
+  .modal .list-group .list-group-item,
+  .modal .fs-6 { font-size: .875rem; }
+
+  /* Inputs y addons más compactos */
+  .modal .form-control { 
+    font-size: .9rem; 
+    padding: .45rem .6rem; 
+    height: auto; 
+  }
+  .modal .input-group-text {
+    font-size: .85rem;
+    padding: .35rem .5rem;
+  }
+
+  /* Botones */
+  .modal .btn { 
+    padding: .45rem .8rem; 
+    font-size: .9rem; 
+    border-radius: .5rem;
+  }
+
+  /* Reducir gutters del grid dentro del modal */
+  .modal .row.g-3 { 
+    --bs-gutter-x: .75rem; 
+    --bs-gutter-y: .75rem; 
+  }
+
+  /* Modales fullscreen: reduce un poco padding interno */
+  .modal .modal-body { padding: .75rem; }
+  .modal .modal-header, 
+  .modal .modal-footer { padding: .5rem .75rem; }
+}
+
+@media (max-width: 576px) {
+  /* Evita centrado vertical en móviles para que el modal inicie “desde arriba” */
+  .modal-dialog-centered { align-items: stretch; }
+
+  /* Asegura fullscreen real y sin márgenes */
+  .modal-fullscreen-sm-down .modal-dialog { margin: 0; }
+  .modal-fullscreen-sm-down .modal-content { height: 100%; }
+
+  /* Header y footer siempre visibles mientras el body hace scroll */
+  .modal .modal-header { position: sticky; top: 0; z-index: 2; }
+  .modal .modal-footer { position: sticky; bottom: 0; z-index: 2; }
+
+  /* Un pelín menos de padding para ganar espacio útil */
+  .modal .modal-header, .modal .modal-footer { padding: .5rem .75rem; }
+  .modal .modal-body { padding: .75rem; }
+}
