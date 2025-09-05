@@ -13,25 +13,27 @@ import com.usic.uniFex.model.entity.Inscripcion;
 public interface IInscripcionDao extends JpaRepository <Inscripcion, Long> {
     // Evita N+1: trae puesto->categoria y entidad->tipoEntidad
     @EntityGraph(attributePaths = {
-        "puesto", "puesto.categoria",
-        "entidad", "entidad.tipoEntidad"
+        "entidad", "entidad.tipoEntidad",
+        "inscripcionPuestos",
+        "inscripcionPuestos.puesto",
+        "inscripcionPuestos.puesto.categoria"
     })
-
     List<Inscripcion> findAll();
 
     @Query(value = """
         select
-        u.id         as usuarioId,
-        u.username   as username,
-        c.id         as categoriaId,
-        c.nombre     as categoria,
-        count(i.id)  as cantidadInscripciones,
-        count(i.id)  as cantidadPuestos,
-        coalesce(sum( (i.precio)::numeric ), 0) as totalBs
+        u.id                         as usuarioId,
+        u.username                   as username,
+        c.id                         as categoriaId,
+        c.nombre                     as categoria,
+        count(distinct i.id)         as cantidadInscripciones,
+        count(ip.id)                 as cantidadPuestos,
+        coalesce(sum(ip.costo), 0)   as totalBs
         from inscripcion i
-        join puesto p     on p.id = i.id_puesto
-        join categoria c  on c.id = p.id_categoria
-        left join usuario u on u.id = i._registro_id_usuario
+        join inscripcion_puesto ip on ip.id_inscripcion = i.id
+        join puesto p             on p.id = ip.id_puesto
+        join categoria c          on c.id = p.id_categoria
+        left join usuario u       on u.id = i._registro_id_usuario
         group by u.id, u.username, c.id, c.nombre
         order by u.username asc nulls last, c.nombre asc
         """, nativeQuery = true)
@@ -39,20 +41,19 @@ public interface IInscripcionDao extends JpaRepository <Inscripcion, Long> {
 
     @Query(value = """
         select
-        u.id         as usuarioId,
-        u.username   as username,
-        e.id         as entidadId,
-        e.nombre     as entidad,
-        count(i.id)  as cantidadInscripciones,
-        count(i.id)  as cantidadPuestos,
-        coalesce(sum( (i.precio)::numeric ), 0) as totalBs
+        u.id                         as usuarioId,
+        u.username                   as username,
+        e.id                         as entidadId,
+        e.nombre                     as entidad,
+        count(distinct i.id)         as cantidadInscripciones,
+        count(ip.id)                 as cantidadPuestos,
+        coalesce(sum(ip.costo), 0)   as totalBs
         from inscripcion i
-        join entidad e   on e.id = i.id_entidad
-        left join usuario u on u.id = i._registro_id_usuario
+        join entidad e           on e.id = i.id_entidad
+        left join usuario u      on u.id = i._registro_id_usuario
+        left join inscripcion_puesto ip on ip.id_inscripcion = i.id
         group by u.id, u.username, e.id, e.nombre
         order by u.username asc nulls last, e.nombre asc
         """, nativeQuery = true)
     List<ResumenEntidadView> resumenPorEntidad();
-
-
 }

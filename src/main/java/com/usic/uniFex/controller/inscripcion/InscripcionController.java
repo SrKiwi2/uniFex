@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 
 import com.usic.uniFex.anotacion.ValidarUsuarioAutenticado;
 import com.usic.uniFex.model.IService.IInscripcionService;
+import com.usic.uniFex.model.dto.InscripcionListadoDTO;
 import com.usic.uniFex.model.entity.Inscripcion;
 
 import lombok.RequiredArgsConstructor;
@@ -29,7 +30,7 @@ public class InscripcionController {
 
     @RequestMapping(value = "/tabla-registros", method = {RequestMethod.GET, RequestMethod.POST})
     public String tabla(Model model) {
-        List<Inscripcion> inscripciones = inscripcionService.listarConRelaciones();
+        List<InscripcionListadoDTO> inscripciones = inscripcionService.listarParaTabla();
         model.addAttribute("inscripciones", inscripciones);
         return "inscripciones/tabla_registro";
     }

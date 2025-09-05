@@ -2,6 +2,8 @@ package com.usic.uniFex.model.entity;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 import com.usic.uniFex.Config.AuditoriaConfig;
 
@@ -25,4 +27,7 @@ public class Inscripcion extends AuditoriaConfig{
 
     private LocalDateTime fechaCompra;
     private String inscripcionEstado;
+
+    @OneToMany(mappedBy = "inscripcion", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    private List<InscripcionPuesto> inscripcionPuestos = new ArrayList<>();
 }
