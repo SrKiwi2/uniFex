@@ -226,6 +226,21 @@ public class AdminController {
         return "publico/verInscripcion";
     }
 
+    @ValidarUsuarioAutenticado
+    @PostMapping(value = "/actualizar/inscripcion")
+    public String actualizarInscripcion(HttpServletRequest request, Model model, @Validated Inscripcion inscripcion
+    ) {
+        Usuario usuario = (Usuario) request.getSession().getAttribute("usuario");
+
+        inscripcion.setFechaCompra(LocalDateTime.now());
+        inscripcion.setInscripcionEstado("PAGADO");
+        inscripcion.setModificacion(new Date());
+        inscripcion.setModificacionIdUsuario(usuario.getId());
+        inscripcionService.save(inscripcion);
+
+        return "redirect:/admin";
+    }
+
     @PostMapping("/iniciar-sesion")
     public ResponseEntity<String> iniciarSesion(
         @RequestParam String usuario,

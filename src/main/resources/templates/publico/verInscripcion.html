@@ -25,7 +25,7 @@
                                             <div class="card-body d-flex flex-column justify-content-center align-items-center text-center py-5 px-3">
                                                 <!-- Nombre del sistema dinámico -->
                                                 <h1 class="titulo-sistema mb-2 text-uppercase">
-                                                    UNIFEXPO-UAP <span class="version">0.1</span>
+                                                    UNIFEXPO-UAP <span class="version">0.2</span>
                                                 </h1>
 
                                                 <p class="slogan mb-0 fst-italic d-sm-block">
@@ -35,7 +35,36 @@
                                             </div>
                                         </div>
 
-                                        <h1 th:text="${sumasumaCostosPuestos}"></h1>
+                                        <div class="col-md">
+                                            <div class="card">
+                                                <h6 class="card-header" >ADJUNTAR COMPROBANTE | TOTAL A PAGAR : <b th:text="${sumaCostosPuestos + ' Bs.'}"></b></h6>
+                                                <div class="card-body">
+                                                    <form class="needs-validation" action="/actualizar/inscripcion" method="post">
+                                                        <input type="hidden" th:field="${inscripcion.id}" />
+                                                        <div class="mb-3">
+                                                            <label class="form-label" for="bs-validation-name">Numero de Comprobante</label>
+                                                            <input
+                                                                type="number"
+                                                                class="form-control"
+                                                                th:field="${inscripcion.num_comprobante}"
+                                                                id="bs-validation-name"
+                                                                required />
+                                                            <div class="valid-feedback">Dato correcto</div>
+                                                            <div class="invalid-feedback">Dato requerido</div>
+                                                        </div>
+                                                        <div class="mb-3">
+                                                            <label class="form-label" for="bs-validation-upload-file">Adjuntar Imagen del comprobante</label>
+                                                            <input type="file" class="form-control" id="bs-validation-upload-file" required />
+                                                        </div>
+                                                        <div class="row">
+                                                            <div class="col-12">
+                                                                <button type="submit" class="btn btn-success w-100 p-3">Completar Registro</button>
+                                                            </div>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
                                         
                                         <footer th:replace="~{layout/footer :: footer}"></footer>
                                     </div>
