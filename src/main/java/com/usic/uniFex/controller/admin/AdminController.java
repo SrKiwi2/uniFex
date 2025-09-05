@@ -1,5 +1,7 @@
 package com.usic.uniFex.controller.admin;
 
+import java.util.List;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -7,11 +9,14 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import com.usic.uniFex.anotacion.ValidarUsuarioAutenticado;
 import com.usic.uniFex.model.IService.IUsuarioService;
+import com.usic.uniFex.model.entity.Persona;
+import com.usic.uniFex.model.entity.Responsable;
 import com.usic.uniFex.model.entity.Usuario;
 
 import ch.qos.logback.core.model.Model;
@@ -32,6 +37,10 @@ public class AdminController {
     public String adminIndex(HttpServletRequest request, Model model) {
         Usuario usuario = (Usuario) request.getSession().getAttribute("usuario");
         logger.info("Usuario en sesión: {}", usuario.getPersona().getNombre());
+
+        Persona persona = usuario.getPersona();
+
+        request.getSession().setAttribute("persona", persona);
         return "inicio-admin";
     }
 
@@ -65,5 +74,18 @@ public class AdminController {
             // 4) Respuesta según rol
             String respuesta = "RESPONSABLE".equals(rol) ? "Inicio Responsable" : "Iniciando Session";
             return ResponseEntity.ok(respuesta);
+    }
+
+    @ValidarUsuarioAutenticado
+    @RequestMapping("/cerrar_sesion")
+    public String cerrarSesion(HttpServletRequest request, RedirectAttributes flash) {
+        Usuario usuarioLogueado = (Usuario) request.getSession().getAttribute("usuario");
+        HttpSession sessionAdministrador = request.getSession();
+        if (sessionAdministrador != null) {
+            sessionAdministrador.invalidate();
+            flash.addAttribute("validado", "Se cerro sesion con exito");
+            logger.info("Usuario cerro sesión: {}", usuarioLogueado.getPersona().getNombre());
+        }
+        return "redirect:/";
     }
 }
