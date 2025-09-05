@@ -23,7 +23,6 @@ import com.usic.uniFex.model.IService.IUsuarioService;
 import com.usic.uniFex.model.entity.Persona;
 import com.usic.uniFex.model.entity.Responsable;
 import com.usic.uniFex.model.entity.Entidad;
-import com.usic.uniFex.model.entity.Persona;
 import com.usic.uniFex.model.entity.Usuario;
 
 import jakarta.servlet.http.HttpServletRequest;
