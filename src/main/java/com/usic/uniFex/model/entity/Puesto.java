@@ -14,7 +14,7 @@ public class Puesto extends AuditoriaConfig{
     private Long id;
 
     private String codigo;
-    private String tamaño;
+    private String tamano;
     private String estadoPuesto; //L = libre ; O = Ocupado
 
     @ManyToOne(fetch = FetchType.LAZY)
