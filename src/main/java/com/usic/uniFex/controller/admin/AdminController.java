@@ -204,11 +204,11 @@ public class AdminController {
             }
         }
         
-        return "redirect:/admin/ver/inscripcion/"+inscripcion.getId();
+        return "redirect:/ver/inscripcion/"+inscripcion.getId();
     }
 
     @ValidarUsuarioAutenticado
-    @GetMapping(value = "/admin/ver/inscripcion/{id_inscripcion}")
+    @GetMapping(value = "/ver/inscripcion/{id_inscripcion}")
     public String verIncripcion(HttpServletRequest request, Model model, @PathVariable("id_inscripcion")Long id_inscripcion) {
         Usuario usuario = (Usuario) request.getSession().getAttribute("usuario");
 
