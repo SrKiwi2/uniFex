@@ -5,10 +5,12 @@ import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.usic.uniFex.model.IService.IPersonaService;
 import com.usic.uniFex.model.IService.IRolService;
@@ -21,6 +23,7 @@ import com.usic.uniFex.model.entity.Usuario;
 @SpringBootApplication
 public class UniFexApplication {
 
+	@Autowired PasswordEncoder passwordEncoder;
 	private static final Logger logger = LoggerFactory.getLogger(UniFexApplication.class);
 	
 	public static void main(String[] args) {
@@ -68,7 +71,7 @@ public class UniFexApplication {
 				if (usuario == null) {
 					usuario = new Usuario();
 					usuario.setUsername(usuarios[i]);
-					usuario.setPassword(utilidadesService.encrypt(password[i]));
+					usuario.setPassword(passwordEncoder.encode(password[i]));
 					usuario.setPersona(persona);
 					usuario.setRol(rolObjects[i % roles.length]);
 					usuario.setEstado("ACTIVO");

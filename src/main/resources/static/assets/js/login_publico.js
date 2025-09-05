@@ -22,7 +22,7 @@ $(function () {
                     // 2) Mostrar loader por encima y redirigir inmediatamente
                     const destino = (response === "Inicio Responsable")
                         ? "/adm/responsable"    // o /adm/responsable si esa es tu ruta real
-                        : "/adm/inicio"; // o /adm/inicio
+                        : "/admin"; // o /adm/inicio
 
                     Swal.fire({
                         title: "Iniciando sesión…",
