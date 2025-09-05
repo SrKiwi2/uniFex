@@ -1,0 +1,94 @@
+<div class="card">
+  <div class="card-header d-flex justify-content-lg-between">
+    <h5>Registro puestoario</h5>
+    <button
+      type="button"
+      class="btn btn-primary"
+      onclick="carpuestorFormulario()"
+      data-bs-toggle="modal"
+      data-bs-target="#modalFormulariopuestoario"
+    >
+      <i class="fa-solid fa-user-plus"></i> Agrepuestor puestoario
+    </button>
+  </div>
+  <div class="card-datatable table-responsive pt-0">
+    <table class="table table-hover" id="data-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Código</th>
+          <th>Tamaño</th>
+          <th>Categoría</th>
+          <th>Estado</th>
+          <th class="text-end">Opciones</th>
+        </tr>
+      </thead>
+      <tbody class="animate__animated animate__bounceInDown">
+        <tr th:each="p, i : ${puestos}">
+          <td th:text="${i.index + 1}"></td>
+          <td th:text="${p.codigo}">P-001</td>
+          <td th:text="${p.tamano}">3x3</td>
+          <!-- si tu campo se llama tamaño en Java, cambia a p.tamaño -->
+          <td
+            th:text="${p.categoria != null ? p.categoria.nombre : 'Sin categoría'}"
+          ></td>
+
+          <!-- Estado: L = Libre (verde), O = Ocupado (rojo), otros = Gris -->
+          <td>
+            <span th:if="${p.estadoPuesto == 'L'}" class="badge bg-success"
+              >Libre</span
+            >
+            <span th:if="${p.estadoPuesto == 'O'}" class="badge bg-danger"
+              >Ocupado</span
+            >
+            <span
+              th:if="${p.estadoPuesto != 'L' and p.estadoPuesto != 'O'}"
+              class="badge bg-secondary"
+              th:text="${p.estadoPuesto}"
+              >-</span
+            >
+          </td>
+
+          <td class="text-end">
+            <button
+              type="button"
+              class="btn btn-sm btn-primary"
+              th:onclick="cargarFormularioEdit([[${p.id}]])"
+              data-bs-toggle="modal"
+              data-bs-target="#modalformularioGaseta"
+            >
+              <i class="fa-solid fa-pen-to-square"></i> Editar
+            </button>
+            <button
+              type="button"
+              class="btn btn-sm btn-danger"
+              th:onclick="eliminar([[${p.codigo}]], [[${p.id}]])"
+            >
+              <i class="fa-solid fa-trash"></i> Eliminar
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  if (window.$ && $.fn.DataTable) {
+      const id = '#data-table';
+      if ($.fn.DataTable.isDataTable(id)) { $(id).DataTable().destroy(); }
+      $(id).DataTable({
+        language: {
+          sProcessing:   "Procesando...",
+          sLengthMenu:   "Mostrar _MENU_ registros",
+          sZeroRecords:  "No se encontraron resultados",
+          sInfo:         "Mostrando _START_ a _END_ de _TOTAL_",
+          sInfoEmpty:    "Mostrando 0 a 0 de 0",
+          sInfoFiltered: "(filtrado de _MAX_ totales)",
+          sSearch:       "Buscar:",
+          oPaginate:     { sFirst:"Primero", sLast:"Último", sNext:"Siguiente", sPrevious:"Anterior" },
+          oAria:         { sSortAscending: ": Orden ascendente", sSortDescending: ": Orden descendente" }
+        }
+      });
+    }
+</script>

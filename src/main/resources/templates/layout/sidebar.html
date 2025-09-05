@@ -30,62 +30,32 @@
         <li class="menu-header small text-uppercase" th:if="${session.nombre_rol == 'ADMINISTRADOR'}">
             <span class="menu-header-text">ADMINISTARCIÓN</span>
         </li>
-        <li class="menu-item" id="opcion_admin" th:if="${session.nombre_rol == 'ADMINISTRADOR'}">
+        <li class="menu-item" id="opcion_admin" th:if="${session.nombre_rol == 'ADMINISTRADOR'  or session.nombre_rol == 'ADMINISTRATIVO'}">
             <a href="#" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons ti ti-users"></i>
                 <div>Administrar Usuarios</div>
             </a>
             <ul class="menu-sub">
-                <li class="menu-item" id="opcion_rol">
-                    <a class="menu-link">
-                        <div>Rol</div>
-                    </a>
-                </li>
                 <li class="menu-item" id="opcion_persona">
                     <a class="menu-link">
                         <div>Persona</div>
                     </a>
                 </li>
-                <li class="menu-item" id="opcion_usuario">
-                    <a class="menu-link">
-                        <div>Usuario</div>
-                    </a>
-                </li>
-                <li class="menu-item" id="opcion_responsable">
-                    <a class="menu-link">
-                        <div>Responsables</div>
-                    </a>
-                </li>
             </ul>
         </li>
         <!-- COMPLEMENTOS -->
-        <li class="menu-header small text-uppercase" th:if="${session.nombre_rol == 'ADMINISTRADOR' or session.nombre_rol == 'SUPER USUARIO'}">
-            <span class="menu-header-text">COMPLEMENTOS</span>
+        <li class="menu-header small text-uppercase" th:if="${session.nombre_rol == 'ADMINISTRADOR' or session.nombre_rol == 'SUPER USUARIO' or session.nombre_rol == 'ADMINISTRATIVO'}">
+            <span class="menu-header-text">GESTION</span>
         </li>
-        <li class="menu-item" th:if="${session.nombre_rol == 'ADMINISTRADOR' or session.nombre_rol == 'SUPER USUARIO'}">
+        <li class="menu-item" th:if="${session.nombre_rol == 'ADMINISTRADOR' or session.nombre_rol == 'SUPER USUARIO' or session.nombre_rol == 'ADMINISTRATIVO'}">
             <a href="#" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons ti ti-users"></i>
-                <div>Administrar Complementos</div>
+                <div>Control</div>
             </a>
             <ul class="menu-sub">
-                <li class="menu-item" id="opcion_contable">
+                <li class="menu-item" id="opcion_gaseta">
                     <a class="menu-link">
-                        <div>Grupo Contable</div>
-                    </a>
-                </li>
-                <li class="menu-item" id="opcion_auxiliar">
-                    <a class="menu-link">
-                        <div>Auxiliar</div>
-                    </a>
-                </li>
-                <li class="menu-item" id="opcion_of">
-                    <a class="menu-link">
-                        <div>Organismo Financiador</div>
-                    </a>
-                </li>
-                <li class="menu-item" id="opcion_estadoA">
-                    <a class="menu-link">
-                        <div>Estado del Activo</div>
+                        <div>Control Gasetas</div>
                     </a>
                 </li>
             </ul>

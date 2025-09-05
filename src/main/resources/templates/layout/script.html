@@ -62,22 +62,12 @@
 
     <!-- SCRIPT CREADOS PROPIOS -->
     <script src="../../assets/js/login_publico.js"></script>
-    <script src="../../assets/js/config_public.js"></script>
-    <script src="../../assets/js/p-asignacion.js"></script>
-    <script src="../../assets/js/p-transferencia.js"></script>
-    <script src="../../assets/js/p-ajeno.js"></script>
-    <script src="../../assets/js/p-baja.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
-    <script src="../../assets/js/p-scanner.js"></script>
-
     <!-- CONFIGURACIÓN SIDEBAR -->
     <script>
         $.ajaxSetup({
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
 
-        
-        
         var botonPulsado;
         $(document).ready(function () {
 
@@ -142,6 +132,20 @@
                 }
 
                 botonPulsado = document.getElementById("opcion_responsable");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            $("#opcion_gaseta").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/gaseta/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_gaseta");;
 
                 botonPulsado.classList.add("active");
 
