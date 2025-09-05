@@ -63,13 +63,6 @@
 
     <!-- SCRIPT CREADOS PROPIOS -->
     <script src="../../assets/js/login_publico.js"></script>
-    <script src="../../assets/js/config_public.js"></script>
-    <script src="../../assets/js/p-asignacion.js"></script>
-    <script src="../../assets/js/p-transferencia.js"></script>
-    <script src="../../assets/js/p-ajeno.js"></script>
-    <script src="../../assets/js/p-baja.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
-    <script src="../../assets/js/p-scanner.js"></script>
 
     <script src="../../assets/vendor/libs/bs-stepper/bs-stepper.js"></script>
     <script src="../../assets/js/form-wizard-validation.js"></script>
@@ -83,8 +76,6 @@
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
 
-        
-        
         var botonPulsado;
         $(document).ready(function () {
 
@@ -149,6 +140,48 @@
                 }
 
                 botonPulsado = document.getElementById("opcion_responsable");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            $("#opcion_gaseta").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/gaseta/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_gaseta");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            $("#opcion_sr").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/inscripcion/resumen/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_sr");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            $("#opcion_inscripciones").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/inscripcion/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_inscripciones");;
 
                 botonPulsado.classList.add("active");
 

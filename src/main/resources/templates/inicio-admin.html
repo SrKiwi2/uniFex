@@ -297,6 +297,35 @@
         </div>
     </div>
 
+    <div class="modal fade" id="modalConfirmLogout" tabindex="-1" aria-labelledby="modalConfirmLogoutLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="modalConfirmLogoutLabel" style="color: aliceblue;">
+                        <i class="ti ti-alert-triangle me-2" style="color: aliceblue;"></i>Confirmar cierre de sesión
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Cerrar"></button>
+                </div>
+
+                <div class="modal-body text-center">
+                    <p class="mb-3">¿Estás seguro de que deseas cerrar sesión?</p>
+                    <i class="ti ti-logout" style="font-size: 3rem; color: #dc3545;"></i>
+                </div>
+
+                <div class="modal-footer justify-content-center">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="ti ti-x me-1"></i> Cancelar
+                    </button>
+                    <a href="/cerrar_sesion" class="btn btn-danger">
+                        <i class="ti ti-logout me-1"></i> Sí, cerrar sesión
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div th:replace="~{layout/script :: script}"></div>
     <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
     <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">

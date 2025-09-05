@@ -1,0 +1,138 @@
+<div class="card">
+  <div class="card-header d-flex justify-content-lg-between">
+    <h5>Registro puestoario</h5>
+    <button
+      type="button"
+      class="btn btn-primary"
+      onclick="carpuestorFormulario()"
+      data-bs-toggle="modal"
+      data-bs-target="#modalFormulariopuestoario"
+    >
+      <i class="fa-solid fa-user-plus"></i> Agrepuestor puestoario
+    </button>
+  </div>
+  <div class="card-datatable table-responsive pt-0">
+    <table class="table table-hover" id="data-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Entidad</th>
+          <th>Tipo</th>
+          <th>NIT</th>
+          <th>Puesto</th>
+          <th>Tamaño</th>
+          <th>Categoría</th>
+          <th class="text-end">Precio (Bs)</th>
+          <th>Fecha</th>
+          <th>Estado</th>
+          <th class="text-end">Opciones</th>
+        </tr>
+      </thead>
+      <tbody class="animate__animated animate__bounceInDown">
+        <tr th:each="ins, i : ${inscripciones}">
+          <td th:text="${i.index + 1}"></td>
+
+          <!-- Entidad -->
+          <td th:text="${ins.entidad != null ? ins.entidad.nombre : '—'}"></td>
+          <td
+            th:text="${ins.entidad != null && ins.entidad.tipoEntidad != null ? ins.entidad.tipoEntidad.nombre : '—'}"
+          ></td>
+          <td th:text="${ins.entidad != null ? ins.entidad.nit : '—'}"></td>
+
+          <!-- Puesto -->
+          <td th:text="${ins.puesto != null ? ins.puesto.codigo : '—'}"></td>
+          <td th:text="${ins.puesto != null ? ins.puesto.tamano : '—'}"></td>
+          <!-- cambia a .tamaño si tu campo es así -->
+          <td
+            th:text="${ins.puesto != null && ins.puesto.categoria != null ? ins.puesto.categoria.nombre : '—'}"
+          ></td>
+
+          <!-- Precio -->
+          <td
+            class="text-end"
+            th:text="${#numbers.formatDecimal(ins.precio != null ? ins.precio : '0', 1, 'POINT', 2, 'NONE')}"
+          ></td>
+
+          <!-- Fecha -->
+          <td
+            th:text="${ins.fechaCompra != null ? #temporals.format(ins.fechaCompra, 'dd/MM/yyyy HH:mm') : '—'}"
+          ></td>
+
+          <!-- Estado -->
+          <td>
+            <span
+              th:if="${ins.inscripcionEstado == 'PENDIENTE'}"
+              class="badge bg-warning text-dark"
+              >Pendiente</span
+            >
+            <span
+              th:if="${ins.inscripcionEstado == 'APROBADA'}"
+              class="badge bg-success"
+              >Aprobada</span
+            >
+            <span
+              th:if="${ins.inscripcionEstado == 'ANULADA'}"
+              class="badge bg-danger"
+              >Anulada</span
+            >
+            <span
+              th:if="${ins.inscripcionEstado != 'PENDIENTE' and ins.inscripcionEstado != 'APROBADA' and ins.inscripcionEstado != 'ANULADA'}"
+              class="badge bg-secondary"
+              th:text="${ins.inscripcionEstado != null ? ins.inscripcionEstado : '-'}"
+            ></span>
+          </td>
+
+          <!-- Opciones -->
+          <td class="text-end">
+            <button
+              type="button"
+              class="btn btn-sm btn-primary"
+              th:onclick="cargarFormularioEdit([[${ins.id}]])"
+              data-bs-toggle="modal"
+              data-bs-target="#modalformularioInscripcion"
+            >
+              <i class="fa-solid fa-pen-to-square"></i> Editar
+            </button>
+            <button
+              type="button"
+              class="btn btn-sm btn-danger"
+              th:onclick="eliminar([[${ins.entidad != null ? ins.entidad.nombre : 'Inscripción'}]], [[${ins.id}]])"
+            >
+              <i class="fa-solid fa-trash"></i> Eliminar
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  if (window.$ && $.fn.DataTable) {
+    const id = "#data-table";
+    if ($.fn.DataTable.isDataTable(id)) {
+      $(id).DataTable().destroy();
+    }
+    $(id).DataTable({
+      language: {
+        sProcessing: "Procesando...",
+        sLengthMenu: "Mostrar _MENU_ registros",
+        sZeroRecords: "No se encontraron resultados",
+        sInfo: "Mostrando _START_ a _END_ de _TOTAL_",
+        sInfoEmpty: "Mostrando 0 a 0 de 0",
+        sInfoFiltered: "(filtrado de _MAX_ totales)",
+        sSearch: "Buscar:",
+        oPaginate: {
+          sFirst: "Primero",
+          sLast: "Último",
+          sNext: "Siguiente",
+          sPrevious: "Anterior",
+        },
+        oAria: {
+          sSortAscending: ": Orden ascendente",
+          sSortDescending: ": Orden descendente",
+        },
+      },
+    });
+  }
+</script>

@@ -39,5 +39,10 @@ public class PuestoServiceImpl implements IPuestoService {
         puestoDao.deleteById(idEntidad);
     }
 
+    @Override
+    public List<Puesto> listarConCategoria() {
+        return puestoDao.findAll();
+    }
+
     
 }

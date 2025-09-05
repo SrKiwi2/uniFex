@@ -1,5 +1,7 @@
 package com.usic.uniFex.controller.admin;
 
+import java.util.List;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,6 +12,7 @@ import org.springframework.ui.Model;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
@@ -17,6 +20,8 @@ import com.usic.uniFex.anotacion.ValidarUsuarioAutenticado;
 import com.usic.uniFex.model.IService.ICategoriaService;
 import com.usic.uniFex.model.IService.ITipoEntidadService;
 import com.usic.uniFex.model.IService.IUsuarioService;
+import com.usic.uniFex.model.entity.Persona;
+import com.usic.uniFex.model.entity.Responsable;
 import com.usic.uniFex.model.entity.Entidad;
 import com.usic.uniFex.model.entity.Persona;
 import com.usic.uniFex.model.entity.Usuario;
@@ -46,6 +51,10 @@ public class AdminController {
         model.addAttribute("responsable2", new Persona());
 
         logger.info("Usuario en sesión: {}", usuario.getPersona().getNombre());
+
+        Persona persona = usuario.getPersona();
+
+        request.getSession().setAttribute("persona", persona);
         return "inicio-admin";
     }
 
@@ -79,5 +88,18 @@ public class AdminController {
             // 4) Respuesta según rol
             String respuesta = "RESPONSABLE".equals(rol) ? "Inicio Responsable" : "Iniciando Session";
             return ResponseEntity.ok(respuesta);
+    }
+
+    @ValidarUsuarioAutenticado
+    @RequestMapping("/cerrar_sesion")
+    public String cerrarSesion(HttpServletRequest request, RedirectAttributes flash) {
+        Usuario usuarioLogueado = (Usuario) request.getSession().getAttribute("usuario");
+        HttpSession sessionAdministrador = request.getSession();
+        if (sessionAdministrador != null) {
+            sessionAdministrador.invalidate();
+            flash.addAttribute("validado", "Se cerro sesion con exito");
+            logger.info("Usuario cerro sesión: {}", usuarioLogueado.getPersona().getNombre());
+        }
+        return "redirect:/";
     }
 }
