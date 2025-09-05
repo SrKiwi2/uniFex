@@ -102,7 +102,8 @@ public class InscripcionServiceImpl implements IInscripcionService{
                 categorias,
                 total,
                 i.getFechaCompra(),
-                i.getInscripcionEstado()
+                i.getInscripcionEstado(),
+                i.getImgComprobante()
             );
         }).collect(Collectors.toList());
     }

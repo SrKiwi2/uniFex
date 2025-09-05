@@ -13,12 +13,10 @@ import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,12 +35,12 @@ import com.usic.uniFex.model.IService.IPuestoService;
 import com.usic.uniFex.model.IService.IResponsableService;
 import com.usic.uniFex.model.IService.ITipoEntidadService;
 import com.usic.uniFex.model.IService.IUsuarioService;
-import com.usic.uniFex.model.entity.Persona;
-import com.usic.uniFex.model.entity.Puesto;
-import com.usic.uniFex.model.entity.Responsable;
 import com.usic.uniFex.model.entity.Entidad;
 import com.usic.uniFex.model.entity.Inscripcion;
 import com.usic.uniFex.model.entity.InscripcionPuesto;
+import com.usic.uniFex.model.entity.Persona;
+import com.usic.uniFex.model.entity.Puesto;
+import com.usic.uniFex.model.entity.Responsable;
 import com.usic.uniFex.model.entity.Usuario;
 import com.usic.uniFex.model.repository.FuncionesInscripcion;
 
@@ -87,24 +85,23 @@ public class AdminController {
     @ValidarUsuarioAutenticado
     @PostMapping(value = "/admin/guardar")
     public String adminIndexGuardar(HttpServletRequest request, Model model,
-        @RequestParam("nombreEntidad") String nombreEntidad,
-        @RequestParam("nitEntidad") String nitEntidad,
-        @RequestParam("descripcionEntidad") String descripcionEntidad,
-        @RequestParam("tipoEntidad") Long tipoEntidad,
-        @RequestParam("nombreResponsable1") String nombreResponsable1,
-        @RequestParam("paternoResponsable1") String paternoResponsable1,
-        @RequestParam("maternoResponsable1") String maternoResponsable1,
-        @RequestParam("ciResponsable1") String ciResponsable1,
-        @RequestParam("correoResponsable1") String correoResponsable1,
-        @RequestParam("celularResponsable1") String celularResponsable1,
-        @RequestParam("nombreResponsable2") String nombreResponsable2,
-        @RequestParam("paternoResponsable2") String paternoResponsable2,
-        @RequestParam("maternoResponsable2") String maternoResponsable2,
-        @RequestParam("ciResponsable2") String ciResponsable2,
-        @RequestParam("correoResponsable2") String correoResponsable2,
-        @RequestParam("celularResponsable2") String celularResponsable2,
-        @RequestParam(value = "puestosSeleccionados", required = false) List<Long> puestosSeleccionados
-    ) {
+            @RequestParam("nombreEntidad") String nombreEntidad,
+            @RequestParam("nitEntidad") String nitEntidad,
+            @RequestParam("descripcionEntidad") String descripcionEntidad,
+            @RequestParam("tipoEntidad") Long tipoEntidad,
+            @RequestParam("nombreResponsable1") String nombreResponsable1,
+            @RequestParam("paternoResponsable1") String paternoResponsable1,
+            @RequestParam("maternoResponsable1") String maternoResponsable1,
+            @RequestParam("ciResponsable1") String ciResponsable1,
+            @RequestParam("correoResponsable1") String correoResponsable1,
+            @RequestParam("celularResponsable1") String celularResponsable1,
+            @RequestParam("nombreResponsable2") String nombreResponsable2,
+            @RequestParam("paternoResponsable2") String paternoResponsable2,
+            @RequestParam("maternoResponsable2") String maternoResponsable2,
+            @RequestParam("ciResponsable2") String ciResponsable2,
+            @RequestParam("correoResponsable2") String correoResponsable2,
+            @RequestParam("celularResponsable2") String celularResponsable2,
+            @RequestParam(value = "puestosSeleccionados", required = false) List<Long> puestosSeleccionados) {
         Usuario usuario = (Usuario) request.getSession().getAttribute("usuario");
 
         Entidad entidad = new Entidad();
@@ -144,8 +141,7 @@ public class AdminController {
         responsableService.save(responsable1);
 
         if (!nombreResponsable2.equals("") && !paternoResponsable2.equals("") && !ciResponsable2.equals("")
-         && !correoResponsable2.equals("") && !celularResponsable2.equals(""))
-            {
+                && !correoResponsable2.equals("") && !celularResponsable2.equals("")) {
             Persona persona2 = new Persona();
             persona2.setNombre(nombreResponsable2);
             persona2.setPaterno(paternoResponsable2);
@@ -202,34 +198,32 @@ public class AdminController {
                 inscripcionPuesto.setModificacionIdUsuario(usuario.getId());
                 inscripcionPuesto.setEstado("ACTIVO");
                 inscripcionPuesto.setCosto(BigDecimal.valueOf(
-                    funcionesInscripcion.obtenerCostoPuesto(
-                        entidad.getTipoEntidad().getId(),
-                        puesto.getTamano()
-                    )
-                ));
+                        funcionesInscripcion.obtenerCostoPuesto(
+                                entidad.getTipoEntidad().getId(),
+                                puesto.getTamano())));
                 inscripcionPuestoService.save(inscripcionPuesto);
             }
         }
-        
-        return "redirect:/ver/inscripcion/"+inscripcion.getId();
+
+        return "redirect:/ver/inscripcion/" + inscripcion.getId();
     }
 
     @ValidarUsuarioAutenticado
     @GetMapping(value = "/ver/inscripcion/{id_inscripcion}")
-    public String verIncripcion(HttpServletRequest request, Model model, @PathVariable("id_inscripcion")Long id_inscripcion) {
+    public String verIncripcion(HttpServletRequest request, Model model,
+            @PathVariable("id_inscripcion") Long id_inscripcion) {
         Usuario usuario = (Usuario) request.getSession().getAttribute("usuario");
 
-        List<Map<String,Object>> puestos = funcionesInscripcion.obtener_puestos_por_inscripcion(id_inscripcion);
+        List<Map<String, Object>> puestos = funcionesInscripcion.obtener_puestos_por_inscripcion(id_inscripcion);
 
         model.addAttribute("inscripcion", inscripcionService.findById(id_inscripcion));
 
         double sumaCostosPuestos = puestos.stream()
-            .mapToDouble(m -> m.get("costo") != null ? ((Number) m.get("costo")).doubleValue() : 0)
-            .sum();
+                .mapToDouble(m -> m.get("costo") != null ? ((Number) m.get("costo")).doubleValue() : 0)
+                .sum();
 
         model.addAttribute("sumaCostosPuestos", sumaCostosPuestos);
 
-        
         return "publico/verInscripcion";
     }
 
@@ -237,49 +231,57 @@ public class AdminController {
     @PostMapping("/actualizar/inscripcion")
     public String actualizarInscripcion(
             HttpServletRequest request,
-            @RequestParam("id") Long idInscripcion,
-            @RequestParam("num_comprobante") Integer numComprobante,   // <-- NOMBRE ALINEADO
+            @RequestParam("id") Long id,
+            @RequestParam("numComprobante") Integer numComprobante,
             @RequestParam("comprobante") MultipartFile file,
-            RedirectAttributes flash
-    ) {
+            RedirectAttributes flash) {
+
+                System.out.println(">> POST /actualizar/inscripcion hit! id=" + id
+        + " numComprobante=" + numComprobante
+        + " fileSize=" + (file != null ? file.getSize() : -1));
         Usuario usuario = (Usuario) request.getSession().getAttribute("usuario");
 
-        Inscripcion ins = inscripcionService.findById(idInscripcion);
+        // 1) Buscar inscripción
+        Inscripcion ins = inscripcionService.findById(id);
         if (ins == null) {
             flash.addFlashAttribute("error", "Inscripción no encontrada.");
-            return "redirect:/";
+            return "redirect:/admin";
         }
 
+        // 2) Validar archivo
         if (file == null || file.isEmpty()) {
             flash.addFlashAttribute("error", "Debe adjuntar la imagen del comprobante.");
-            return "redirect:/ver/inscripcion/" + idInscripcion;
+            return "redirect:/ver/inscripcion/" + id;
         }
-        String contentType = file.getContentType();
-        if (contentType == null || !contentType.startsWith("image/")) {
+        String ct = file.getContentType();
+        if (ct == null || !ct.startsWith("image/")) {
             flash.addFlashAttribute("error", "El archivo debe ser una imagen.");
-            return "redirect:/ver/inscripcion/" + idInscripcion;
+            return "redirect:/ver/inscripcion/" + id;
         }
 
+        // 3) Guardar archivo
         Path base = Paths.get("uploads/comprobantes").toAbsolutePath().normalize();
-        try { Files.createDirectories(base); } catch (IOException e) {
+        try {
+            Files.createDirectories(base);
+        } catch (IOException e) {
             flash.addFlashAttribute("error", "No se pudo preparar el directorio de subida.");
-            return "redirect:/ver/inscripcion/" + idInscripcion;
+            return "redirect:/ver/inscripcion/" + id;
         }
 
         String ext = Optional.ofNullable(file.getOriginalFilename())
-                            .filter(n -> n.contains("."))
-                            .map(n -> n.substring(n.lastIndexOf('.')))
-                            .orElse(".jpg");
-        String filename = "inscripcion-" + idInscripcion + "-" + System.currentTimeMillis() + ext;
-        Path destino = base.resolve(filename);
+                .filter(n -> n.contains("."))
+                .map(n -> n.substring(n.lastIndexOf('.')))
+                .orElse(".jpg");
+        String filename = "inscripcion-" + id + "-" + System.currentTimeMillis() + ext;
+
         try {
-            file.transferTo(destino.toFile());
+            file.transferTo(base.resolve(filename).toFile());
         } catch (IOException e) {
             flash.addFlashAttribute("error", "Error al guardar el archivo: " + e.getMessage());
-            return "redirect:/ver/inscripcion/" + idInscripcion;
+            return "redirect:/ver/inscripcion/" + id;
         }
 
-        // Actualiza SOLO esos campos
+        // 4) Actualizar solo esos campos
         ins.setNumComprobante(numComprobante);
         ins.setImgComprobante(filename);
         ins.setModificacion(new Date());
@@ -288,17 +290,18 @@ public class AdminController {
             ins.setInscripcionEstado("EN_REVISIÓN");
         }
         inscripcionService.save(ins);
+        System.out.println(
+                "id=" + id + ", numComprobante=" + numComprobante + ", size=" + (file != null ? file.getSize() : -1));
 
         flash.addFlashAttribute("success", "Comprobante guardado correctamente.");
-        return "redirect:/ver/inscripcion/" + idInscripcion; // <- vuelve a la vista de detalle
+        return "redirect:/admin"; // o "redirect:/admin" si prefieres
     }
-
 
     @PostMapping("/iniciar-sesion")
     public ResponseEntity<String> iniciarSesion(
-        @RequestParam String usuario,
-        @RequestParam String contrasena, 
-        HttpServletRequest request, RedirectAttributes flash) {
+            @RequestParam String usuario,
+            @RequestParam String contrasena,
+            HttpServletRequest request, RedirectAttributes flash) {
 
         // los dos parametros de usuario, contraseña vienen del formulario html
         Usuario usuario_ = IusuarioService.findByUsername(usuario).orElse(null);
@@ -310,20 +313,20 @@ public class AdminController {
             return ResponseEntity.ok("Este usuario esta en estado inactivo!");
         }
 
-            HttpSession session = request.getSession(true);
-            session.setAttribute("usuario", usuario_);
-            session.setAttribute("persona", usuario_.getPersona());
+        HttpSession session = request.getSession(true);
+        session.setAttribute("usuario", usuario_);
+        session.setAttribute("persona", usuario_.getPersona());
 
-            String rol = (usuario_.getRol() != null && usuario_.getRol().getNombre() != null)
-                    ? usuario_.getRol().getNombre().toUpperCase()
-                    : "";
+        String rol = (usuario_.getRol() != null && usuario_.getRol().getNombre() != null)
+                ? usuario_.getRol().getNombre().toUpperCase()
+                : "";
 
-            session.setAttribute("nombre_rol", usuario_.getRol().getNombre());
-            flash.addAttribute("success", usuario_.getPersona().getNombre());
+        session.setAttribute("nombre_rol", usuario_.getRol().getNombre());
+        flash.addAttribute("success", usuario_.getPersona().getNombre());
 
-            // 4) Respuesta según rol
-            String respuesta = "RESPONSABLE".equals(rol) ? "Inicio Responsable" : "Iniciando Session";
-            return ResponseEntity.ok(respuesta);
+        // 4) Respuesta según rol
+        String respuesta = "RESPONSABLE".equals(rol) ? "Inicio Responsable" : "Iniciando Session";
+        return ResponseEntity.ok(respuesta);
     }
 
     @ValidarUsuarioAutenticado

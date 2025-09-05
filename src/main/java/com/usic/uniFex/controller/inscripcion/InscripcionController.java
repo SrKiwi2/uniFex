@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import com.usic.uniFex.anotacion.ValidarUsuarioAutenticado;
 import com.usic.uniFex.model.IService.IInscripcionService;
 import com.usic.uniFex.model.dto.InscripcionListadoDTO;
-import com.usic.uniFex.model.entity.Inscripcion;
 
 import lombok.RequiredArgsConstructor;
 

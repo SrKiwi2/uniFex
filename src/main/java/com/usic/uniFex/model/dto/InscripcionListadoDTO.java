@@ -13,7 +13,8 @@ public record InscripcionListadoDTO(
     List<String> categorias,   // para chips/badges
     BigDecimal total,
     LocalDateTime fecha,
-    String estado
+    String estado,
+    String imgComprobante
 ) {
     
 }

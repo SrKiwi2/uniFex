@@ -15,65 +15,71 @@
             <aside th:replace="~{layout/sidebar :: sidebar}"></aside>
             <div class="layout-page">
                 <nav th:replace="~{layout/topbar :: topbar}"></nav>
-                
-                    <div class="container-xxl flex-grow-1 container-p-y" id="contenido">
-                        <div class="layout-wrapper layout-content-navbar">
-                            <div class="layout-container">
-                                <div class="container">
-                                    <div class="content-wrapper">
-                                        <div class="card animated-card position-relative p-0 mb-4 overflow-hidden shadow-sm border-0" style="min-height: 200px; border-radius: 14px; background: linear-gradient(135deg, rgba(30,58,138,0.06), rgba(185,28,28,0.06));">
-                                            <div class="card-body d-flex flex-column justify-content-center align-items-center text-center py-5 px-3">
-                                                <!-- Nombre del sistema dinámico -->
-                                                <h1 class="titulo-sistema mb-2 text-uppercase">
-                                                    UNIFEXPO-UAP <span class="version">0.2</span>
-                                                </h1>
 
-                                                <p class="slogan mb-0 fst-italic d-sm-block">
-                                                    Escribiendo una nueva historia con vos......
-                                                </p>
+                <div class="container-xxl flex-grow-1 container-p-y" id="contenido">
+                    <div class="layout-wrapper layout-content-navbar">
+                        <div class="layout-container">
+                            <div class="container">
+                                <div class="content-wrapper">
+                                    <div class="card animated-card position-relative p-0 mb-4 overflow-hidden shadow-sm border-0"
+                                        style="min-height: 200px; border-radius: 14px; background: linear-gradient(135deg, rgba(30,58,138,0.06), rgba(185,28,28,0.06));">
+                                        <div
+                                            class="card-body d-flex flex-column justify-content-center align-items-center text-center py-5 px-3">
+                                            <!-- Nombre del sistema dinámico -->
+                                            <h1 class="titulo-sistema mb-2 text-uppercase">
+                                                UNIFEXPO-UAP <span class="version">0.2</span>
+                                            </h1>
 
-                                            </div>
+                                            <p class="slogan mb-0 fst-italic d-sm-block">
+                                                Escribiendo una nueva historia con vos......
+                                            </p>
+
                                         </div>
-
-                                        <div class="col-md">
-                                            <div class="card">
-                                                <h6 class="card-header" >ADJUNTAR COMPROBANTE | TOTAL A PAGAR : <b th:text="${sumaCostosPuestos + ' Bs.'}"></b></h6>
-                                                <div class="card-body">
-                                                    <form th:action="@{/actualizar/inscripcion}"
-      th:object="${inscripcion}"
-      method="post"
-      enctype="multipart/form-data"
-      novalidate>
-
-  <input type="hidden" th:field="*{id}" />
-
-  <div class="mb-3">
-    <label class="form-label">Número de Comprobante</label>
-    <!-- Envía name="num_comprobante" -->
-    <input type="number" class="form-control" th:field="*{num_comprobante}" required />
-  </div>
-
-  <div class="mb-3">
-    <label class="form-label">Adjuntar Imagen del comprobante</label>
-    <input type="file" name="comprobante" accept="image/*" class="form-control" required />
-  </div>
-
-  <button type="submit" class="btn btn-success w-100 p-3">Completar Registro</button>
-</form>
-
-
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        <footer th:replace="~{layout/footer :: footer}"></footer>
                                     </div>
+
+                                    <div class="col-md">
+                                        <div class="card">
+                                            <h6 class="card-header">ADJUNTAR COMPROBANTE | TOTAL A PAGAR : <b
+                                                    th:text="${sumaCostosPuestos + ' Bs.'}"></b></h6>
+                                            <div class="card-body">
+                                                <form th:action="@{/actualizar/inscripcion}"
+                                                        method="post"
+                                                        enctype="multipart/form-data"
+                                                        novalidate>
+
+                                                    <!-- id oculto -->
+                                                    <input type="hidden" name="id" th:value="${inscripcion.id}" />
+
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Número de Comprobante</label>
+                                                        <input type="number" name="numComprobante"
+                                                            class="form-control"
+                                                            th:value="${inscripcion.numComprobante}" required />
+                                                    </div>
+
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Adjuntar Imagen del comprobante</label>
+                                                        <input type="file" name="comprobante" accept="image/*" class="form-control" required />
+                                                    </div>
+
+                                                    <button type="submit" class="btn btn-success w-100 p-3">
+                                                        Completar Registro
+                                                    </button>
+                                                    </form>
+
+
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <footer th:replace="~{layout/footer :: footer}"></footer>
                                 </div>
                             </div>
                         </div>
-                        
                     </div>
-                
+
+                </div>
+
             </div>
         </div>
     </div>
