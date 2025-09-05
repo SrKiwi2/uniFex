@@ -3,11 +3,13 @@ package com.usic.uniFex.model.IServiceImp;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 import com.usic.uniFex.model.IService.IInscripcionService;
 import com.usic.uniFex.model.dao.IInscripcionDao;
 import com.usic.uniFex.model.entity.Inscripcion;
 
+@Service
 public class InscripcionServiceImpl implements IInscripcionService{
     
     @Autowired

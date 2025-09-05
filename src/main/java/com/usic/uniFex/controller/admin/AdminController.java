@@ -2,19 +2,25 @@ package com.usic.uniFex.controller.admin;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import com.usic.uniFex.anotacion.ValidarUsuarioAutenticado;
+import com.usic.uniFex.model.IService.ICategoriaService;
+import com.usic.uniFex.model.IService.ITipoEntidadService;
 import com.usic.uniFex.model.IService.IUsuarioService;
+import com.usic.uniFex.model.entity.Entidad;
+import com.usic.uniFex.model.entity.Persona;
 import com.usic.uniFex.model.entity.Usuario;
 
-import ch.qos.logback.core.model.Model;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
@@ -23,14 +29,22 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class AdminController {
 
+    private final ITipoEntidadService tipoEntidadService;
+    private final ICategoriaService categoriaService;
     private final IUsuarioService IusuarioService;
     private final PasswordEncoder passwordEncoder;
     private static final Logger logger = LoggerFactory.getLogger(AdminController.class);
 
     @ValidarUsuarioAutenticado
     @GetMapping(value = "/admin")
-    public String adminIndex(HttpServletRequest request, Model model) {
+    public String adminIndex(HttpServletRequest request, Model model, @Validated Entidad entidad) {
         Usuario usuario = (Usuario) request.getSession().getAttribute("usuario");
+        model.addAttribute("tiposEntidads", tipoEntidadService.findAll());
+        model.addAttribute("categorias", categoriaService.findAll());
+
+        model.addAttribute("responsable1", new Persona());
+        model.addAttribute("responsable2", new Persona());
+
         logger.info("Usuario en sesión: {}", usuario.getPersona().getNombre());
         return "inicio-admin";
     }

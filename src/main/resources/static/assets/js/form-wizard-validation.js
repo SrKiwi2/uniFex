@@ -29,52 +29,88 @@
     // Account details
     const FormValidation1 = FormValidation.formValidation(wizardValidationFormStep1, {
       fields: {
-        formValidationUsername: {
+        formValidationNombreEntidad: {
+          selector: '#formValidationNombreEntidad',
           validators: {
             notEmpty: {
-              message: 'The name is required'
+              message: 'El campo es requerido'
             },
             stringLength: {
               min: 6,
               max: 30,
-              message: 'The name must be more than 6 and less than 30 characters long'
+              message: 'El dato debe tener entre 6 y 30 caracteres'
             },
             regexp: {
               regexp: /^[a-zA-Z0-9 ]+$/,
-              message: 'The name can only consist of alphabetical, number and space'
+              message: 'El dato solo puede consistir en caracteres alfanuméricos y espacios'
             }
           }
         },
-        formValidationEmail: {
+        formValidationNit: {
+          selector: '#formValidationNit',
           validators: {
             notEmpty: {
-              message: 'The Email is required'
+              message: 'El campo es requerido'
             },
-            emailAddress: {
-              message: 'The value is not a valid email address'
-            }
-          }
-        },
-        formValidationPass: {
-          validators: {
-            notEmpty: {
-              message: 'The password is required'
-            }
-          }
-        },
-        formValidationConfirmPass: {
-          validators: {
-            notEmpty: {
-              message: 'The Confirm Password is required'
+            stringLength: {
+              min: 6,
+              max: 30,
+              message: 'El dato debe tener entre 6 y 30 caracteres'
             },
-            identical: {
-              compare: function () {
-                return wizardValidationFormStep1.querySelector('[name="formValidationPass"]').value;
-              },
-              message: 'The password and its confirm are not the same'
+            regexp: {
+              regexp: /^[a-zA-Z0-9 ]+$/,
+              message: 'El dato solo puede consistir en caracteres alfanuméricos y espacios'
             }
           }
-        }
+        },
+        formValidationDescripcion: {
+          selector: '#formValidationDescripcion',
+          validators: {
+            notEmpty: {
+              message: 'El campo es requerido'
+            },
+            stringLength: {
+              min: 6,
+              max: 30,
+              message: 'El dato debe tener entre 6 y 30 caracteres'
+            },
+            regexp: {
+              regexp: /^[a-zA-Z0-9 ]+$/,
+              message: 'El dato solo puede consistir en caracteres alfanuméricos y espacios'
+            }
+          }
+        },
+        
+        // formValidationEmail: {
+        //   validators: {
+        //     notEmpty: {
+        //       message: 'The Email is required'
+        //     },
+        //     emailAddress: {
+        //       message: 'The value is not a valid email address'
+        //     }
+        //   }
+        // },
+        // formValidationPass: {
+        //   validators: {
+        //     notEmpty: {
+        //       message: 'The password is required'
+        //     }
+        //   }
+        // },
+        // formValidationConfirmPass: {
+        //   validators: {
+        //     notEmpty: {
+        //       message: 'The Confirm Password is required'
+        //     },
+        //     identical: {
+        //       compare: function () {
+        //         return wizardValidationFormStep1.querySelector('[name="formValidationPass"]').value;
+        //       },
+        //       message: 'The password and its confirm are not the same'
+        //     }
+        //   }
+        // }
       },
       plugins: {
         trigger: new FormValidation.plugins.Trigger(),
@@ -103,34 +139,86 @@
     // Personal info
     const FormValidation2 = FormValidation.formValidation(wizardValidationFormStep2, {
       fields: {
-        formValidationFirstName: {
+        formValidationNombreResponsable1: {
+          selector: '#formValidationNombreResponsable1',
           validators: {
             notEmpty: {
-              message: 'The first name is required'
+              message: 'El dato es requerido'
             }
           }
         },
-        formValidationLastName: {
+        formValidationApResponsable1: {
+          selector: '#formValidationApResponsable1',
           validators: {
             notEmpty: {
-              message: 'The last name is required'
+              message: 'El dato es requerido'
             }
           }
         },
-        formValidationCountry: {
+        formValidationAmResponsable1: {
+          selector: '#formValidationAmResponsable1',
           validators: {
             notEmpty: {
-              message: 'The Country is required'
+              message: 'El dato es requerido'
             }
           }
         },
-        formValidationLanguage: {
+        formValidationCiResponsable1: {
+          selector: '#formValidationCiResponsable1',
           validators: {
             notEmpty: {
-              message: 'The Languages is required'
+              message: 'El dato es requerido'
+            }
+          }
+        },
+        formValidationCorreoResponsable1: {
+          selector: '#formValidationCorreoResponsable1',
+          validators: {
+            notEmpty: {
+              message: 'El correo es requerido'
+            },
+            emailAddress: {
+              message: 'No es un correo válido'
+            }
+          }
+        },
+        formValidationCelularResponsable1: {
+          selector: '#formValidationCelularResponsable1',
+          validators: {
+            notEmpty: {
+              message: 'El dato es requerido'
             }
           }
         }
+        
+        // formValidationFirstName: {
+        //   validators: {
+        //     notEmpty: {
+        //       message: 'The first name is required'
+        //     }
+        //   }
+        // },
+        // formValidationLastName: {
+        //   validators: {
+        //     notEmpty: {
+        //       message: 'The last name is required'
+        //     }
+        //   }
+        // },
+        // formValidationCountry: {
+        //   validators: {
+        //     notEmpty: {
+        //       message: 'The Country is required'
+        //     }
+        //   }
+        // },
+        // formValidationLanguage: {
+        //   validators: {
+        //     notEmpty: {
+        //       message: 'The Languages is required'
+        //     }
+        //   }
+        // }
       },
       plugins: {
         trigger: new FormValidation.plugins.Trigger(),
@@ -138,7 +226,7 @@
           // Use this for enabling/changing valid/invalid class
           // eleInvalidClass: '',
           eleValidClass: '',
-          rowSelector: '.col-sm-6'
+          rowSelector: '.col-sm-4'
         }),
         autoFocus: new FormValidation.plugins.AutoFocus(),
         submitButton: new FormValidation.plugins.SubmitButton()
