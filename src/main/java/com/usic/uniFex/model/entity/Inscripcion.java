@@ -2,6 +2,7 @@ package com.usic.uniFex.model.entity;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 import com.usic.uniFex.Config.AuditoriaConfig;
@@ -30,6 +31,8 @@ public class Inscripcion extends AuditoriaConfig{
     private Integer numComprobante;
     private String imgComprobante;
     private boolean pagoContado;
+    private Date fechaInicio;
+    private Date fechaFin;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_entidad")

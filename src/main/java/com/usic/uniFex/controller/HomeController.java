@@ -7,11 +7,26 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import com.usic.uniFex.model.IService.ICategoriaService;
+import com.usic.uniFex.model.IService.IPuestoService;
+import com.usic.uniFex.model.IService.ITipoEntidadService;
+
+import lombok.RequiredArgsConstructor;
+
 @Controller
+@RequiredArgsConstructor
 public class HomeController {
+
+  private final ITipoEntidadService tipoEntidadService;
+  private final ICategoriaService categoriaService;
+    private final IPuestoService puestoService;
+
     @GetMapping("/")
   public String home(Model model) {
     model.addAttribute("personaForm", new PersonaForm());
+    model.addAttribute("tiposEntidads", tipoEntidadService.findAll());
+        model.addAttribute("categorias", categoriaService.findAll());
+        model.addAttribute("puestos", puestoService.findAll());
     System.out.println("publico mijo");
     return "publico/index"; // templates/publico/index.html
   }

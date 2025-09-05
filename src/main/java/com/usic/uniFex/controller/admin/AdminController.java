@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
@@ -13,6 +14,7 @@ import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Controller;
@@ -90,8 +92,8 @@ public class AdminController {
             @RequestParam("nitEntidad") String nitEntidad,
             @RequestParam("descripcionEntidad") String descripcionEntidad,
             @RequestParam("objetoContratacion") String objetoContratacion,
-            @RequestParam("fechaInicio") String fechaInicio,
-            @RequestParam("fechaFin") String fechaFin,
+            @RequestParam("fechaInicio") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaInicio,
+            @RequestParam("fechaFin")    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaFin,
             @RequestParam("tipoEntidad") Long tipoEntidad,
 
             @RequestParam("nombreResponsable1") String nombreResponsable1,
@@ -207,6 +209,8 @@ public class AdminController {
         inscripcion.setRegistroIdUsuario(usuario.getId());
         inscripcion.setModificacion(new Date());
         inscripcion.setModificacionIdUsuario(usuario.getId());
+        inscripcion.setFechaInicio(java.sql.Date.valueOf(fechaInicio));
+        inscripcion.setFechaFin(java.sql.Date.valueOf(fechaFin));
         inscripcionService.save(inscripcion);
 
         // ===== PUESTOS =====
@@ -404,7 +408,7 @@ public class AdminController {
         flash.addAttribute("success", usuario_.getPersona().getNombre());
 
         // 4) Respuesta según rol
-        String respuesta = "RESPONSABLE".equals(rol) ? "Inicio Responsable" : "Iniciando Session";
+        String respuesta = "ADMINISTRATIVO".equals(rol) ? "Inicio Responsable" : "Iniciando Session";
         return ResponseEntity.ok(respuesta);
     }
 
