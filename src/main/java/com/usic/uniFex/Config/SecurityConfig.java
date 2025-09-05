@@ -23,6 +23,7 @@ public class SecurityConfig {
             "/admin/**",
             "/iniciar-sesion/**",
             "/cerrar_sesion",
+            "/administracion/**",
             "/assets/**")
             .permitAll()
             .anyRequest().authenticated()

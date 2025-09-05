@@ -31,7 +31,7 @@
                             data-bs-toggle="modal" data-bs-target="#modalFormularioPersona">
                             <i class="fa-solid fa-pen-to-square"></i> Editar
                         </button>
-                        <button type="button" class="btn btn-sm btn-danger" th:onclick="eliminar([[${per.nombreCompleto}]],[[${id_encryptado[__${index.index}__]}]])">
+                        <button type="button" class="btn btn-sm btn-danger" th:onclick="eliminar([[${per.nombre}]],[[${id_encryptado[__${index.index}__]}]])">
                             <i class="fa-solid fa-trash"></i> Eliminar
                         </button>
                     </th>

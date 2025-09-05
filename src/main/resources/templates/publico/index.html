@@ -34,15 +34,6 @@
 
                     <!-- Usuario logueado -->
                     <li class="nav-item dropdown" th:if="${session.persona != null}">
-                        <a class="nav-link dropdown-toggle d-flex align-items-center" href="#"
-                            data-bs-toggle="dropdown">
-                            <span class="rounded-circle d-inline-flex justify-content-center align-items-center me-2"
-                                style="width:32px;height:32px;background:linear-gradient(135deg,#4f46e5,#06b6d4);color:#fff;font-weight:600;">
-                                <span
-                                    th:text="${(#strings.substring((session.persona?.nombre?:'A'),0,1) + (#strings.substring((session.persona?.paterno?:'Z'),0,1))).toUpperCase()}">AZ</span>
-                            </span>
-                            <span th:text="${session.persona?.nombreCompleto}">Usuario</span>
-                        </a>
                         <ul class="dropdown-menu dropdown-menu-end shadow">
                             <li class="px-3 py-2 small text-muted">
                                 <i class="ti ti-shield me-1"></i><span th:text="${session.nombre_rol}">ROL</span>

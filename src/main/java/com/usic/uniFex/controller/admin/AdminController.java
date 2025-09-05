@@ -12,8 +12,6 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import com.usic.uniFex.anotacion.ValidarUsuarioAutenticado;
 import com.usic.uniFex.model.IService.IUsuarioService;
-import com.usic.uniFex.model.entity.Persona;
-import com.usic.uniFex.model.entity.Responsable;
 import com.usic.uniFex.model.entity.Usuario;
 
 import ch.qos.logback.core.model.Model;
