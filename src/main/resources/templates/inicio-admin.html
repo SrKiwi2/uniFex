@@ -68,10 +68,7 @@
                                                 </div>
                                             </div>
                                             <div class="bs-stepper-content">
-                                                <form id="wizard-validation-form" onSubmit="return false">
-                                                    <input type="hidden" th:field="${entidad.id}">
-                                                    <input type="hidden" th:field="${responsable1.id}">
-                                                    <input type="hidden" th:field="${responsable2.id}">
+                                                <form id="wizard-validation-form" action="/admin/guardar" method="post">
 
                                                     <div id="account-details-validation" class="content">
                                                         <div class="content-header mb-3 text-center">
@@ -83,7 +80,7 @@
                                                                 <label class="form-label" for="formValidationNombreEntidad">Nombre de la Entidad</label>
                                                                 <input
                                                                     type="text"
-                                                                    th:field="${entidad.nombre}"
+                                                                    name="nombreEntidad"
                                                                     id="formValidationNombreEntidad"
                                                                     class="form-control"/>
                                                             </div>
@@ -91,7 +88,7 @@
                                                                 <label class="form-label" for="formValidationNit">Nit de la Entidad</label>
                                                                 <input
                                                                     type="text"
-                                                                    th:field="${entidad.nit}"
+                                                                    name="nitEntidad"
                                                                     id="formValidationNit"
                                                                     class="form-control"/>
                                                             </div>
@@ -99,13 +96,13 @@
                                                                 <label class="form-label" for="formValidationDescripcion">Descricion de la Entidad</label>
                                                                 <input
                                                                     type="text"
-                                                                    th:field="${entidad.descripcion}"
+                                                                    name="descripcionEntidad"
                                                                     id="formValidationDescripcion"
                                                                     class="form-control"/>
                                                             </div>
                                                             <div class="col-sm-6">
                                                                 <label class="form-label" for="formValidationTipoEntidad">Tipo de Entidad</label>
-                                                                <select class="select2" id="formValidationTipoEntidad" name="formValidationTipoEntidad">
+                                                                <select class="select2" id="formValidationTipoEntidad" name="tipoEntidad">
                                                                     <th:block th:each="tes : ${tiposEntidads}">
                                                                         <option th:value="${tes.id}" th:text="${tes.nombre}"></option>
                                                                     </th:block>
@@ -118,7 +115,7 @@
                                                                 <i class="ti ti-arrow-left me-sm-1 me-0"></i>
                                                                 <span class="align-middle d-sm-inline-block d-none">ANTERIOR REGISTRO</span>
                                                             </button>
-                                                            <button class="btn btn-primary btn-next">
+                                                            <button class="btn btn-primary btn-next" type="button">
                                                                 <span class="align-middle d-sm-inline-block d-none me-sm-1">CONTINUAR REGISTRO</span>
                                                                 <i class="ti ti-arrow-right"></i>
                                                             </button>
@@ -139,7 +136,7 @@
                                                                 <input
                                                                     type="text"
                                                                     id="formValidationNombreResponsable1"
-                                                                    th:field="${responsable1.nombre}"
+                                                                    name="nombreResponsable1"
                                                                     class="form-control"/>
                                                             </div>
                                                             <div class="col-sm-4">
@@ -147,7 +144,7 @@
                                                                     <input
                                                                         type="text"
                                                                         id="formValidationApResponsable1"
-                                                                        th:field="${responsable1.paterno}"
+                                                                        name="paternoResponsable1"
                                                                         class="form-control"/>
                                                             </div>
                                                             <div class="col-sm-4">
@@ -155,7 +152,7 @@
                                                                     <input
                                                                         type="text"
                                                                         id="formValidationAmResponsable1"
-                                                                        th:field="${responsable1.materno}"
+                                                                        name="maternoResponsable1"
                                                                         class="form-control"/>
                                                             </div>
                                                             <div class="col-sm-4">
@@ -163,7 +160,7 @@
                                                                     <input
                                                                         type="text"
                                                                         id="formValidationCiResponsable1"
-                                                                        th:field="${responsable1.ci}"
+                                                                        name="ciResponsable1"
                                                                         class="form-control"/>
                                                             </div>
                                                             <div class="col-sm-4">
@@ -171,7 +168,7 @@
                                                                     <input
                                                                         type="text"
                                                                         id="formValidationCorreoResponsable1"
-                                                                        th:field="${responsable1.correo}"
+                                                                        name="correoResponsable1"
                                                                         class="form-control"/>
                                                             </div>
                                                             <div class="col-sm-4">
@@ -179,7 +176,7 @@
                                                                     <input
                                                                         type="text"
                                                                         id="formValidationCelularResponsable1"
-                                                                        th:field="${responsable1.celular}"
+                                                                        name="celularResponsable1"
                                                                         class="form-control"/>
                                                             </div>
                                                             
@@ -190,7 +187,7 @@
                                                                 <input
                                                                     type="text"
                                                                     id="formValidationNombreResponsable2"
-                                                                    th:field="${responsable2.nombre}"
+                                                                    name="nombreResponsable2"
                                                                     class="form-control"/>
                                                             </div>
                                                             <div class="col-sm-4">
@@ -198,7 +195,7 @@
                                                                     <input
                                                                         type="text"
                                                                         id="formValidationApResponsable2"
-                                                                        th:field="${responsable2.paterno}"
+                                                                        name="paternoResponsable2"
                                                                         class="form-control"/>
                                                             </div>
                                                             <div class="col-sm-4">
@@ -206,7 +203,7 @@
                                                                     <input
                                                                         type="text"
                                                                         id="formValidationAmResponsable2"
-                                                                        th:field="${responsable2.materno}"
+                                                                        name="maternoResponsable2"
                                                                         class="form-control"/>
                                                             </div>
                                                             <div class="col-sm-4">
@@ -214,7 +211,7 @@
                                                                     <input
                                                                         type="text"
                                                                         id="formValidationCiResponsable2"
-                                                                        th:field="${responsable2.ci}"
+                                                                        name="ciResponsable2"
                                                                         class="form-control"/>
                                                             </div>
                                                             <div class="col-sm-4">
@@ -222,7 +219,7 @@
                                                                     <input
                                                                         type="text"
                                                                         id="formValidationCorreoResponsable2"
-                                                                        th:field="${responsable2.correo}"
+                                                                        name="correoResponsable2"
                                                                         class="form-control"/>
                                                             </div>
                                                             <div class="col-sm-4">
@@ -230,17 +227,17 @@
                                                                     <input
                                                                         type="text"
                                                                         id="formValidationCelularResponsable2"
-                                                                        th:field="${responsable2.celular}"
+                                                                        name="celularResponsable2"
                                                                         class="form-control"/>
                                                             </div>   
                                                             
                                                          
                                                             <div class="col-12 d-flex justify-content-between">
-                                                            <button class="btn btn-label-secondary btn-prev">
+                                                            <button class="btn btn-label-secondary btn-prev" type="button">
                                                                 <i class="ti ti-arrow-left me-sm-1 me-0"></i>
                                                                 <span class="align-middle d-sm-inline-block d-none">ANTERIOR REGISTRO</span>
                                                             </button>
-                                                            <button class="btn btn-primary btn-next">
+                                                            <button class="btn btn-primary btn-next" type="button">
                                                                 <span class="align-middle d-sm-inline-block d-none me-sm-1">CONTINUAR REGISTRO</span>
                                                                 <i class="ti ti-arrow-right"></i>
                                                             </button>
@@ -255,30 +252,30 @@
                                                         </div>
                                                         <div class="row g-3">
                                                             <div class="col-sm-6">
-                                                                <label class="form-label" for="formValidationCategoria">Categoria del puesto</label>
+                                                                <label class="form-label" for="formValidationCategoria">Categoría del puesto</label>
                                                                 <select class="select2" id="formValidationCategoria" name="formValidationCategoria">
+                                                                    <option value="">-- Seleccione una categoría --</option>
                                                                     <th:block th:each="cats : ${categorias}">
                                                                         <option th:value="${cats.id}" th:text="${cats.nombre}"></option>
                                                                     </th:block>
                                                                 </select>
                                                             </div>
+
                                                             <div class="col-sm-6">
-                                                                <label class="form-label" for="formValidationCategoria">Puestos Disponibles</label>
-                                                                <select id="formValidationPuestosDisponibles" class="select2 form-select" multiple>
-                                                                    <th:block th:each="pts : ${puestos}">
-                                                                        <option th:value="${pts.id}" th:text="${pts.codigo +' | tamano: '+pts.tamano}"></option>
-                                                                    </th:block>
+                                                                <label class="form-label" for="formValidationPuestosDisponibles">Puestos Disponibles</label>
+                                                                <select name="puestosSeleccionados" id="formValidationPuestosDisponibles" class="select2 form-select" multiple>
+                                                                    <!-- Se cargan dinámicamente con JS -->
                                                                 </select>
                                                             </div>
                                                             
                                                             
                                                             
                                                             <div class="col-12 d-flex justify-content-between">
-                                                            <button class="btn btn-label-secondary btn-prev">
+                                                            <button class="btn btn-label-secondary btn-prev" type="button">
                                                                 <i class="ti ti-arrow-left me-sm-1 me-0"></i>
                                                                 <span class="align-middle d-sm-inline-block d-none">ANTERIOR REGISTRO</span>
                                                             </button>
-                                                            <button class="btn btn-success btn-next btn-submit">COMPLETAR REGISTRO</button>
+                                                            <button class="btn btn-success btn-next btn-submit" type="submit">COMPLETAR REGISTRO</button>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -329,6 +326,44 @@
     <div th:replace="~{layout/script :: script}"></div>
     <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
     <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+    <script th:inline="javascript">
+        /*<![CDATA[*/
+        // Thymeleaf inyecta todos los puestos en un array JS
+        let puestos = /*[[${puestos}]]*/ [];
+
+        // convertir cada puesto en objeto limpio
+        puestos = puestos.map(p => ({
+            id: p.id,
+            codigo: p.codigo,
+            tamano: p.tamano,
+            categoriaId: p.categoria.id
+        }));
+        /*]]>*/
+    </script>
+    <script>
+        $(document).ready(function () {
+            $('#formValidationCategoria, #formValidationPuestosDisponibles').select2();
+
+            $('#formValidationCategoria').on('change', function () {
+                let categoriaId = $(this).val();
+                let $puestosSelect = $('#formValidationPuestosDisponibles');
+
+                // limpiar antes de cargar
+                $puestosSelect.empty();
+
+                if (categoriaId) {
+                    // filtrar los puestos por categoría
+                    let filtrados = puestos.filter(p => p.categoriaId == categoriaId);
+
+                    filtrados.forEach(function (p) {
+                        $puestosSelect.append(new Option(p.codigo + ' | tamaño: ' + p.tamano, p.id));
+                    });
+                }
+
+                $puestosSelect.trigger('change'); // refrescar select2
+            });
+        });
+    </script>
 
 </body>
 

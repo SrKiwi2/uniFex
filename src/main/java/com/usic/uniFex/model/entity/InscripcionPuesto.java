@@ -9,20 +9,21 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "inscripcion")
+@Table(name = "inscripcion_puesto")
 @Setter
 @Getter
-public class Inscripcion extends AuditoriaConfig{
+public class InscripcionPuesto extends AuditoriaConfig{
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private Integer num_comprobante;
-    private String img_comprobante;
+    private BigDecimal costo;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "id_entidad")
-    private Entidad entidad;
+    @JoinColumn(name = "id_puesto")
+    private Puesto puesto;
 
-    private LocalDateTime fechaCompra;
-    private String inscripcionEstado;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_inscripcion")
+    private Inscripcion inscripcion;
+    
 }

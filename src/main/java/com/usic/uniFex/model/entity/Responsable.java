@@ -6,7 +6,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "entidad")
+@Table(name = "responsable")
 @Setter
 @Getter
 public class Responsable extends AuditoriaConfig{

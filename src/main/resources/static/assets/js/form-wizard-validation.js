@@ -266,46 +266,46 @@
     // Social links
     const FormValidation3 = FormValidation.formValidation(wizardValidationFormStep3, {
       fields: {
-        formValidationTwitter: {
-          validators: {
-            notEmpty: {
-              message: 'The Twitter URL is required'
-            },
-            uri: {
-              message: 'The URL is not proper'
-            }
-          }
-        },
-        formValidationFacebook: {
-          validators: {
-            notEmpty: {
-              message: 'The Facebook URL is required'
-            },
-            uri: {
-              message: 'The URL is not proper'
-            }
-          }
-        },
-        formValidationGoogle: {
-          validators: {
-            notEmpty: {
-              message: 'The Google URL is required'
-            },
-            uri: {
-              message: 'The URL is not proper'
-            }
-          }
-        },
-        formValidationLinkedIn: {
-          validators: {
-            notEmpty: {
-              message: 'The LinkedIn URL is required'
-            },
-            uri: {
-              message: 'The URL is not proper'
-            }
-          }
-        }
+        // formValidationTwitter: {
+        //   validators: {
+        //     notEmpty: {
+        //       message: 'The Twitter URL is required'
+        //     },
+        //     uri: {
+        //       message: 'The URL is not proper'
+        //     }
+        //   }
+        // },
+        // formValidationFacebook: {
+        //   validators: {
+        //     notEmpty: {
+        //       message: 'The Facebook URL is required'
+        //     },
+        //     uri: {
+        //       message: 'The URL is not proper'
+        //     }
+        //   }
+        // },
+        // formValidationGoogle: {
+        //   validators: {
+        //     notEmpty: {
+        //       message: 'The Google URL is required'
+        //     },
+        //     uri: {
+        //       message: 'The URL is not proper'
+        //     }
+        //   }
+        // },
+        // formValidationLinkedIn: {
+        //   validators: {
+        //     notEmpty: {
+        //       message: 'The LinkedIn URL is required'
+        //     },
+        //     uri: {
+        //       message: 'The URL is not proper'
+        //     }
+        //   }
+        // }
       },
       plugins: {
         trigger: new FormValidation.plugins.Trigger(),
@@ -319,11 +319,7 @@
         submitButton: new FormValidation.plugins.SubmitButton()
       }
     }).on('core.form.valid', function () {
-      // You can submit the form
-      // wizardValidationForm.submit()
-      // or send the form data to server via an Ajax request
-      // To make the demo simple, I just placed an alert
-      alert('Submitted..!!');
+      wizardValidationForm.submit();
     });
 
     wizardValidationNext.forEach(item => {
