@@ -8,6 +8,8 @@ import org.springframework.stereotype.Service;
 import com.usic.uniFex.model.IService.IInscripcionService;
 import com.usic.uniFex.model.dao.IAdministrativoDao;
 import com.usic.uniFex.model.dao.IInscripcionDao;
+import com.usic.uniFex.model.dto.ResumenCategoriaView;
+import com.usic.uniFex.model.dto.ResumenEntidadView;
 import com.usic.uniFex.model.entity.Inscripcion;
 
 @Service
@@ -49,5 +51,15 @@ public class InscripcionServiceImpl implements IInscripcionService{
     @Override
     public List<Inscripcion> listarConRelaciones() {
         return inscripcionDao.findAll();
+    }
+
+    @Override
+    public List<ResumenCategoriaView> resumenPorCategoria() {
+        return inscripcionDao.resumenPorCategoria();
+    }
+
+    @Override
+    public List<ResumenEntidadView> resumenPorEntidad() {
+        return inscripcionDao.resumenPorEntidad();
     }
 }

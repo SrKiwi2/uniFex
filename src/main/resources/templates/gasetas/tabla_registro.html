@@ -27,7 +27,7 @@
         <tr th:each="p, i : ${puestos}">
           <td th:text="${i.index + 1}"></td>
           <td th:text="${p.codigo}">P-001</td>
-          <td th:text="${p.tamano}">3x3</td>
+          <td th:text="${p.tamaño}">3x3</td>
           <!-- si tu campo se llama tamaño en Java, cambia a p.tamaño -->
           <td
             th:text="${p.categoria != null ? p.categoria.nombre : 'Sin categoría'}"

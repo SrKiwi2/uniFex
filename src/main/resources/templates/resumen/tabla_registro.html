@@ -1,0 +1,57 @@
+<div class="card">
+  <div class="card-header d-flex justify-content-lg-between">
+    <h5>Registro puestoario</h5>
+  </div>
+  <div class="card-datatable table-responsive pt-0">
+    <table class="table table-hover" id="tbl-cat">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Usuario</th>
+            <th>Categoría</th>
+            <th class="text-end">Inscripciones</th>
+            <th class="text-end">Puestos</th>
+            <th class="text-end">Total (Bs)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr th:each="row, i : ${data}">
+            <td th:text="${i.index + 1}"></td>
+            <td th:text="${row.username}"></td>
+            <td th:text="${row.categoria}"></td>
+            <td class="text-end" th:text="${row.cantidadInscripciones}"></td>
+            <td class="text-end" th:text="${row.cantidadPuestos}"></td>
+            <td class="text-end" th:text="${#numbers.formatDecimal(row.totalBs, 1, 'POINT', 2, 'NONE')}"></td>
+          </tr>
+        </tbody>
+      </table>
+  </div>
+</div>
+
+<script>
+  $('#tbl-cat').DataTable({
+        language: {
+            "sProcessing": "Procesando...",
+            "sLengthMenu": "Mostrar _MENU_ registros",
+            "sZeroRecords": "No se encontraron resultados",
+            "sInfo": "Mostrando registros del _START_ al _END_ de un total de _TOTAL_ registros",
+            "sInfoEmpty": "Mostrando registros del 0 al 0 de un total de 0 registros",
+            "sInfoFiltered": "(filtrado de un total de _MAX_ registros)",
+            "sInfoPostFix": "",
+            "sSearch": "Buscar:",
+            "sUrl": "",
+            "sInfoThousands": ",",
+            "sLoadingRecords": "Cargando...",
+            "oPaginate": {
+                "sFirst": "Primero",
+                "sLast": "Último",
+                "sNext": "Siguiente",
+                "sPrevious": "Anterior"
+            },
+            "oAria": {
+                "sSortAscending": ": Activar para ordenar la columna de manera ascendente",
+                "sSortDescending": ": Activar para ordenar la columna de manera descendente"
+            }
+        }
+    });
+</script>

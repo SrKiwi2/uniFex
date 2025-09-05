@@ -33,7 +33,7 @@
         <li class="menu-item" id="opcion_admin" th:if="${session.nombre_rol == 'ADMINISTRADOR'  or session.nombre_rol == 'ADMINISTRATIVO'}">
             <a href="#" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons ti ti-users"></i>
-                <div>Administrar Usuarios</div>
+                <div>Administrar personal</div>
             </a>
             <ul class="menu-sub">
                 <li class="menu-item" id="opcion_persona">
@@ -42,6 +42,14 @@
                     </a>
                 </li>
             </ul>
+            <ul class="menu-sub">
+                <li class="menu-item" id="opcion_usuario">
+                    <a class="menu-link">
+                        <div>usuario</div>
+                    </a>
+                </li>
+            </ul>
+            
         </li>
         <!-- COMPLEMENTOS -->
         <li class="menu-header small text-uppercase" th:if="${session.nombre_rol == 'ADMINISTRADOR' or session.nombre_rol == 'SUPER USUARIO' or session.nombre_rol == 'ADMINISTRATIVO'}">
@@ -63,6 +71,13 @@
                 <li class="menu-item" id="opcion_inscripciones">
                     <a class="menu-link">
                         <div>Control Inscripciones</div>
+                    </a>
+                </li>
+            </ul>
+            <ul class="menu-sub">
+                <li class="menu-item" id="opcion_sr">
+                    <a class="menu-link">
+                        <div>seguimiento registro</div>
                     </a>
                 </li>
             </ul>
