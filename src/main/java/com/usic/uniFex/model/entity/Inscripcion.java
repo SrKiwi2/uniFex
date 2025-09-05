@@ -19,6 +19,8 @@ public class Inscripcion extends AuditoriaConfig{
     @JoinColumn(name = "id_puesto")
     private Puesto puesto;
 
+    private String precio;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_entidad")
     private Entidad entidad;

@@ -15,6 +15,4 @@ public class TipoEntidad extends AuditoriaConfig{
     private Long id;
 
     private String nombre; //microEmpresa macroEmpresa
-    private BigDecimal precio; //costo por tipo de entidad
-    
 }

@@ -16,4 +16,8 @@ public class Responsable extends AuditoriaConfig{
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_persona")
     private Persona persona;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_entidad")
+    private Entidad entidad;
 }

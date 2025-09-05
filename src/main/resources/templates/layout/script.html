@@ -151,6 +151,20 @@
 
             });
 
+            $("#opcion_inscripciones").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/inscripcion/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_inscripciones");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
             function cargarContenido(url) {
 
                 $.ajax({
