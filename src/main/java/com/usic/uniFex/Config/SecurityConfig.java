@@ -22,6 +22,7 @@ public class SecurityConfig {
             .requestMatchers("/",
             "/admin/**",
             "/iniciar-sesion/**",
+            "/ver/**",
             "/cerrar_sesion",
             "/administracion/**",
             "/assets/**")
