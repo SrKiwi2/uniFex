@@ -50,24 +50,33 @@
                                                     <!-- id oculto -->
                                                     <input type="hidden" name="id" th:value="${inscripcion.id}" />
 
-                                                    <div class="mb-3">
-                                                        <label class="form-label">Número de Comprobante</label>
-                                                        <input type="number" name="numComprobante"
-                                                            class="form-control"
-                                                            th:value="${inscripcion.numComprobante}" required />
+                                                                    <!-- Checkbox pago contado -->
+                                                    <div class="form-check mb-3">
+                                                        <input class="form-check-input" type="checkbox" id="pagoContado" name="pagoContado">
+                                                        <label class="form-check-label fw-bold" for="pagoContado">
+                                                            Pago al contado
+                                                        </label>
                                                     </div>
+                                                    <div id="camposComprobante">
+                                                        <div class="mb-3">
+                                                            <label class="form-label">Número de Comprobante</label>
+                                                            <input type="number" name="numComprobante"
+                                                                class="form-control"
+                                                                th:value="${inscripcion.numComprobante}"/>
+                                                        </div>
 
                                                     <div class="mb-3">
                                                         <label class="form-label">Adjuntar Imagen del comprobante</label>
-                                                        <input type="file" name="comprobante" accept="image/*" class="form-control" required />
+                                                        <input type="file" name="comprobante" accept="image/*" class="form-control"/>
                                                     </div>
 
+                                                    </div>
+
+                                                   
                                                     <button type="submit" class="btn btn-success w-100 p-3">
                                                         Completar Registro
                                                     </button>
                                                     </form>
-
-
                                             </div>
                                         </div>
                                     </div>
@@ -116,7 +125,26 @@
     <div th:replace="~{layout/script :: script}"></div>
     <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
     <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+        const pagoContado = document.getElementById("pagoContado");
+        const camposComprobante = document.querySelectorAll("#camposComprobante input");
 
+        pagoContado.addEventListener("change", () => {
+            if (pagoContado.checked) {
+                camposComprobante.forEach(campo => {
+                    campo.disabled = true;
+                    campo.removeAttribute("required");
+                });
+            } else {
+                camposComprobante.forEach(campo => {
+                    campo.disabled = false;
+                    campo.setAttribute("required", "required");
+                });
+            }
+        });
+    });
+    </script>
 </body>
 
 </html>
