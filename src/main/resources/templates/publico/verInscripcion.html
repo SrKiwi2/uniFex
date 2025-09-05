@@ -39,29 +39,29 @@
                                             <div class="card">
                                                 <h6 class="card-header" >ADJUNTAR COMPROBANTE | TOTAL A PAGAR : <b th:text="${sumaCostosPuestos + ' Bs.'}"></b></h6>
                                                 <div class="card-body">
-                                                    <form class="needs-validation" action="/actualizar/inscripcion" method="post">
-                                                        <input type="hidden" th:field="${inscripcion.id}" />
-                                                        <div class="mb-3">
-                                                            <label class="form-label" for="bs-validation-name">Numero de Comprobante</label>
-                                                            <input
-                                                                type="number"
-                                                                class="form-control"
-                                                                th:field="${inscripcion.num_comprobante}"
-                                                                id="bs-validation-name"
-                                                                required />
-                                                            <div class="valid-feedback">Dato correcto</div>
-                                                            <div class="invalid-feedback">Dato requerido</div>
-                                                        </div>
-                                                        <div class="mb-3">
-                                                            <label class="form-label" for="bs-validation-upload-file">Adjuntar Imagen del comprobante</label>
-                                                            <input type="file" class="form-control" id="bs-validation-upload-file" required />
-                                                        </div>
-                                                        <div class="row">
-                                                            <div class="col-12">
-                                                                <button type="submit" class="btn btn-success w-100 p-3">Completar Registro</button>
-                                                            </div>
-                                                        </div>
-                                                    </form>
+                                                    <form th:action="@{/actualizar/inscripcion}"
+      th:object="${inscripcion}"
+      method="post"
+      enctype="multipart/form-data"
+      novalidate>
+
+  <input type="hidden" th:field="*{id}" />
+
+  <div class="mb-3">
+    <label class="form-label">Número de Comprobante</label>
+    <!-- Envía name="num_comprobante" -->
+    <input type="number" class="form-control" th:field="*{num_comprobante}" required />
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Adjuntar Imagen del comprobante</label>
+    <input type="file" name="comprobante" accept="image/*" class="form-control" required />
+  </div>
+
+  <button type="submit" class="btn btn-success w-100 p-3">Completar Registro</button>
+</form>
+
+
                                                 </div>
                                             </div>
                                         </div>

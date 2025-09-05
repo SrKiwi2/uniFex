@@ -23,6 +23,7 @@ public class SecurityConfig {
             "/admin/**",
             "/iniciar-sesion/**",
             "/ver/**",
+            "/files/**",
             "/cerrar_sesion",
             "/administracion/**",
             "/assets/**")

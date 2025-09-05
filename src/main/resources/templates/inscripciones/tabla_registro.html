@@ -14,62 +14,101 @@
   <div class="card-datatable table-responsive pt-0">
     <table class="table table-hover" id="data-table">
       <thead>
-      <tr>
-        <th>#</th>
-        <th>Entidad</th>
-        <th>Tipo</th>
-        <th>NIT</th>
-        <th class="text-end"># Puestos</th>
-        <th>Categorías</th>
-        <th class="text-end">Total (Bs)</th>
-        <th>Fecha</th>
-        <th>Estado</th>
-        <th class="text-end">Opciones</th>
-      </tr>
+        <tr>
+          <th>#</th>
+          <th>Entidad</th>
+          <th>Tipo</th>
+          <th>NIT</th>
+          <th class="text-end"># Puestos</th>
+          <th>Categorías</th>
+          <th class="text-end">Total (Bs)</th>
+          <th>Fecha</th>
+          <th>Estado</th>
+          <th>Comprobante</th>
+          <th class="text-end">Opciones</th>
+        </tr>
       </thead>
       <tbody class="animate__animated animate__bounceInDown">
-      <tr th:each="ins, i : ${inscripciones}">
-        <td th:text="${i.index + 1}"></td>
+        <tr th:each="ins, i : ${inscripciones}">
+          <td th:text="${i.index + 1}"></td>
 
-        <td th:text="${ins.entidad != null ? ins.entidad : '—'}"></td>
-        <td th:text="${ins.tipoEntidad != null ? ins.tipoEntidad : '—'}"></td>
-        <td th:text="${ins.nit != null ? ins.nit : '—'}"></td>
+          <td th:text="${ins.entidad != null ? ins.entidad : '—'}"></td>
+          <td th:text="${ins.tipoEntidad != null ? ins.tipoEntidad : '—'}"></td>
+          <td th:text="${ins.nit != null ? ins.nit : '—'}"></td>
 
-        <td class="text-end" th:text="${ins.cantidadPuestos}"></td>
+          <td class="text-end" th:text="${ins.cantidadPuestos}"></td>
 
-        <!-- Chips de categorías -->
-        <td>
-          <span th:if="${#lists.isEmpty(ins.categorias)}">—</span>
-          <span th:each="cat : ${ins.categorias}" class="badge me-1"
-                th:classappend="${cat} ? 'bg-primary' : 'bg-secondary'"
-                th:text="${cat}">Cat</span>
-        </td>
+          <!-- Chips de categorías -->
+          <td>
+            <span th:if="${#lists.isEmpty(ins.categorias)}">—</span>
+            <span
+              th:each="cat : ${ins.categorias}"
+              class="badge me-1"
+              th:classappend="${cat} ? 'bg-primary' : 'bg-secondary'"
+              th:text="${cat}"
+              >Cat</span
+            >
+          </td>
 
-        <td class="text-end"
-            th:text="${#numbers.formatDecimal(ins.total, 1, 'POINT', 2, 'NONE')}"></td>
+          <td
+            class="text-end"
+            th:text="${#numbers.formatDecimal(ins.total, 1, 'POINT', 2, 'NONE')}"
+          ></td>
 
-        <td th:text="${ins.fecha != null ? #temporals.format(ins.fecha, 'dd/MM/yyyy HH:mm') : '—'}"></td>
+          <td
+            th:text="${ins.fecha != null ? #temporals.format(ins.fecha, 'dd/MM/yyyy HH:mm') : '—'}"
+          ></td>
 
-        <td>
-          <span th:if="${ins.estado == 'PENDIENTE'}" class="badge bg-warning text-dark">Pendiente</span>
-          <span th:if="${ins.estado == 'APROBADA'}" class="badge bg-success">Aprobada</span>  
-          <span th:if="${ins.estado == 'ANULADA'}" class="badge bg-danger">Anulada</span>
-          <span th:if="${ins.estado != 'PENDIENTE' and ins.estado != 'APROBADA' and ins.estado != 'ANULADA'}"
-                class="badge bg-secondary" th:text="${ins.estado != null ? ins.estado : '-'}"></span>
-        </td>
+          <td>
+            <span
+              th:if="${ins.estado == 'PENDIENTE'}"
+              class="badge bg-warning text-dark"
+              >Pendiente</span
+            >
+            <span th:if="${ins.estado == 'APROBADA'}" class="badge bg-success"
+              >Aprobada</span
+            >
+            <span th:if="${ins.estado == 'ANULADA'}" class="badge bg-danger"
+              >Anulada</span
+            >
+            <span
+              th:if="${ins.estado != 'PENDIENTE' and ins.estado != 'APROBADA' and ins.estado != 'ANULADA'}"
+              class="badge bg-secondary"
+              th:text="${ins.estado != null ? ins.estado : '-'}"
+            ></span>
+          </td>
 
-        <td class="text-end">
-          <button type="button" class="btn btn-sm btn-primary"
-                  th:onclick="cargarFormularioEdit([[${ins.id}]])"
-                  data-bs-toggle="modal" data-bs-target="#modalformularioInscripcion">
-            <i class="fa-solid fa-pen-to-square"></i> Editar
-          </button>
-          <button type="button" class="btn btn-sm btn-danger"
-                  th:onclick="eliminar([[${ins.entidad != null ? ins.entidad : 'Inscripción'}]], [[${ins.id}]])">
-            <i class="fa-solid fa-trash"></i> Eliminar
-          </button>
-        </td>
-      </tr>
+          <td class="text-center">
+        <span th:if="${ins.imgComprobante != null}">
+          <a th:href="@{'/files/comprobantes/' + ${ins.imgComprobante}}" target="_blank">
+            <img th:src="@{'/files/comprobantes/' + ${ins.imgComprobante}}"
+                 alt="Comprobante"
+                 class="img-thumbnail"
+                 style="width:50px;height:50px;object-fit:cover;" />
+          </a>
+        </span>
+        <span th:if="${ins.imgComprobante == null}">—</span>
+      </td>
+
+          <td class="text-end">
+            <button
+              type="button"
+              class="btn btn-sm btn-primary"
+              th:onclick="cargarFormularioEdit([[${ins.id}]])"
+              data-bs-toggle="modal"
+              data-bs-target="#modalformularioInscripcion"
+            >
+              <i class="fa-solid fa-pen-to-square"></i> Editar
+            </button>
+            <button
+              type="button"
+              class="btn btn-sm btn-danger"
+              th:onclick="eliminar([[${ins.entidad != null ? ins.entidad : 'Inscripción'}]], [[${ins.id}]])"
+            >
+              <i class="fa-solid fa-trash"></i> Eliminar
+            </button>
+          </td>
+        </tr>
       </tbody>
     </table>
   </div>

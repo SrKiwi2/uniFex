@@ -1,10 +1,15 @@
 package com.usic.uniFex.controller.admin;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +24,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import com.usic.uniFex.anotacion.ValidarUsuarioAutenticado;
@@ -194,6 +200,7 @@ public class AdminController {
                 inscripcionPuesto.setRegistroIdUsuario(usuario.getId());
                 inscripcionPuesto.setModificacion(new Date());
                 inscripcionPuesto.setModificacionIdUsuario(usuario.getId());
+                inscripcionPuesto.setEstado("ACTIVO");
                 inscripcionPuesto.setCosto(BigDecimal.valueOf(
                     funcionesInscripcion.obtenerCostoPuesto(
                         entidad.getTipoEntidad().getId(),
@@ -227,19 +234,65 @@ public class AdminController {
     }
 
     @ValidarUsuarioAutenticado
-    @PostMapping(value = "/actualizar/inscripcion")
-    public String actualizarInscripcion(HttpServletRequest request, Model model, @Validated Inscripcion inscripcion
+    @PostMapping("/actualizar/inscripcion")
+    public String actualizarInscripcion(
+            HttpServletRequest request,
+            @RequestParam("id") Long idInscripcion,
+            @RequestParam("num_comprobante") Integer numComprobante,   // <-- NOMBRE ALINEADO
+            @RequestParam("comprobante") MultipartFile file,
+            RedirectAttributes flash
     ) {
         Usuario usuario = (Usuario) request.getSession().getAttribute("usuario");
 
-        inscripcion.setFechaCompra(LocalDateTime.now());
-        inscripcion.setInscripcionEstado("PAGADO");
-        inscripcion.setModificacion(new Date());
-        inscripcion.setModificacionIdUsuario(usuario.getId());
-        inscripcionService.save(inscripcion);
+        Inscripcion ins = inscripcionService.findById(idInscripcion);
+        if (ins == null) {
+            flash.addFlashAttribute("error", "Inscripción no encontrada.");
+            return "redirect:/";
+        }
 
-        return "redirect:/admin";
+        if (file == null || file.isEmpty()) {
+            flash.addFlashAttribute("error", "Debe adjuntar la imagen del comprobante.");
+            return "redirect:/ver/inscripcion/" + idInscripcion;
+        }
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            flash.addFlashAttribute("error", "El archivo debe ser una imagen.");
+            return "redirect:/ver/inscripcion/" + idInscripcion;
+        }
+
+        Path base = Paths.get("uploads/comprobantes").toAbsolutePath().normalize();
+        try { Files.createDirectories(base); } catch (IOException e) {
+            flash.addFlashAttribute("error", "No se pudo preparar el directorio de subida.");
+            return "redirect:/ver/inscripcion/" + idInscripcion;
+        }
+
+        String ext = Optional.ofNullable(file.getOriginalFilename())
+                            .filter(n -> n.contains("."))
+                            .map(n -> n.substring(n.lastIndexOf('.')))
+                            .orElse(".jpg");
+        String filename = "inscripcion-" + idInscripcion + "-" + System.currentTimeMillis() + ext;
+        Path destino = base.resolve(filename);
+        try {
+            file.transferTo(destino.toFile());
+        } catch (IOException e) {
+            flash.addFlashAttribute("error", "Error al guardar el archivo: " + e.getMessage());
+            return "redirect:/ver/inscripcion/" + idInscripcion;
+        }
+
+        // Actualiza SOLO esos campos
+        ins.setNumComprobante(numComprobante);
+        ins.setImgComprobante(filename);
+        ins.setModificacion(new Date());
+        ins.setModificacionIdUsuario(usuario.getId());
+        if ("PENDIENTE".equalsIgnoreCase(ins.getInscripcionEstado())) {
+            ins.setInscripcionEstado("EN_REVISIÓN");
+        }
+        inscripcionService.save(ins);
+
+        flash.addFlashAttribute("success", "Comprobante guardado correctamente.");
+        return "redirect:/ver/inscripcion/" + idInscripcion; // <- vuelve a la vista de detalle
     }
+
 
     @PostMapping("/iniciar-sesion")
     public ResponseEntity<String> iniciarSesion(

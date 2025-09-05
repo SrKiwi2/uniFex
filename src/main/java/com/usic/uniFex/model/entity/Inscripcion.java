@@ -18,8 +18,8 @@ public class Inscripcion extends AuditoriaConfig{
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private Integer num_comprobante;
-    private String img_comprobante;
+    private Integer numComprobante;
+    private String imgComprobante;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_entidad")
