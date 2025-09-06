@@ -1,11 +1,18 @@
 package com.usic.uniFex.model.entity;
 
-import java.util.Set;
-
 import com.usic.uniFex.Config.AuditoriaConfig;
 
-import jakarta.persistence.*;
-import lombok.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import lombok.Getter;
+import lombok.Setter;
 
 @Entity
 @Table(name = "usuario")
@@ -20,11 +27,11 @@ public class Usuario extends AuditoriaConfig{
     @Column(nullable=false, length=120)
     private String password; // BCRYPT
 
-    @OneToOne(optional=false)
+    @ManyToOne(optional=false)
     @JoinColumn(name="persona_id")
     private Persona persona;
 
-    @OneToOne(optional=false)
-    @JoinColumn(name="rol_id")
+    @ManyToOne(optional = false, fetch = FetchType.LAZY)
+    @JoinColumn(name = "rol_id", nullable = false)
     private Rol rol;
 }
