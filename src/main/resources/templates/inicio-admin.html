@@ -12,7 +12,7 @@
 
     <div class="layout-wrapper layout-content-navbar">
         <div class="layout-container">
-            <aside th:replace="~{layout/sidebar :: sidebar}"></aside>
+            <aside th:replace="~{layout/sidebar :: sidebar}" ></aside>
             <div class="layout-page">
                 <nav th:replace="~{layout/topbar :: topbar}"></nav>
                 
@@ -21,19 +21,25 @@
                             <div class="layout-container">
                                 <div class="container">
                                     <div class="content-wrapper">
-                                        <div class="card animated-card position-relative p-0 mb-4 overflow-hidden shadow-sm border-0" style="min-height: 200px; border-radius: 14px; background: linear-gradient(135deg, rgba(30,58,138,0.06), rgba(185,28,28,0.06));">
-                                            <div class="card-body d-flex flex-column justify-content-center align-items-center text-center py-5 px-3">
-                                                <!-- Nombre del sistema dinámico -->
-                                                <h1 class="titulo-sistema mb-2 text-uppercase">
-                                                    FEXPO UAP V. <span class="version">01</span>
-                                                </h1>
+                                        <div class="card animated-card position-relative p-0 mb-4 overflow-hidden shadow-sm border-0"
+                        style="min-height: 200px; border-radius: 14px; background: linear-gradient(135deg, rgba(30,58,138,0.06), rgba(185,28,28,0.06));">
 
-                                                <p class="slogan mb-0 fst-italic d-sm-block">
-                                                    Escribiendo una nueva historia con vos......
-                                                </p>
+                        <div
+                            class="card-body d-flex flex-column justify-content-center align-items-center text-center py-5 px-3">
 
-                                            </div>
-                                        </div>
+                            <!-- Contenedor título + logo -->
+                            <h1
+                                class="titulo-sistema mb-2 text-uppercase d-flex align-items-center justify-content-center gap-3">
+                                FEXPO UAP V. <span class="version">01</span>
+                                <img src="../../assets/img/logo/EXPO.png" alt="EXPO UAP"
+                                    style="height:180px; width:auto;" />
+                            </h1>
+
+                            <p class="slogan mb-0 fst-italic d-sm-block">
+                                Escribiendo una nueva historia con vos...
+                            </p>
+                        </div>
+                    </div>
                                         <div id="wizard-validation" class="bs-stepper mt-2">
                                             <div class="bs-stepper-header">
                                                 <div class="step" data-target="#account-details-validation">

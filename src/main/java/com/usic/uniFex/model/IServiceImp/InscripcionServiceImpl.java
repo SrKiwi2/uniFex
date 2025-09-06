@@ -1,8 +1,8 @@
 package com.usic.uniFex.model.IServiceImp;
 
 import java.math.BigDecimal;
-import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -64,36 +64,40 @@ public class InscripcionServiceImpl implements IInscripcionService{
     }
 
     @Override
-    public List<InscripcionListadoDTO> listarParaTabla() {
-        List<Inscripcion> ins = inscripcionDao.findAll();
+public List<InscripcionListadoDTO> listarParaTabla() {
+    List<Inscripcion> ins = inscripcionDao.findAllConTodo(); // o findAllConTodo() si usas EntityGraph/Query
 
-        return ins.stream().map(i -> {
-            var entidad = i.getEntidad();
-            var tipo = (entidad != null && entidad.getTipoEntidad() != null)
-                    ? entidad.getTipoEntidad().getNombre() : null;
+    return ins.stream().map(i -> {
+        var entidad = i.getEntidad();
+        var tipo = (entidad != null && entidad.getTipoEntidad() != null)
+                ? entidad.getTipoEntidad().getNombre() : null;
 
-            var items = i.getInscripcionPuestos();
+        var items = i.getInscripcionPuestos();
+        int cantidad = items != null ? items.size() : 0;
 
-            int cantidad = items != null ? items.size() : 0;
+        BigDecimal total = (items == null ? BigDecimal.ZERO :
+                items.stream()
+                        .map(InscripcionPuesto::getCosto)
+                        .filter(Objects::nonNull)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add));
 
-            // Total = suma de costo (BigDecimal)
-            BigDecimal total = (items == null ? BigDecimal.ZERO :
-                    items.stream()
-                         .map(InscripcionPuesto::getCosto)
-                         .filter(v -> v != null)
-                         .reduce(BigDecimal.ZERO, BigDecimal::add));
+        List<String> categorias = (items == null ? List.<String>of() :
+                items.stream()
+                        .map(ip -> ip.getPuesto() != null && ip.getPuesto().getCategoria() != null
+                                ? ip.getPuesto().getCategoria().getNombre() : null)
+                        .filter(n -> n != null && !n.isBlank())
+                        .distinct()
+                        .sorted()
+                        .collect(Collectors.toList()));
 
-            // Categorías únicas (ordenadas) de los puestos
-            List<String> categorias = (items == null ? List.<String>of() :
-                    items.stream()
-                         .map(ip -> ip.getPuesto() != null && ip.getPuesto().getCategoria() != null
-                                   ? ip.getPuesto().getCategoria().getNombre() : null)
-                         .filter(n -> n != null && !n.isBlank())
-                         .distinct()
-                         .sorted(Comparator.naturalOrder())
-                         .collect(Collectors.toList()));
+        List<String> codigosPuestos = (items == null ? List.<String>of() :
+                items.stream()
+                        .map(ip -> ip.getPuesto() != null ? ip.getPuesto().getCodigo() : null)
+                        .filter(Objects::nonNull)
+                        .sorted()
+                        .collect(Collectors.toList()));
 
-            return new InscripcionListadoDTO(
+        return new InscripcionListadoDTO(
                 i.getId(),
                 entidad != null ? entidad.getNombre() : null,
                 tipo,
@@ -103,8 +107,11 @@ public class InscripcionServiceImpl implements IInscripcionService{
                 total,
                 i.getFechaCompra(),
                 i.getInscripcionEstado(),
-                i.getImgComprobante()
-            );
-        }).collect(Collectors.toList());
-    }
+                i.getImgComprobante(),
+                i.isPagoContado(),     // <—
+                codigosPuestos         // <—
+        );
+    }).collect(Collectors.toList());
+}
+
 }

@@ -14,13 +14,14 @@
                     <th>Entidad</th>
                     <th>Tipo</th>
                     <th>NIT</th>
-                    <th class="text-end"># Puestos</th>
+                    <th>Pago</th>
+                    <th class="text-end">Puestos</th>
                     <th>Categorías</th>
                     <th class="text-end">Total (Bs)</th>
                     <th>Fecha</th>
                     <th>Estado</th>
                     <th>Comprobante</th>
-                    <th class="text-end">Opciones</th>
+                    <!-- <th class="text-end">Opciones</th> -->
                 </tr>
             </thead>
             <tbody class="animate__animated animate__bounceInDown">
@@ -31,7 +32,29 @@
                     <td th:text="${ins.tipoEntidad != null ? ins.tipoEntidad : '—'}"></td>
                     <td th:text="${ins.nit != null ? ins.nit : '—'}"></td>
 
-                    <td class="text-end" th:text="${ins.cantidadPuestos}"></td>
+                    <td>
+                        <span th:if="${ins.pagoContado}" class="badge bg-primary">
+                            Contado
+                        </span>
+                        <span th:if="${!ins.pagoContado}" class="badge bg-secondary">
+                            No contado
+                        </span>
+                    </td>
+
+                    <td>
+                        <span th:if="${#lists.isEmpty(ins.codigosPuestos)}">—</span>
+
+                        <!-- renderiza hasta 6 -->
+                        <span th:each="cod : ${ins.codigosPuestos.size() > 6 ? ins.codigosPuestos.subList(0,6) : ins.codigosPuestos}"
+                                class="badge bg-info me-1"
+                                th:text="${cod}">P</span>
+
+                        <!-- si hay más de 6, muestra contador extra -->
+                        <span th:if="${ins.codigosPuestos.size() > 6}"
+                                class="badge bg-secondary">
+                            + [[${ins.codigosPuestos.size() - 6}]]
+                        </span>
+                    </td>
 
                     <!-- Chips de categorías -->
                     <td>
@@ -40,7 +63,10 @@
                             th:classappend="${cat} ? 'bg-primary' : 'bg-secondary'" th:text="${cat}">Cat</span>
                     </td>
 
-                    <td class="text-end" th:text="${#numbers.formatDecimal(ins.total, 1, 'POINT', 2, 'NONE')}"></td>
+                    <td class="text-end"
+    th:text="${#numbers.formatDecimal(ins.total, 0, 'COMMA', 2, 'POINT')}"></td>
+
+
 
                     <td th:text="${ins.fecha != null ? #temporals.format(ins.fecha, 'dd/MM/yyyy HH:mm') : '—'}"></td>
 
@@ -65,7 +91,7 @@
                     </td>
 
 
-                    <td class="text-end">
+                    <!-- <td class="text-end">
                         <button type="button" class="btn btn-sm btn-primary"
                             th:onclick="cargarFormularioEdit([[${ins.id}]])" data-bs-toggle="modal"
                             data-bs-target="#modalformularioInscripcion">
@@ -75,7 +101,7 @@
                             th:onclick="eliminar([[${ins.entidad != null ? ins.entidad : 'Inscripción'}]], [[${ins.id}]])">
                             <i class="fa-solid fa-trash"></i> Eliminar
                         </button>
-                    </td>
+                    </td> -->
                 </tr>
             </tbody>
         </table>

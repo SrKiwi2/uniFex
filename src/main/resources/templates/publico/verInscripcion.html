@@ -250,26 +250,27 @@
             });
         });
 
-        const inicio = document.getElementById("fechaInicio");
-        const fin = document.getElementById("fechaFin");
-        const resultado = document.getElementById("resultado");
+        document.addEventListener("DOMContentLoaded", () => {
+        const chk = document.getElementById("pagoContado");
+        const num = document.querySelector('input[name="numComprobante"]');
+        const file = document.querySelector('input[name="comprobante"]');
 
-        function mostrarRango() {
-            if (inicio.value && fin.value) {
-                const opciones = { day: 'numeric', month: 'long' };
-                const fechaInicio = new Date(inicio.value).toLocaleDateString('es-ES', opciones);
-                const fechaFin = new Date(fin.value).toLocaleDateString('es-ES', opciones);
-                resultado.textContent = `${fechaInicio} a ${fechaFin}`;
+        const toggle = () => {
+            const on = chk.checked;
+            // limpiar valores si se marca contado
+            if (on) {
+            if (num) { num.value = ""; num.disabled = true; num.removeAttribute("required"); }
+            if (file) { file.value = ""; file.disabled = true; file.removeAttribute("required"); }
+            } else {
+            if (num) { num.disabled = false; }
+            if (file) { file.disabled = false; }
             }
-        }
+        };
+        chk.addEventListener("change", toggle);
+        toggle(); // estado inicial
+        });
 
-        inicio.addEventListener("change", mostrarRango);
-        fin.addEventListener("change", mostrarRango);
 
-        // Si quieres mostrar directamente “18 a 22 de septiembre”
-        inicio.value = "2025-09-18";
-        fin.value = "2025-09-22";
-        mostrarRango();
     </script>
 
 </body>

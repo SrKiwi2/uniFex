@@ -1,5 +1,5 @@
 <!-- Menu -->
-<aside th:fragment="sidebar" id="layout-menu" class="layout-menu menu-vertical menu bg-menu-theme" th:if="${session.nombre_rol == 'ADMINISTRADOR'}">
+<aside th:fragment="sidebar" id="layout-menu" class="layout-menu menu-vertical menu bg-menu-theme" th:if="${session.nombre_rol == 'ADMINISTRADOR' or session.nombre_rol == 'SUPER USUARIO'}">
     <div class="app-brand demo">
         <a href="/admin" class="app-brand-link">
             <span class="app-brand-logo demo">
@@ -55,7 +55,7 @@
         <li class="menu-header small text-uppercase" th:if="${session.nombre_rol == 'ADMINISTRADOR' or session.nombre_rol == 'SUPER USUARIO'}">
             <span class="menu-header-text">GESTION</span>
         </li>
-        <li class="menu-item" th:if="${session.nombre_rol == 'ADMINISTRADOR' or session.nombre_rol == 'SUPER USUARIO'}">
+        <li class="menu-item" id="opcion_admin" th:if="${session.nombre_rol == 'ADMINISTRADOR' or session.nombre_rol == 'SUPER USUARIO'}">
             <a href="#" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons ti ti-users"></i>
                 <div>Control</div>

@@ -56,4 +56,14 @@ public interface IInscripcionDao extends JpaRepository <Inscripcion, Long> {
         order by u.username asc nulls last, e.nombre asc
         """, nativeQuery = true)
     List<ResumenEntidadView> resumenPorEntidad();
+
+        @EntityGraph(attributePaths = {
+        "entidad",
+        "entidad.tipoEntidad",
+        "inscripcionPuestos",
+        "inscripcionPuestos.puesto",
+        "inscripcionPuestos.puesto.categoria"
+    })
+    @Query("select i from Inscripcion i")
+    List<Inscripcion> findAllConTodo();
 }

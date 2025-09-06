@@ -14,7 +14,9 @@ public record InscripcionListadoDTO(
     BigDecimal total,
     LocalDateTime fecha,
     String estado,
-    String imgComprobante
+    String imgComprobante,
+        boolean pagoContado,          // <— nuevo
+    List<String> codigosPuestos   // <— nuevo
 ) {
     
 }

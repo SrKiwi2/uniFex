@@ -21,7 +21,7 @@
             <td th:text="${row.categoria}"></td>
             <td class="text-end" th:text="${row.cantidadInscripciones}"></td>
             <td class="text-end" th:text="${row.cantidadPuestos}"></td>
-            <td class="text-end" th:text="${#numbers.formatDecimal(row.totalBs, 1, 'POINT', 2, 'NONE')}"></td>
+            <td class="text-end" th:text="${#numbers.formatDecimal(row.totalBs, 1, 'COMMA', 2, 'POINT')}"></td>
           </tr>
         </tbody>
       </table>
