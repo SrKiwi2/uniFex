@@ -1,3 +1,30 @@
+.card-bg {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.card-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("../../assets/img/fondo/uap.jpg") no-repeat center center;
+  background-size: cover;
+  filter: blur(6px);          /* difuminar la foto */
+  transform: scale(1.05);     /* evita bordes blancos */
+  z-index: -2;                /* fondo difuminado */    
+}
+
+.card-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.086); /* velo blanco 50% */
+  z-index: -1;                       /* se superpone al fondo pero queda detrás del texto */
+}
+
+
 /* ANIMACION DEL ENCABEZADO*/
 @keyframes fadeSlideIn {
     0% {
@@ -47,46 +74,6 @@
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
 }
 
-.btn-lg-custom i {
-    margin-right: 10px;
-    font-size: 1.3rem;
-}
-
-.btn-asignar {
-    background-color: #1e3a8a;
-}
-
-.btn-asignar:hover {
-    background-color: #162f6a;
-    transform: scale(1.03);
-}
-
-.btn-reporte {
-    background-color: #b91c1c;
-}
-
-.btn-reporte:hover {
-    background-color: #991b1b;
-    transform: scale(1.03);
-}
-
-.btn-importar {
-    background-color: #15803d;
-}
-
-.btn-importar:hover {
-    background-color: #166534;
-    transform: scale(1.03);
-}
-
-.btn-visualizar {
-    background-color: #0e7490;
-}
-
-.btn-visualizar:hover {
-    background-color: #155e75;
-    transform: scale(1.03);
-}
 
 /* ESTILO PARA SECCION DE INFORMACIÓN*/
 .transition-rotate {
@@ -134,7 +121,7 @@
     font-size: clamp(2rem, 6vw, 3.8rem);
     font-weight: 900;
     letter-spacing: 3px;
-    background: linear-gradient(90deg, #1e3a8a, #b91c1c, #1e3a8a);
+    background: linear-gradient(90deg, #10318a, #d81a1a, #1e3a8a);
     background-size: 200% auto;
     background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -144,9 +131,9 @@
 
 .titulo-sistema .version {
     font-weight: 700;
-    color: #dc2626;
+    color: #ff0000;
     /* rojo fijo para destacar */
-    text-shadow: 0 2px 8px rgba(220, 38, 38, 0.4);
+    text-shadow: 0 2px 8px rgba(220, 38, 38, 0.702);
 }
 
 .slogan {
@@ -229,3 +216,174 @@
     padding-top: .5rem;
     margin-top: .25rem;
   }
+
+  /* titulo y presentacion*/
+
+  /* ----- Tipografías y ajuste general ----- */
+.titulo-sistema {
+  /* Tamaño responsivo: pequeño en móvil, grande en desktop */
+  font-size: clamp(1.25rem, 4.5vw, 3rem);
+  line-height: 1.15;
+  margin: 0;
+}
+
+/* Evita cortes cuando el texto es largo */
+.titulo-sistema .brand-title {
+  display: inline-block;
+  word-break: break-word;
+}
+
+/* Badge de versión */
+
+
+/* Logo: que nunca se corte y se escale suave */
+.logo-expo {
+  max-width: 100%;
+  height: auto;
+  /* Altura responsiva; en móvil pequeño será ~64–96px */
+  max-height: clamp(80px, 20vw, 120px);
+  object-fit: contain;      /* garantiza que no se recorte la imagen */
+  object-position: center;  /* centra la imagen dentro del espacio disponible */
+}
+
+/* Slogan responsivo */
+.slogan {
+  font-size: clamp(0.95rem, 2.4vw, 1.1rem);
+}
+
+/* ----- Escalas por breakpoint (Bootstrap/Vuexy) ----- */
+@media (min-width: 768px) {           /* md+ */
+  .titulo-sistema {
+    font-size: clamp(2rem, 3vw, 3rem);
+  }
+  .logo-expo {
+    max-height: 140px;                /* look cómodo en laptop */
+  }
+}
+
+@media (min-width: 1200px) {          /* xl+ (escritorio grande) */
+  .titulo-sistema {
+    font-size: clamp(2.4rem, 2.4vw, 3.25rem);
+  }
+  .logo-expo {
+    max-height: 180px;                /* réplica del alto “antes” */
+  }
+}
+
+@media (max-width: 575.98px) {
+  .logo-expo {
+    max-height: 200px;  /* o lo que se vea bien */
+  }
+}
+
+/* Si algún theme aplica overflow: hidden en ancestros, evitamos recortes del H1 */
+.titulo-sistema, .titulo-sistema * {
+  overflow: visible;
+}
+
+/* LOGIN RESPOVIVE CEL Y LAPTOP */
+
+/* ===== Base: móvil primero (xs–sm) ===== */
+#modalLogin .modal-content { border-radius: 14px; overflow: visible; }
+#modalLogin .modal-header { padding: 1rem 1.25rem !important; }
+
+#modalLogin .titlebar {
+  padding: .25rem 1rem 0;
+}
+
+/* Logo responsivo: más grande en móvil si quieres */
+#modalLogin .logo-uap {
+  height: clamp(40px, 10vw, 56px);  /* móvil -> desktop */
+  width: auto;
+  object-fit: contain;
+}
+
+/* Título: tamaño cómodo */
+#modalLogin .modal-title {
+  font-size: clamp(1.05rem, 2.8vw, 1.35rem);
+  line-height: 1.2;
+}
+
+#modalLogin .login-body { padding: 1rem 1.25rem !important; }
+
+/* Campos compactos en móvil */
+#modalLogin .login-field .input-group-text,
+#modalLogin .login-field .form-control,
+#modalLogin .login-field .login-eye {
+  padding: .55rem .75rem;
+  font-size: .95rem;
+  line-height: 1.25rem;
+}
+
+#modalLogin .btn-login {
+  padding: .6rem 1rem;
+  font-size: 1rem;
+}
+
+/* Que el header pueda partir en dos líneas sin recortar */
+#modalLogin .modal-title { flex-wrap: wrap; gap: .5rem; }
+
+/* ===== md en adelante: conserva tu look grande ===== */
+@media (min-width: 768px) {
+  #modalLogin .login-body { padding: 2rem 2.5rem !important; }
+  #modalLogin .modal-title { font-size: 1.35rem; }
+  #modalLogin .modal-title .logo-uap { height: 48px; }
+
+  #modalLogin .login-field .input-group-text,
+  #modalLogin .login-field .form-control,
+  #modalLogin .login-field .login-eye {
+    padding: .75rem 1rem;         /* equivalente a input-group-lg */
+    font-size: 1.05rem;
+    line-height: 1.5rem;
+  }
+
+  #modalLogin .btn-login {
+    padding: .85rem 1.25rem;      /* equivalente a btn-lg */
+    font-size: 1.05rem;
+  }
+}
+
+/* ===== xl+: ancho cómodo de modal en escritorio grande (opcional) ===== */
+@media (min-width: 1200px) {
+  #modalLogin .modal-dialog { max-width: 720px; }
+}
+
+/* Solo aplica en pantallas pequeñas */
+@media (max-width: 575.98px) {
+  /* El modal ya no será fullscreen */
+  #modalLogin .modal-dialog {
+    max-width: 95%;          /* casi toda la pantalla en ancho */
+    margin: 1.25rem auto;    /* baja el modal del top, no centrado vertical forzado */
+  }
+
+  /* El contenido no ocupa todo el alto */
+  #modalLogin .modal-content {
+    height: auto !important; /* deja que se ajuste al contenido */
+    min-height: unset !important;
+  }
+
+  /* Opcional: reducir padding de body */
+  #modalLogin .login-body {
+    padding: 1rem 1.25rem !important;
+  }
+}
+
+/* En pantallas muy pequeñas, fuerza apilado y centrado */
+@media (max-width: 575.98px) {
+  #modalLogin .titlebar {
+    gap: .5rem;
+  }
+  #modalLogin .logo-uap {
+    height: 56px;           /* súbelo si lo quieres más notorio en móvil */
+  }
+}
+
+/* En md+ vuelve al layout en línea (como en tu PC) */
+@media (min-width: 768px) {
+  #modalLogin .titlebar {
+    gap: .75rem;
+    text-align: left;       /* puedes dejar center si te gusta más centrado en desktop */
+  }
+}
+
+

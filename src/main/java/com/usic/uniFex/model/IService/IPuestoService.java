@@ -9,4 +9,6 @@ import com.usic.uniFex.model.entity.Puesto;
 @Service
 public interface IPuestoService extends IServiceGenerico<Puesto, Long> {
     List<Puesto> listarConCategoria();
+    List<Puesto> listarPuestos();
+    List<Puesto> listarLibresPorCategoria(Long categoriaId);
 }

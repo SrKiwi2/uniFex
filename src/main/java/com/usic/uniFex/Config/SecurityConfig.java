@@ -28,6 +28,8 @@ public class SecurityConfig {
             "/admin/**",
             "/iniciar-sesion/**",
             "/ver/**",
+            "/api/**",
+            "/guardar/**",
             "/actualizar/**",
             "/files/**",
             "/cerrar_sesion",

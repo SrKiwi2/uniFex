@@ -10,34 +10,41 @@
         <table class="datatables-basic table table-hover" id="data-table">
             <thead>
                 <tr>
-                    <th>#</th>
-                    <th>NOMBRE COMPLETO</th>
-                    <th>USUARIO</th>
-                    <th>CONTRASEÑA</th>
-                    <th>ROL</th>
-                    <th>OPCIONES</th>
+                <th>#</th>
+                <th>NOMBRE COMPLETO</th>
+                <th>USUARIO</th>
+                <th>ROL</th>
+                <th>OPCIONES</th>
                 </tr>
             </thead>
             <tbody class="animate__animated animate__bounceInDown">
                 <tr th:each="usu, index: ${listaUsuarios}">
-                    <th th:text="${index.index+1}"></th>
-                    <th th:text="${usu.persona.nombreCompleto}"></th>
-                    <th th:text="${usu.usuario}"></th>
-                    <th th:text="${usu.password}"></th>
-                    <th th:text="${usu.rol.nombre}"></th>
-                    <th>
-                        <button type="button" class="btn btn-sm btn-primary"
+                <th th:text="${index.index+1}"></th>
+                <td th:text="${usu.persona.nombre}"></td>
+                <td th:text="${usu.username}"></td>
+                <td th:text="${usu.rol.nombre}"></td>
+                <td class="d-flex gap-1">
+                    <button type="button" class="btn btn-sm btn-primary"
                             th:onclick="cargarFormularioEdit([[${id_encryptado[__${index.index}__]}]])"
                             data-bs-toggle="modal" data-bs-target="#modalFormularioUsuario">
-                            <i class="fa-solid fa-pen-to-square"></i> Editar
-                        </button>
-                        <button type="button" class="btn btn-sm btn-danger" th:onclick="eliminar([[${usu.usuario}]],[[${id_encryptado[__${index.index}__]}]])">
-                            <i class="fa-solid fa-trash"></i> Eliminar
-                        </button>
-                    </th>
+                    <i class="fa-solid fa-pen-to-square"></i> Editar
+                    </button>
+
+                    <button type="button" class="btn btn-sm btn-warning"
+                            th:onclick="abrirModalPassword([[${id_encryptado[__${index.index}__]}]], [[${usu.username}]])"
+                            data-bs-toggle="modal" data-bs-target="#modalCambiarPassword">
+                    <i class="fa-solid fa-key"></i> Cambiar contraseña
+                    </button>
+
+                    <button type="button" class="btn btn-sm btn-danger"
+                            th:onclick="eliminar([[${usu.username}]], [[${id_encryptado[__${index.index}__]}]])">
+                    <i class="fa-solid fa-trash"></i> Eliminar
+                    </button>
+                </td>
                 </tr>
             </tbody>
-        </table>
+            </table>
+
     </div>
 </div>
 

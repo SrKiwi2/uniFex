@@ -11,6 +11,38 @@
     </div>
 </div>
 
+<div class="modal fade" id="modalCambiarPassword" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form id="formCambiarPassword" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="fa-solid fa-key me-1"></i>
+          Cambiar contraseña — <span id="cp-usuario"></span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="cp-idEnc" name="idEnc" />
+        <div class="mb-3">
+          <label class="form-label">Nueva contraseña</label>
+          <input type="password" class="form-control" id="cp-nueva" required minlength="6">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Confirmar contraseña</label>
+          <input type="password" class="form-control" id="cp-confirmar" required minlength="6">
+        </div>
+        <small class="text-muted">La contraseña no se mostrará nunca en claro; se almacenará hasheada.</small>
+      </div>
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-warning">
+          <i class="fa-solid fa-floppy-disk me-1"></i> Actualizar
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
 <script>
     $(document).ready(function () {
         cargarTabla();
@@ -37,4 +69,36 @@
     function eliminar(nombre, id) {
         eliminarRegistroAlert(nombre, id, "/administracion/usuario/eliminar",cargarTabla);
     }
+
+
+    function abrirModalPassword(idEnc, username) {
+  document.getElementById('cp-idEnc').value = idEnc;
+  document.getElementById('cp-usuario').textContent = username;
+  document.getElementById('cp-nueva').value = '';
+  document.getElementById('cp-confirmar').value = '';
+}
+
+document.getElementById('formCambiarPassword').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const idEnc = document.getElementById('cp-idEnc').value;
+  const nueva = document.getElementById('cp-nueva').value.trim();
+  const confirmar = document.getElementById('cp-confirmar').value.trim();
+
+  if (!nueva || !confirmar) { alert('Completa ambos campos'); return; }
+  if (nueva !== confirmar) { alert('Las contraseñas no coinciden'); return; }
+
+  fetch(`/administracion/usuario/cambiar-password/${idEnc}`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: new URLSearchParams({ nueva, confirmar })
+  })
+  .then(r => r.text())
+  .then(msg => {
+    alert(msg);
+    // cerrar modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('modalCambiarPassword'));
+    modal.hide();
+  })
+  .catch(() => alert('No se pudo actualizar la contraseña.'));
+});
 </script>

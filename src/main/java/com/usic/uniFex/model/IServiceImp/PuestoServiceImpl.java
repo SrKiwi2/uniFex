@@ -9,6 +9,8 @@ import com.usic.uniFex.model.IService.IPuestoService;
 import com.usic.uniFex.model.dao.IPuestoDao;
 import com.usic.uniFex.model.entity.Puesto;
 
+import jakarta.transaction.Transactional;
+
 @Service
 public class PuestoServiceImpl implements IPuestoService {
     
@@ -43,6 +45,15 @@ public class PuestoServiceImpl implements IPuestoService {
     public List<Puesto> listarConCategoria() {
         return puestoDao.findAll();
     }
-
     
+    @Override
+    public List<Puesto> listarPuestos() {
+       return puestoDao.listarPuestos();
+    }
+
+    @Override
+    public List<Puesto> listarLibresPorCategoria(Long categoriaId) {
+        return puestoDao.findByEstadoPuestoAndCategoriaIdOrderByCodigoAsc("L", categoriaId);
+    }
+
 }

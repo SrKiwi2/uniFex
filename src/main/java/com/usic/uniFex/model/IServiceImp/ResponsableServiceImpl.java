@@ -39,5 +39,10 @@ public class ResponsableServiceImpl implements IResponsableService{
         responsableDao.deleteById(idEntidad);
     }
 
+    @Override
+    public List<Responsable> findByEntidadId(Long entidadId) {
+        return responsableDao.findByEntidadId(entidadId);
+    }
+
     
 }

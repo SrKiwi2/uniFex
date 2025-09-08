@@ -1,6 +1,7 @@
 package com.usic.uniFex.controller.admin;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -8,12 +9,15 @@ import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -24,6 +28,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
@@ -45,8 +50,12 @@ import com.usic.uniFex.model.entity.Puesto;
 import com.usic.uniFex.model.entity.Responsable;
 import com.usic.uniFex.model.entity.Usuario;
 import com.usic.uniFex.model.repository.FuncionesInscripcion;
+import com.usic.uniFex.model.service.FileStorageService;
+import com.usic.uniFex.model.service.ReciboPdfService;
+import com.usic.uniFex.model.service.FileStorageService.Bucket;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 
@@ -66,11 +75,42 @@ public class AdminController {
     private final IPuestoService puestoService;
     private final IUsuarioService IusuarioService;
     private final PasswordEncoder passwordEncoder;
+    private final ReciboPdfService reciboPdfService;
     private static final Logger logger = LoggerFactory.getLogger(AdminController.class);
+
+    private final FileStorageService storage;
 
     @ValidarUsuarioAutenticado
     @GetMapping(value = "/admin")
     public String adminIndex(HttpServletRequest request, Model model) {
+        Usuario usuario = (Usuario) request.getSession().getAttribute("usuario");
+        Persona persona = usuario.getPersona();
+        model.addAttribute("tiposEntidads", tipoEntidadService.findAll());
+        model.addAttribute("categorias", categoriaService.findAll());
+        request.getSession().setAttribute("persona", persona);
+        logger.info("Usuario en sesión: {}", usuario.getPersona().getNombre());
+        return "inicio-admin";
+    }
+
+    @GetMapping("/api/puestos-libres")
+    @ResponseBody
+    public List<Map<String, Object>> puestosLibresPorCategoria(@RequestParam("categoriaId") Long categoriaId) {
+        return puestoService.listarLibresPorCategoria(categoriaId)
+            .stream()
+            .map(p -> {
+                Map<String, Object> map = new HashMap<>();
+                map.put("id", p.getId());
+                map.put("codigo", p.getCodigo());
+                map.put("tamano", p.getTamano());
+                map.put("categoriaId", p.getCategoria().getId());
+                return map;
+            })
+            .collect(Collectors.toList());
+    }
+
+    @ValidarUsuarioAutenticado
+    @GetMapping(value = "/index")
+    public String Index(HttpServletRequest request, Model model) {
         Usuario usuario = (Usuario) request.getSession().getAttribute("usuario");
         model.addAttribute("tiposEntidads", tipoEntidadService.findAll());
         model.addAttribute("categorias", categoriaService.findAll());
@@ -81,11 +121,11 @@ public class AdminController {
         Persona persona = usuario.getPersona();
 
         request.getSession().setAttribute("persona", persona);
-        return "inicio-admin";
+        return "index";
     }
 
     @ValidarUsuarioAutenticado
-    @PostMapping(value = "/admin/guardar")
+    @PostMapping("/guardar")
     public String adminIndexGuardar(
             HttpServletRequest request, Model model,
             @RequestParam("nombreEntidad") String nombreEntidad,
@@ -113,7 +153,14 @@ public class AdminController {
             @RequestParam(value = "fotoResponsable2", required = false) MultipartFile fotoResponsable2,
 
             @RequestParam(value = "puestosSeleccionados", required = false) List<Long> puestosSeleccionados,
-            RedirectAttributes flash) {
+
+            // si tu campo es Integer en la entidad, usa Integer aquí (sin defaultValue="")
+            @RequestParam(value = "numComprobante", required = false) Long numComprobante,
+            @RequestParam(value = "comprobante", required = false) MultipartFile comprobante,
+            @RequestParam(value = "pagoContado", defaultValue = "false") boolean pagoContado,
+
+            RedirectAttributes flash
+    ) {
 
         Usuario usuario = (Usuario) request.getSession().getAttribute("usuario");
 
@@ -138,24 +185,26 @@ public class AdminController {
         persona1.setCi(ciResponsable1);
         persona1.setCorreo(correoResponsable1);
         persona1.setCelular(celularResponsable1);
-        persona1.setEstado("ACTIVO");
+        persona1.setEstado("RESPONSABLE");
         persona1.setRegistro(new Date());
         persona1.setRegistroIdUsuario(usuario.getId());
         persona1.setModificacion(new Date());
         persona1.setModificacionIdUsuario(usuario.getId());
 
-        // Guardar foto responsable 1 (si llegó)
-        String foto1Nombre = guardarImagenSiCorresponde(fotoResponsable1, "resp1");
-        if (foto1Nombre != null) {
-            // Ajusta el campo según tu modelo (ej. persona1.setFoto(foto1Nombre))
-            persona1.setFoto(foto1Nombre);
+        try {
+            String foto1Rel = storage.save(fotoResponsable1, Bucket.RESPONSABLES,
+                    nombreResponsable1 + " " + paternoResponsable1 + " " + maternoResponsable1);
+            persona1.setFoto(foto1Rel); // ruta relativa (null si no subió)
+        } catch (IOException e) {
+            logger.warn("No se pudo guardar foto de responsable 1: {}", e.getMessage());
+            persona1.setFoto(null);
         }
         personaService.save(persona1);
 
         Responsable responsable1 = new Responsable();
         responsable1.setEntidad(entidad);
         responsable1.setPersona(persona1);
-        responsable1.setEstado("ACTIVO");
+        responsable1.setEstado("RESPONSABLE");
         responsable1.setRegistro(new Date());
         responsable1.setRegistroIdUsuario(usuario.getId());
         responsable1.setModificacion(new Date());
@@ -163,10 +212,10 @@ public class AdminController {
         responsableService.save(responsable1);
 
         // ===== PERSONA 2 (opcional) =====
-        boolean hayResp2 = notBlank(nombreResponsable2) || notBlank(paternoResponsable2) ||
-                notBlank(maternoResponsable2) || notBlank(ciResponsable2) ||
-                notBlank(correoResponsable2) || notBlank(celularResponsable2) ||
-                (fotoResponsable2 != null && !fotoResponsable2.isEmpty());
+        boolean hayResp2 =
+            notBlank(nombreResponsable2) || notBlank(paternoResponsable2) || notBlank(maternoResponsable2) ||
+            notBlank(ciResponsable2) || notBlank(correoResponsable2) || notBlank(celularResponsable2) ||
+            (fotoResponsable2 != null && !fotoResponsable2.isEmpty());
 
         if (hayResp2) {
             Persona persona2 = new Persona();
@@ -176,22 +225,26 @@ public class AdminController {
             persona2.setCi(nvl(ciResponsable2));
             persona2.setCorreo(nvl(correoResponsable2));
             persona2.setCelular(nvl(celularResponsable2));
-            persona2.setEstado("ACTIVO");
+            persona2.setEstado("RESPONSABLE");
             persona2.setRegistro(new Date());
             persona2.setRegistroIdUsuario(usuario.getId());
             persona2.setModificacion(new Date());
             persona2.setModificacionIdUsuario(usuario.getId());
 
-            String foto2Nombre = guardarImagenSiCorresponde(fotoResponsable2, "resp2");
-            if (foto2Nombre != null) {
-                persona2.setFoto(foto2Nombre);
+            try {
+                String foto2Rel = storage.save(fotoResponsable2, Bucket.RESPONSABLES,
+                        (nombreResponsable2 + " " + paternoResponsable2 + " " + maternoResponsable2).trim());
+                persona2.setFoto(foto2Rel);
+            } catch (IOException e) {
+                logger.warn("No se pudo guardar foto de responsable 2: {}", e.getMessage());
+                persona2.setFoto(null);
             }
             personaService.save(persona2);
 
             Responsable responsable2 = new Responsable();
             responsable2.setEntidad(entidad);
             responsable2.setPersona(persona2);
-            responsable2.setEstado("ACTIVO");
+            responsable2.setEstado("RESPONSABLE");
             responsable2.setRegistro(new Date());
             responsable2.setRegistroIdUsuario(usuario.getId());
             responsable2.setModificacion(new Date());
@@ -211,6 +264,22 @@ public class AdminController {
         inscripcion.setModificacionIdUsuario(usuario.getId());
         inscripcion.setFechaInicio(java.sql.Date.valueOf(fechaInicio));
         inscripcion.setFechaFin(java.sql.Date.valueOf(fechaFin));
+
+        if (pagoContado) {
+            inscripcion.setPagoContado(true);
+            inscripcion.setNumComprobante(null);
+            inscripcion.setImgComprobante(null);
+        } else {
+            inscripcion.setPagoContado(false);
+            inscripcion.setNumComprobante(numComprobante);
+            try {
+                String compRel = storage.save(comprobante, Bucket.COMPROBANTES, entidad.getNombre());
+                inscripcion.setImgComprobante(compRel); // puede ser null si no subieron
+            } catch (IOException e) {
+                logger.warn("No se pudo guardar comprobante: {}", e.getMessage());
+                inscripcion.setImgComprobante(null);
+            }
+        }
         inscripcionService.save(inscripcion);
 
         // ===== PUESTOS =====
@@ -232,153 +301,29 @@ public class AdminController {
                 ip.setModificacion(new Date());
                 ip.setModificacionIdUsuario(usuario.getId());
                 ip.setEstado("ACTIVO");
-                ip.setCosto(BigDecimal.valueOf(
-                        funcionesInscripcion.obtenerCostoPuesto(
-                                entidad.getTipoEntidad().getId(),
-                                puesto.getTamano())));
+                ip.setCosto(funcionesInscripcion.obtenerCostoPuesto(
+                        entidad.getTipoEntidad().getId(),
+                        puesto.getTamano(),
+                        puesto.getCategoria().getId()
+                ));
+
                 inscripcionPuestoService.save(ip);
             }
         }
-
-        return "redirect:/ver/inscripcion/" + inscripcion.getId();
+        flash.addFlashAttribute("inscripcionId", inscripcion.getId());
+        return "redirect:/index";
     }
 
-    /**
-     * Guarda la imagen si viene y es de tipo image/*; devuelve el nombre del
-     * archivo o null
-     */
-    private String guardarImagenSiCorresponde(MultipartFile file, String prefijo) {
-        try {
-            if (file == null || file.isEmpty())
-                return null;
-            String ct = file.getContentType();
-            if (ct == null || !ct.toLowerCase().startsWith("image/"))
-                return null;
-
-            Path base = Paths.get("uploads/responsables").toAbsolutePath().normalize();
-            Files.createDirectories(base);
-
-            String original = Optional.ofNullable(file.getOriginalFilename()).orElse("foto.jpg");
-            String ext = original.contains(".") ? original.substring(original.lastIndexOf('.')) : ".jpg";
-            String nombre = prefijo + "-" + System.currentTimeMillis() + ext;
-
-            file.transferTo(base.resolve(nombre).toFile());
-            return nombre;
-        } catch (IOException e) {
-            // Puedes loguear y devolver null para no romper el flujo
-            return null;
-        }
-    }
-
-    private static boolean notBlank(String s) {
+    // Helpers
+    private boolean notBlank(String s) {
         return s != null && !s.trim().isEmpty();
     }
-
-    private static String nvl(String s) {
-        return s == null ? "" : s;
+    private String nvl(String s) {
+        return s == null ? "" : s.trim();
     }
 
-    @ValidarUsuarioAutenticado
-    @GetMapping(value = "/ver/inscripcion/{id_inscripcion}")
-    public String verIncripcion(HttpServletRequest request, Model model,
-            @PathVariable("id_inscripcion") Long id_inscripcion) {
-        Usuario usuario = (Usuario) request.getSession().getAttribute("usuario");
-
-        List<Map<String, Object>> puestos = funcionesInscripcion.obtener_puestos_por_inscripcion(id_inscripcion);
-
-        model.addAttribute("inscripcion", inscripcionService.findById(id_inscripcion));
-
-        double sumaCostosPuestos = puestos.stream()
-                .mapToDouble(m -> m.get("costo") != null ? ((Number) m.get("costo")).doubleValue() : 0)
-                .sum();
-
-        model.addAttribute("sumaCostosPuestos", sumaCostosPuestos);
-
-        return "publico/verInscripcion";
-    }
-
-    @ValidarUsuarioAutenticado
-    @PostMapping("/actualizar/inscripcion")
-    public String actualizarInscripcion(
-            HttpServletRequest request,
-            @RequestParam("id") Long id,
-            @RequestParam(value = "numComprobante", required = false, defaultValue = "") String numComprobanteStr,
-            @RequestParam(value = "comprobante", required = false) MultipartFile file,
-            @RequestParam(value = "pagoContado", defaultValue = "false") boolean pagoContado,
-            RedirectAttributes flash) {
-
-        Usuario usuario = (Usuario) request.getSession().getAttribute("usuario");
-
-        Inscripcion ins = inscripcionService.findById(id);
-        if (ins == null) {
-            flash.addFlashAttribute("error", "Inscripción no encontrada.");
-            return "redirect:/admin";
-        }
-
-        if (pagoContado) {
-            ins.setPagoContado(true);
-            ins.setNumComprobante(null);
-            ins.setImgComprobante(null);
-        } else {
-            // validar numComprobante
-            Integer numComprobante = null;
-            if (numComprobanteStr == null || numComprobanteStr.trim().isEmpty()) {
-                flash.addFlashAttribute("error", "Debe indicar el número de comprobante.");
-                return "redirect:/ver/inscripcion/" + id;
-            }
-            try {
-                numComprobante = Integer.valueOf(numComprobanteStr.trim());
-            } catch (NumberFormatException e) {
-                flash.addFlashAttribute("error", "El número de comprobante no es válido.");
-                return "redirect:/ver/inscripcion/" + id;
-            }
-
-            // validar archivo
-            if (file == null || file.isEmpty()) {
-                flash.addFlashAttribute("error", "Debe adjuntar la imagen del comprobante.");
-                return "redirect:/ver/inscripcion/" + id;
-            }
-            String ct = file.getContentType();
-            if (ct == null || !ct.toLowerCase().startsWith("image/")) {
-                flash.addFlashAttribute("error", "El archivo debe ser una imagen.");
-                return "redirect:/ver/inscripcion/" + id;
-            }
-
-            // guardar archivo
-            Path base = Paths.get("uploads/comprobantes").toAbsolutePath().normalize();
-            try {
-                Files.createDirectories(base);
-            } catch (IOException e) {
-                flash.addFlashAttribute("error", "No se pudo preparar el directorio de subida.");
-                return "redirect:/ver/inscripcion/" + id;
-            }
-            String original = Optional.ofNullable(file.getOriginalFilename()).orElse("comprobante.jpg");
-            String ext = original.contains(".") ? original.substring(original.lastIndexOf('.')) : ".jpg";
-            String filename = "inscripcion-" + id + "-" + System.currentTimeMillis() + ext;
-            try {
-                file.transferTo(base.resolve(filename).toFile());
-            } catch (IOException e) {
-                flash.addFlashAttribute("error", "Error al guardar el archivo: " + e.getMessage());
-                return "redirect:/ver/inscripcion/" + id;
-            }
-
-            ins.setPagoContado(false);
-            ins.setNumComprobante(numComprobante);
-            ins.setImgComprobante(filename);
-        }
-
-        ins.setModificacion(new Date());
-        if (usuario != null)
-            ins.setModificacionIdUsuario(usuario.getId());
-        if ("PENDIENTE".equalsIgnoreCase(ins.getInscripcionEstado())) {
-            ins.setInscripcionEstado("EN_REVISIÓN");
-        }
-        inscripcionService.save(ins);
-
-        flash.addFlashAttribute("success",
-                pagoContado ? "Pago al contado registrado." : "Comprobante guardado correctamente.");
-        return "redirect:/admin";
-    }
+    @Value("${app.upload-dir:uploads}")
+    private String uploadRoot;
 
     @PostMapping("/iniciar-sesion")
     public ResponseEntity<String> iniciarSesion(

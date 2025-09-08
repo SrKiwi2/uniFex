@@ -219,7 +219,7 @@ public class PersonaController {
             persona.setMaterno(materno);
             persona.setCi(ciPersona);
             persona.setCorreo(correo);
-            persona.setEstado("ACTIVO");
+            persona.setEstado("PROMOTOR");
             personaService.save(persona);
         }
     

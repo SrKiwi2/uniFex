@@ -21,7 +21,7 @@ $(function () {
 
                     // 2) Mostrar loader por encima y redirigir inmediatamente
                     const destino = (response === "Inicio Responsable")
-                        ? "/"    // o /adm/responsable si esa es tu ruta real
+                        ? "/index"    // o /adm/responsable si esa es tu ruta real
                         : "/admin"; // o /adm/inicio
 
                     Swal.fire({

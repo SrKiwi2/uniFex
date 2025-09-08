@@ -157,11 +157,9 @@
                         </div>
                     </div>
 
-
                     <div class="col-md">
                         <div class="card">
-                            <h6 class="card-header">ADJUNTAR COMPROBANTE | TOTAL A PAGAR : <b
-                                    th:text="${sumaCostosPuestos + ' Bs.'}"></b></h6>
+                            <h6 class="card-header">ADJUNTAR COMPROBANTE | TOTAL A PAGAR : <b th:text="${sumaCostosPuestos + ' Bs.'}"></b></h6>
                             <div class="card-body">
                                 <form th:action="@{/actualizar/inscripcion}" method="post" enctype="multipart/form-data"
                                     novalidate>
@@ -177,6 +175,7 @@
                                             Pago al contado
                                         </label>
                                     </div>
+
                                     <div id="camposComprobante">
                                         <div class="mb-3">
                                             <label class="form-label">Número de Comprobante</label>
@@ -189,9 +188,7 @@
                                             <input type="file" name="comprobante" accept="image/*"
                                                 class="form-control" />
                                         </div>
-
                                     </div>
-
 
                                     <button type="submit" class="btn btn-success w-100 p-3">
                                         Completar Registro
@@ -200,11 +197,8 @@
                             </div>
                         </div>
                     </div>
-
-
                     <footer th:replace="~{layout/footer :: footer}"></footer>
                 </div>
-
             </div>
         </div>
     </div>
@@ -212,20 +206,6 @@
     <div th:replace="~{layout/script :: script}"></div>
     <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
     <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
-    <script th:inline="javascript">
-        /*<![CDATA[*/
-        // Thymeleaf inyecta todos los puestos en un array JS
-        let puestos = /*[[${puestos}]]*/[];
-
-        // convertir cada puesto en objeto limpio
-        puestos = puestos.map(p => ({
-            id: p.id,
-            codigo: p.codigo,
-            tamano: p.tamano,
-            categoriaId: p.categoria.id
-        }));
-        /*]]>*/
-    </script>
     <script>
         $(document).ready(function () {
             $('#formValidationCategoria, #formValidationPuestosDisponibles').select2();
@@ -269,8 +249,6 @@
         chk.addEventListener("change", toggle);
         toggle(); // estado inicial
         });
-
-
     </script>
 
 </body>

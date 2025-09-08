@@ -1,5 +1,6 @@
 package com.usic.uniFex.model.repository;
 
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
@@ -20,19 +21,6 @@ public class FuncionesInscripcion {
     @Autowired
     private NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
-    public Double obtenerCostoPuesto(Long id_tipo_entidad, String tamano_puesto){
-        
-        String sql = "select * from public.obtenercostopuesto(?,?);";
-        Object[] params = new Object[] {id_tipo_entidad, tamano_puesto};
-        try {
-            return jdbcTemplate.queryForObject(sql, Double.class, params);
-        } catch (EmptyResultDataAccessException e) {
-            
-            return null;
-        }
-        
-    }
-
     public List<Map<String, Object>> obtener_puestos_por_inscripcion(Long p_id_inscripcion) {
         String sql = "SELECT * FROM public.obtener_puestos_por_inscripcion(?)";
 
@@ -46,6 +34,19 @@ public class FuncionesInscripcion {
             throw new RuntimeException("Error al crear array SQL", e);
         } catch (EmptyResultDataAccessException e) {
             return null;
+        }
+    }
+
+    public BigDecimal obtenerCostoPuesto(Long idTipoEntidad, String tamanoPuesto, Long idCategoria) {
+        final String sql = "SELECT public.obtenercostopuesto(?,?,?)";
+        try {
+            return jdbcTemplate.queryForObject(
+                sql,
+                (rs, rowNum) -> rs.getBigDecimal(1),
+                idTipoEntidad, tamanoPuesto, idCategoria
+            );
+        } catch (EmptyResultDataAccessException e) {
+            return BigDecimal.ZERO;
         }
     }
 }

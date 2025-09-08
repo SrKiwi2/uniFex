@@ -86,21 +86,6 @@
             botonPulsado = document.getElementById("opcion_admin");
             botonPulsado.classList.add("active");
 
-            // menú de rol
-            $("#opcion_rol").click(function (e) {
-                e.preventDefault();
-                cargarContenido("/administracion/rol/vista");
-
-                if (botonPulsado.classList.contains("active")) {
-                    botonPulsado.classList.remove("active");
-                }
-
-                botonPulsado = document.getElementById("opcion_rol");;
-
-                botonPulsado.classList.add("active");
-
-            });
-
             // menú de usuario
             $("#opcion_usuario").click(function (e) {
                 e.preventDefault();
