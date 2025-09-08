@@ -47,23 +47,30 @@ public class ResponsableServiceImpl implements IResponsableService{
 
     @Override
     public List<PromotoresListadoDTO> listarParaTabla() {
-        return responsableDao.findAllConPersona().stream().map(r -> {
+        return responsableDao.findAllConPersonaYEntidad().stream().map(r -> {
             var p = r.getPersona();
+            var e = r.getEntidad();
+
             String nombreCompleto = (p != null)
                     ? String.format("%s %s %s",
                         p.getNombre()  != null ? p.getNombre()  : "",
                         p.getPaterno() != null ? p.getPaterno() : "",
                         p.getMaterno() != null ? p.getMaterno() : ""
-                      ).trim().replaceAll("\\s{2,}", " ")
+                    ).trim().replaceAll("\\s{2,}", " ")
                     : "";
+
             String ci   = (p != null && p.getCi()   != null) ? p.getCi()   : "";
             String foto = (p != null && p.getFoto() != null) ? p.getFoto() : "";
 
+            Long   entidadId      = (e != null) ? e.getId() : null;
+            String entidadNombre  = (e != null && e.getNombre() != null) ? e.getNombre() : "";
+
             return new PromotoresListadoDTO(
-                r.getId(), nombreCompleto, ci, foto
+                r.getId(), entidadId, entidadNombre, nombreCompleto, ci, foto
             );
         }).toList();
     }
+
 
     
 }

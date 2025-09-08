@@ -18,7 +18,7 @@
             <tbody class="animate__animated animate__fadeIn">
                 <tr th:each="resp, i : ${responsables}">
                 <td th:text="${i.index + 1}"></td>
-                <td th:text="${resp.entidad.nombre}"></td>
+                <td th:text="${#strings.isEmpty(resp.entidadNombre) ? '—' : resp.entidadNombre}"></td>
                 <td th:text="${resp.persona}"></td>
 
                 <!-- Si quitaste la columna Código, omite esta celda; si la dejas, usa '—' -->

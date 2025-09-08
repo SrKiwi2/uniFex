@@ -1,35 +1,35 @@
 <div class="card">
-  <div class="card-header d-flex justify-content-lg-between">
-    <h5>Registro puestoario</h5>
-  </div>
-  <div class="card-datatable table-responsive pt-0">
-    <table class="table table-hover" id="tbl-ent">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Nombre</th>
-            <th>Entidad</th>
-            <th class="text-end">Inscripciones</th>
-            <th class="text-end">Nro puestos</th>
-            <th class="text-end">Total (Bs)</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr th:each="row, i : ${data}">
-            <td th:text="${i.index + 1}"></td>
-            <td th:text="${row.nombreCompleto}"></td>
-            <td th:text="${row.entidad}"></td>
-            <td class="text-end" th:text="${row.cantidadInscripciones}"></td>
-            <td class="text-end" th:text="${row.cantidadPuestos}"></td>
-            <td class="text-end" th:text="${#numbers.formatDecimal(row.totalBs, 1, 'COMMA', 2, 'POINT')}"></td>
-          </tr>
-        </tbody>
-      </table>
-  </div>
+    <div class="card-header d-flex justify-content-lg-between">
+        <h5>Registro puestoario</h5>
+    </div>
+    <div class="card-datatable table-responsive pt-0">
+        <table class="table table-hover" id="tbl-ent">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Nombre</th>
+                    <th>Entidad</th>
+                    <th class="text-end">Inscripciones</th>
+                    <th class="text-end">Nro puestos</th>
+                    <th class="text-end">Total (Bs)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="row, i : ${data}">
+                    <td th:text="${i.index + 1}"></td>
+                    <td th:text="${row.nombreCompleto}"></td>
+                    <td th:text="${row.entidad}"></td>
+                    <td class="text-end" th:text="${row.cantidadInscripciones}"></td>
+                    <td class="text-end" th:text="${row.cantidadPuestos}"></td>
+                    <td class="text-end" th:text="${#numbers.formatDecimal(row.totalBs, 1, 'COMMA', 2, 'POINT')}"></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
 </div>
 
 <script>
-$('#tbl-ent').DataTable({
+    $('#tbl-ent').DataTable({
         language: {
             "sProcessing": "Procesando...",
             "sLengthMenu": "Mostrar _MENU_ registros",

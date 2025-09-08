@@ -14,4 +14,12 @@ public interface IResponsableDao extends JpaRepository <Responsable, Long>{
     @EntityGraph(attributePaths = {"persona"})
     @Query("select r from Responsable r")
     List<Responsable> findAllConPersona();
+
+    @Query("""
+        select r
+        from Responsable r
+        left join fetch r.persona p
+        left join fetch r.entidad e
+    """)
+    List<Responsable> findAllConPersonaYEntidad();
 }
