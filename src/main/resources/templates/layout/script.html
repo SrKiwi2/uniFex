@@ -172,15 +172,15 @@
 
             });
 
-            $("#opcion_promo").click(function (e) {
+            $("#opcion_responsables").click(function (e) {
                 e.preventDefault();
-                cargarContenido("/administracion/promotores/vista");
+                cargarContenido("/administracion/responsables/vista");
 
                 if (botonPulsado.classList.contains("active")) {
                     botonPulsado.classList.remove("active");
                 }
 
-                botonPulsado = document.getElementById("opcion_promo");;
+                botonPulsado = document.getElementById("opcion_responsables");;
 
                 botonPulsado.classList.add("active");
 

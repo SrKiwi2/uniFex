@@ -7,6 +7,7 @@
             <thead class="table-dark">
                 <tr>
                 <th>#</th>
+                <th>Entidad</th>
                 <th>Nombre Completo</th>
                 <!-- <th>Código</th>  Quitar si ya no aplica -->
                 <th>C.I.</th>
@@ -15,29 +16,30 @@
                 </tr>
             </thead>
             <tbody class="animate__animated animate__fadeIn">
-                <tr th:each="adm, i : ${promotores}">
+                <tr th:each="resp, i : ${responsables}">
                 <td th:text="${i.index + 1}"></td>
-                <td th:text="${adm.persona}"></td>
+                <td th:text="${resp.entidad.nombre}"></td>
+                <td th:text="${resp.persona}"></td>
 
                 <!-- Si quitaste la columna Código, omite esta celda; si la dejas, usa '—' -->
                 <!-- <td>—</td> -->
 
-                <td th:text="${adm.ci}"></td>
+                <td th:text="${resp.ci}"></td>
 
                 <td>
-                    <span th:if="${adm.foto != null and !#strings.isEmpty(adm.foto)}">
-                    <a th:href="|/files/${adm.foto}|" target="_blank">
-                        <img th:src="|/files/${adm.foto}|"
+                    <span th:if="${resp.foto != null and !#strings.isEmpty(resp.foto)}">
+                    <a th:href="|/files/${resp.foto}|" target="_blank">
+                        <img th:src="|/files/${resp.foto}|"
                             alt="Foto"
                             class="img-thumbnail rounded-circle shadow-sm"
                             style="width:50px;height:50px;object-fit:cover;" />
                     </a>
                     </span>
-                    <span th:if="${adm.foto == null or #strings.isEmpty(adm.foto)}">—</span>
+                    <span th:if="${resp.foto == null or #strings.isEmpty(resp.foto)}">—</span>
                 </td>
 
                 <td>
-                    <a th:href="@{/administracion/promotores/{id}/credencial.pdf(id=${adm.id})}"
+                    <a th:href="@{/respinistracion/promotores/{id}/credencial.pdf(id=${resp.id})}"
                     class="btn btn-sm btn-outline-danger"
                     title="Generar Credencial PDF" target="_blank">
                     <i class="ti ti-file-text"></i> PDF

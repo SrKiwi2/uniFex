@@ -1,4 +1,4 @@
-<h4 class="py-3 mb-4"><span class="text-muted fw-light">Menú /</span> PROMOTORES</h4>
+<h4 class="py-3 mb-4"><span class="text-muted fw-light">Menú /</span> responsables</h4>
 
 <div id="tablaRegistro"></div>
 
@@ -11,7 +11,7 @@
     function cargarTabla() {
         $.ajax({
             type: 'POST',
-            url: "/administracion/promotores/tabla-registros",  // Ruta del metodo del controlador en Spring Boot
+            url: "/administracion/responsables/tabla-registros",  // Ruta del metodo del controlador en Spring Boot
             success: function (response) {
                 $("#tablaRegistro").html(response);  // Actualiza el contenido del div con la respuesta del servidor
             }
@@ -19,6 +19,6 @@
     }
 
     function eliminar(nombre, id) {
-        eliminarRegistroAlert(nombre, id, "/administracion/promotores/eliminar",cargarTabla);
+        eliminarRegistroAlert(nombre, id, "/administracion/responsables/eliminar",cargarTabla);
     }
 </script>
