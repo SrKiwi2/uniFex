@@ -6,21 +6,38 @@ import java.math.RoundingMode;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.Date;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.stereotype.Service;
 
-import com.itextpdf.text.*;
+import com.itextpdf.text.BaseColor;
+import com.itextpdf.text.Document;
+import com.itextpdf.text.Element;
+import com.itextpdf.text.Font;
 import com.itextpdf.text.Font.FontFamily;
-import com.itextpdf.text.pdf.*;
-import com.usic.uniFex.model.IService.IEntidadService;
+import com.itextpdf.text.Image;
+import com.itextpdf.text.PageSize;
+import com.itextpdf.text.Paragraph;
+import com.itextpdf.text.Phrase;
+import com.itextpdf.text.Rectangle;
+import com.itextpdf.text.pdf.BarcodeQRCode;
+import com.itextpdf.text.pdf.PdfContentByte;
+import com.itextpdf.text.pdf.PdfPCell;
+import com.itextpdf.text.pdf.PdfPTable;
+import com.itextpdf.text.pdf.PdfPageEventHelper;
+import com.itextpdf.text.pdf.PdfWriter;
+import com.usic.uniFex.model.IService.IAdministrativoService;
 import com.usic.uniFex.model.IService.IInscripcionService;
 import com.usic.uniFex.model.IService.IResponsableService;
+import com.usic.uniFex.model.IService.IUsuarioService;
+import com.usic.uniFex.model.entity.Administrativo;
 import com.usic.uniFex.model.entity.Entidad;
 import com.usic.uniFex.model.entity.Inscripcion;
 import com.usic.uniFex.model.entity.Persona;
 import com.usic.uniFex.model.entity.Responsable;
+import com.usic.uniFex.model.entity.Usuario;
 import com.usic.uniFex.model.repository.FuncionesInscripcion;
 
 import lombok.RequiredArgsConstructor;
@@ -32,6 +49,8 @@ public class ReciboPdfService {
     private final IInscripcionService inscripcionService;
     private final FuncionesInscripcion funcionesInscripcion;
     private final IResponsableService responsableService;
+    private final IUsuarioService usuarioService;
+    private final IAdministrativoService administrativoService;
 
     public void generarRecibo(Long idInscripcion, OutputStream os) throws Exception {
         Inscripcion ins = inscripcionService.findById(idInscripcion);
@@ -102,6 +121,7 @@ public class ReciboPdfService {
         PdfPTable tEnt = new PdfPTable(new float[]{28,72});
         tEnt.setWidthPercentage(100);
         tEnt.addCell(cell("Entidad:", fBold));             tEnt.addCell(cell(nvl(entidad.getNombre()), fNorm));
+        tEnt.addCell(cell("Representante legal:", fBold));             tEnt.addCell(cell(nvl(entidad.getRepresentanteLegal() + " - " + entidad.getCiRepresentante()), fNorm));
         tEnt.addCell(cell("NIT:", fBold));                 tEnt.addCell(cell(nvl(entidad.getNit()), fNorm));
         tEnt.addCell(cell("Tipo:", fBold));                tEnt.addCell(cell(nvl(entidad.getTipoEntidad()!=null? entidad.getTipoEntidad().getNombre(): null), fNorm));
         tEnt.addCell(cell("Objetivo:", fBold));         tEnt.addCell(cell(nvl(entidad.getObjeto()), fNorm));
@@ -178,8 +198,13 @@ public class ReciboPdfService {
         PdfPTable sello = new PdfPTable(new float[]{70, 30});
         sello.setWidthPercentage(100);
 
+        Usuario usuario = usuarioService.findById(ins.getRegistroIdUsuario());
+        Persona persona = usuario.getPersona();
+        Administrativo administrativo = administrativoService.findByPersonaId(persona.getId()).orElse(null);
+
         String infoCodigo = "Código de autenticación: " + codigoAut + "\n" +
-                            "Generado: " + fechaHoraEmision;
+                            "Generado: " + fechaHoraEmision + "\n" +
+                            "Usuario: " + administrativo.getCodigoFuncionario();
         PdfPCell cInfo = cell(infoCodigo, fSmall);
         cInfo.setBorder(Rectangle.NO_BORDER);
         cInfo.setPaddingTop(4f);

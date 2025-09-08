@@ -39,4 +39,9 @@ public class AdministrativoServiceImpl implements IAdministrativoService {
     public Optional<Administrativo> findByCodigoFuncionario(String codigoFuncionario) {
         return dao.findByCodigoFuncionario(codigoFuncionario);
     }
+
+    @Override
+    public Optional<Administrativo> findByPersonaId(Long personaId) {
+        return dao.findByPersonaId(personaId);
+    }
 }

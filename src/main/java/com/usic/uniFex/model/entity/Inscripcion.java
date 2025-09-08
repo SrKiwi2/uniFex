@@ -28,6 +28,7 @@ public class Inscripcion extends AuditoriaConfig{
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    private String entidadBancaria;
     private Long numComprobante;
     private String imgComprobante;
     private boolean pagoContado;

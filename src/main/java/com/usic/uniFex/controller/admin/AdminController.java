@@ -1,18 +1,12 @@
 package com.usic.uniFex.controller.admin;
 
 import java.io.IOException;
-import java.io.OutputStream;
-import java.math.BigDecimal;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -24,7 +18,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -52,8 +45,8 @@ import com.usic.uniFex.model.entity.Responsable;
 import com.usic.uniFex.model.entity.Usuario;
 import com.usic.uniFex.model.repository.FuncionesInscripcion;
 import com.usic.uniFex.model.service.FileStorageService;
-import com.usic.uniFex.model.service.ReciboPdfService;
 import com.usic.uniFex.model.service.FileStorageService.Bucket;
+import com.usic.uniFex.model.service.ReciboPdfService;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -136,6 +129,8 @@ public class AdminController {
             @RequestParam("nitEntidad") String nitEntidad,
             @RequestParam("descripcionEntidad") String descripcionEntidad,
             @RequestParam("objetoContratacion") String objetoContratacion,
+            @RequestParam("nombreR") String nombreR,
+            @RequestParam("ciR") String ciR,
             @RequestParam("fechaInicio") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaInicio,
             @RequestParam("fechaFin")    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaFin,
             @RequestParam("tipoEntidad") Long tipoEntidad,
@@ -154,6 +149,7 @@ public class AdminController {
             @RequestParam(value = "celularResponsable2", required = false) String celularResponsable2,
             @RequestParam(value = "fotoResponsable2", required = false) MultipartFile fotoResponsable2,
             @RequestParam(value = "puestosSeleccionados", required = false) List<Long> puestosSeleccionados,
+            @RequestParam(value = "entidadBancaria", required = false) String entidadBancaria,
             @RequestParam(value = "numComprobante", required = false) Long numComprobante,
             @RequestParam(value = "comprobante", required = false) MultipartFile comprobante,
             @RequestParam(value = "pagoContado", defaultValue = "false") boolean pagoContado,
@@ -168,6 +164,8 @@ public class AdminController {
         entidad.setNit(nitEntidad);
         entidad.setDescripcion(descripcionEntidad);
         entidad.setObjeto(objetoContratacion);
+        entidad.setRepresentanteLegal(nombreR);
+        entidad.setCiRepresentante(ciR);
         entidad.setTipoEntidad(tipoEntidadService.findById(tipoEntidad));
         entidad.setEstado("ACTIVO");
         entidad.setRegistro(new Date());
@@ -260,6 +258,7 @@ public class AdminController {
         inscripcion.setModificacionIdUsuario(usuario.getId());
         inscripcion.setFechaInicio(java.sql.Date.valueOf(fechaInicio));
         inscripcion.setFechaFin(java.sql.Date.valueOf(fechaFin));
+        inscripcion.setEntidadBancaria(entidadBancaria);
 
         if (pagoContado) {
             inscripcion.setPagoContado(true);

@@ -260,6 +260,24 @@
                                             </small>
                                         </div>
                                         <div class="col-sm-6">
+                                            <label class="form-label"
+                                                for="formValidationNombreResponsable2">Nombres completo representante legal</label>
+                                            <input type="text" id="formValidationNombreResponsable2"
+                                                name="nombreR" class="form-control" />
+                                                <small id="ayudaObjeto" class="form-text text-muted">
+                                                Nombre Completo del propietario o representante legal de la entidad.
+                                            </small>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <label class="form-label"
+                                                for="formValidationNombreResponsable2">C.I.</label>
+                                            <input type="number" id="formValidationNombreResponsable2"
+                                                name="ciR" class="form-control" />
+                                                <small id="ayudaObjeto" class="form-text text-muted">
+                                                C.I. del propietario o representante legal de la entidad (solo números).
+                                            </small>
+                                        </div>
+                                        <div class="col-sm-6">
                                             <label for="rangoFechas" class="form-label">Fecha designadas</label>
                                             <input type="date" name="fechaInicio" id="fechaInicio" readonly
                                                 class="form-control d-inline-block w-auto" />
@@ -463,12 +481,30 @@
 
                                         <div id="camposComprobante">
                                             <div class="mb-3">
-                                                <label class="form-label">Número de Comprobante</label>
+                                                <label class="form-label">Entidad bancaria</label>
+                                                <select name="entidadBancaria" class="form-control">
+                                                    <option value="">-- Seleccione una entidad bancaria --</option>
+                                                    <option value="Banco Unión">Banco Unión</option>
+                                                    <option value="Banco Solidario">BancoSol</option>
+                                                    <option value="Banco Ganadero">Banco Ganadero</option>
+                                                    <option value="Banco fie">BancoFie</option>
+                                                    <option value="Ecofuturo">Ecofuturo</option>
+                                                    <option value="Banco Nacional de Bolivia">Banco Nacional de Bolivia (BNB)</option>
+                                                    <option value="Banco Mercantil Santa Cruz">Banco Mercantil Santa Cruz</option>
+                                                    <option value="Banco Económico">Banco Económico</option>
+                                                    <option value="Banco PRODEM">Banco PRODEM</option>
+                                                    <option value="Banco Bisa">Banco Bisa</option>
+                                                </select>
+                                            </div>
+
+
+                                            <div class="mb-3">
+                                                <label class="form-label">Número de comprobante</label>
                                                 <input type="number" name="numComprobante" class="form-control"/>
                                             </div>
 
                                             <div class="mb-3">
-                                                <label class="form-label">Adjuntar Imagen del comprobante</label>
+                                                <label class="form-label">Adjuntar imagen del comprobante</label>
                                                 <input type="file" name="comprobante" accept="image/*"
                                                     class="form-control" />
                                             </div>
