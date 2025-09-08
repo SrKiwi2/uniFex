@@ -6,7 +6,7 @@ import java.math.BigDecimal;
 
 public interface ResumenCategoriaView {
     Long getUsuarioId();
-    String getUsername();
+    String getNombreCompleto();   // aquí
     Long getCategoriaId();
     String getCategoria();
     Long getCantidadInscripciones();

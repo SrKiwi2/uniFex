@@ -64,54 +64,54 @@ public class InscripcionServiceImpl implements IInscripcionService{
     }
 
     @Override
-public List<InscripcionListadoDTO> listarParaTabla() {
-    List<Inscripcion> ins = inscripcionDao.findAllConTodo(); // o findAllConTodo() si usas EntityGraph/Query
+    public List<InscripcionListadoDTO> listarParaTabla() {
+        List<Inscripcion> ins = inscripcionDao.findAllConTodo(); // o findAllConTodo() si usas EntityGraph/Query
 
-    return ins.stream().map(i -> {
-        var entidad = i.getEntidad();
-        var tipo = (entidad != null && entidad.getTipoEntidad() != null)
-                ? entidad.getTipoEntidad().getNombre() : null;
+        return ins.stream().map(i -> {
+            var entidad = i.getEntidad();
+            var tipo = (entidad != null && entidad.getTipoEntidad() != null)
+                    ? entidad.getTipoEntidad().getNombre() : null;
 
-        var items = i.getInscripcionPuestos();
-        int cantidad = items != null ? items.size() : 0;
+            var items = i.getInscripcionPuestos();
+            int cantidad = items != null ? items.size() : 0;
 
-        BigDecimal total = (items == null ? BigDecimal.ZERO :
-                items.stream()
-                        .map(InscripcionPuesto::getCosto)
-                        .filter(Objects::nonNull)
-                        .reduce(BigDecimal.ZERO, BigDecimal::add));
+            BigDecimal total = (items == null ? BigDecimal.ZERO :
+                    items.stream()
+                            .map(InscripcionPuesto::getCosto)
+                            .filter(Objects::nonNull)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add));
 
-        List<String> categorias = (items == null ? List.<String>of() :
-                items.stream()
-                        .map(ip -> ip.getPuesto() != null && ip.getPuesto().getCategoria() != null
-                                ? ip.getPuesto().getCategoria().getNombre() : null)
-                        .filter(n -> n != null && !n.isBlank())
-                        .distinct()
-                        .sorted()
-                        .collect(Collectors.toList()));
+            List<String> categorias = (items == null ? List.<String>of() :
+                    items.stream()
+                            .map(ip -> ip.getPuesto() != null && ip.getPuesto().getCategoria() != null
+                                    ? ip.getPuesto().getCategoria().getNombre() : null)
+                            .filter(n -> n != null && !n.isBlank())
+                            .distinct()
+                            .sorted()
+                            .collect(Collectors.toList()));
 
-        List<String> codigosPuestos = (items == null ? List.<String>of() :
-                items.stream()
-                        .map(ip -> ip.getPuesto() != null ? ip.getPuesto().getCodigo() : null)
-                        .filter(Objects::nonNull)
-                        .sorted()
-                        .collect(Collectors.toList()));
+            List<String> codigosPuestos = (items == null ? List.<String>of() :
+                    items.stream()
+                            .map(ip -> ip.getPuesto() != null ? ip.getPuesto().getCodigo() : null)
+                            .filter(Objects::nonNull)
+                            .sorted()
+                            .collect(Collectors.toList()));
 
-        return new InscripcionListadoDTO(
-                i.getId(),
-                entidad != null ? entidad.getNombre() : null,
-                tipo,
-                entidad != null ? entidad.getNit() : null,
-                cantidad,
-                categorias,
-                total,
-                i.getFechaCompra(),
-                i.getInscripcionEstado(),
-                i.getImgComprobante(),
-                i.isPagoContado(),     // <—
-                codigosPuestos         // <—
-        );
-    }).collect(Collectors.toList());
-}
+            return new InscripcionListadoDTO(
+                    i.getId(),
+                    entidad != null ? entidad.getNombre() : null,
+                    tipo,
+                    entidad != null ? entidad.getNit() : null,
+                    cantidad,
+                    categorias,
+                    total,
+                    i.getFechaCompra(),
+                    i.getInscripcionEstado(),
+                    i.getImgComprobante(),
+                    i.isPagoContado(),     // <—
+                    codigosPuestos         // <—
+            );
+        }).collect(Collectors.toList());
+    }
 
 }

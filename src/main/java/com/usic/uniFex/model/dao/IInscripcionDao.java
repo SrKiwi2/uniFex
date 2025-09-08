@@ -21,41 +21,44 @@ public interface IInscripcionDao extends JpaRepository <Inscripcion, Long> {
     List<Inscripcion> findAll();
 
     @Query(value = """
-        select
-        u.id                         as usuarioId,
-        u.username                   as username,
-        c.id                         as categoriaId,
-        c.nombre                     as categoria,
-        count(distinct i.id)         as cantidadInscripciones,
-        count(ip.id)                 as cantidadPuestos,
-        coalesce(sum(ip.costo), 0)   as totalBs
-        from inscripcion i
-        join inscripcion_puesto ip on ip.id_inscripcion = i.id
-        join puesto p             on p.id = ip.id_puesto
-        join categoria c          on c.id = p.id_categoria
-        left join usuario u       on u.id = i._registro_id_usuario
-        group by u.id, u.username, c.id, c.nombre
-        order by u.username asc nulls last, c.nombre asc
-        """, nativeQuery = true)
+            select
+            u.id                         as usuarioId,
+            concat_ws(' ', per.nombre, per.paterno, per.materno) as nombreCompleto,
+            c.id                         as categoriaId,
+            c.nombre                     as categoria,
+            count(distinct i.id)         as cantidadInscripciones,
+            count(ip.id)                 as cantidadPuestos,
+            coalesce(sum(ip.costo), 0)   as totalBs
+            from inscripcion i
+            join inscripcion_puesto ip on ip.id_inscripcion = i.id
+            join puesto p             on p.id = ip.id_puesto
+            join categoria c          on c.id = p.id_categoria
+            left join usuario u       on u.id = i._registro_id_usuario
+            left join persona per     on per.id = u.persona_id
+            group by u.id, per.nombre, per.paterno, per.materno, c.id, c.nombre
+            order by nombreCompleto asc nulls last, c.nombre asc
+            """, nativeQuery = true)
     List<ResumenCategoriaView> resumenPorCategoria();
 
     @Query(value = """
-        select
-        u.id                         as usuarioId,
-        u.username                   as username,
-        e.id                         as entidadId,
-        e.nombre                     as entidad,
-        count(distinct i.id)         as cantidadInscripciones,
-        count(ip.id)                 as cantidadPuestos,
-        coalesce(sum(ip.costo), 0)   as totalBs
-        from inscripcion i
-        join entidad e           on e.id = i.id_entidad
-        left join usuario u      on u.id = i._registro_id_usuario
-        left join inscripcion_puesto ip on ip.id_inscripcion = i.id
-        group by u.id, u.username, e.id, e.nombre
-        order by u.username asc nulls last, e.nombre asc
-        """, nativeQuery = true)
+            select
+            u.id                         as usuarioId,
+            concat_ws(' ', per.nombre, per.paterno, per.materno) as nombreCompleto,
+            e.id                         as entidadId,
+            e.nombre                     as entidad,
+            count(distinct i.id)         as cantidadInscripciones,
+            count(ip.id)                 as cantidadPuestos,
+            coalesce(sum(ip.costo), 0)   as totalBs
+            from inscripcion i
+            join entidad e           on e.id = i.id_entidad
+            left join usuario u      on u.id = i._registro_id_usuario
+            left join persona per    on per.id = u.persona_id
+            left join inscripcion_puesto ip on ip.id_inscripcion = i.id
+            group by u.id, per.nombre, per.paterno, per.materno, e.id, e.nombre
+            order by nombreCompleto asc nulls last, e.nombre asc
+            """, nativeQuery = true)
     List<ResumenEntidadView> resumenPorEntidad();
+
 
         @EntityGraph(attributePaths = {
         "entidad",

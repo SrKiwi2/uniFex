@@ -25,6 +25,7 @@ public class SecurityConfig {
         http
         .authorizeHttpRequests(auth -> auth
             .requestMatchers("/",
+            "/vistaR/**",
             "/admin/**",
             "/iniciar-sesion/**",
             "/ver/**",

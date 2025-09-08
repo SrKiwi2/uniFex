@@ -29,25 +29,25 @@
       formValidationNombreEntidad: {
         selector: '#formValidationNombreEntidad',
         validators: {
-          notEmpty: { message: 'El campo es requerido' },
-          stringLength: { min: 6, max: 30, message: 'Entre 6 y 30 caracteres' },
-          regexp: { regexp: /^[a-zA-Z0-9 ]+$/, message: 'Solo alfanumérico y espacios' }
+          notEmpty: { message: 'El campo es requerido' }
         }
       },
       formValidationNit: {
         selector: '#formValidationNit',
         validators: {
-          notEmpty: { message: 'El campo es requerido' },
-          stringLength: { min: 6, max: 30, message: 'Entre 6 y 30 caracteres' },
-          regexp: { regexp: /^[a-zA-Z0-9 ]+$/, message: 'Solo alfanumérico y espacios' }
+          notEmpty: { message: 'El campo es requerido' }
         }
       },
       formValidationDescripcion: {
         selector: '#formValidationDescripcion',
         validators: {
-          notEmpty: { message: 'El campo es requerido' },
-          stringLength: { min: 6, max: 30, message: 'Entre 6 y 30 caracteres' },
-          regexp: { regexp: /^[a-zA-Z0-9 ]+$/, message: 'Solo alfanumérico y espacios' }
+          notEmpty: { message: 'El campo es requerido' }
+        }
+      },
+      formValidationObjeto: {
+        selector: '#formValidationObjeto',
+        validators: {
+          notEmpty: { message: 'El campo es requerido' }
         }
       }
     },
@@ -73,7 +73,6 @@
       formValidationApResponsable1:     { selector: '#formValidationApResponsable1',     validators: { notEmpty: { message: 'El dato es requerido' } } },
       formValidationAmResponsable1:     { selector: '#formValidationAmResponsable1',     validators: { notEmpty: { message: 'El dato es requerido' } } },
       formValidationCiResponsable1:     { selector: '#formValidationCiResponsable1',     validators: { notEmpty: { message: 'El dato es requerido' } } },
-      formValidationCorreoResponsable1: { selector: '#formValidationCorreoResponsable1', validators: { notEmpty: { message: 'El correo es requerido' }, emailAddress: { message: 'No es un correo válido' } } },
       formValidationCelularResponsable1:{ selector: '#formValidationCelularResponsable1',validators: { notEmpty: { message: 'El dato es requerido' } } }
     },
     plugins: {

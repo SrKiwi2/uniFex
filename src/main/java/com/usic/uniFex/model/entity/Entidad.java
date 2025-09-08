@@ -16,6 +16,7 @@ public class Entidad extends AuditoriaConfig{
     private String nombre;
     private String nit;
     private String descripcion;
+    private String Objeto;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_tipo_entidad")

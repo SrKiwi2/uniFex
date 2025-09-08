@@ -24,6 +24,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -109,19 +110,22 @@ public class AdminController {
     }
 
     @ValidarUsuarioAutenticado
-    @GetMapping(value = "/index")
-    public String Index(HttpServletRequest request, Model model) {
+    @GetMapping(value = "/vistaR")
+    public String Index(@RequestParam(value = "inscripcionId", required = false) Long inscripcionId, HttpServletRequest request, Model model) {
         Usuario usuario = (Usuario) request.getSession().getAttribute("usuario");
         model.addAttribute("tiposEntidads", tipoEntidadService.findAll());
         model.addAttribute("categorias", categoriaService.findAll());
         model.addAttribute("puestos", puestoService.findAll());
-
+        model.addAttribute("inscripcionId", inscripcionId);
         logger.info("Usuario en sesión: {}", usuario.getPersona().getNombre());
 
         Persona persona = usuario.getPersona();
 
         request.getSession().setAttribute("persona", persona);
-        return "index";
+        logger.info("inscripcionId (flash): {}", inscripcionId);
+
+        System.out.println("vista logueada con responsable");
+        return "publico/responsable";
     }
 
     @ValidarUsuarioAutenticado
@@ -135,7 +139,6 @@ public class AdminController {
             @RequestParam("fechaInicio") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaInicio,
             @RequestParam("fechaFin")    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaFin,
             @RequestParam("tipoEntidad") Long tipoEntidad,
-
             @RequestParam("nombreResponsable1") String nombreResponsable1,
             @RequestParam("paternoResponsable1") String paternoResponsable1,
             @RequestParam("maternoResponsable1") String maternoResponsable1,
@@ -143,7 +146,6 @@ public class AdminController {
             @RequestParam("correoResponsable1") String correoResponsable1,
             @RequestParam("celularResponsable1") String celularResponsable1,
             @RequestParam(value = "fotoResponsable1", required = false) MultipartFile fotoResponsable1,
-
             @RequestParam(value = "nombreResponsable2", required = false) String nombreResponsable2,
             @RequestParam(value = "paternoResponsable2", required = false) String paternoResponsable2,
             @RequestParam(value = "maternoResponsable2", required = false) String maternoResponsable2,
@@ -151,10 +153,7 @@ public class AdminController {
             @RequestParam(value = "correoResponsable2", required = false) String correoResponsable2,
             @RequestParam(value = "celularResponsable2", required = false) String celularResponsable2,
             @RequestParam(value = "fotoResponsable2", required = false) MultipartFile fotoResponsable2,
-
             @RequestParam(value = "puestosSeleccionados", required = false) List<Long> puestosSeleccionados,
-
-            // si tu campo es Integer en la entidad, usa Integer aquí (sin defaultValue="")
             @RequestParam(value = "numComprobante", required = false) Long numComprobante,
             @RequestParam(value = "comprobante", required = false) MultipartFile comprobante,
             @RequestParam(value = "pagoContado", defaultValue = "false") boolean pagoContado,
@@ -164,11 +163,11 @@ public class AdminController {
 
         Usuario usuario = (Usuario) request.getSession().getAttribute("usuario");
 
-        // ===== ENTIDAD =====
         Entidad entidad = new Entidad();
         entidad.setNombre(nombreEntidad);
         entidad.setNit(nitEntidad);
         entidad.setDescripcion(descripcionEntidad);
+        entidad.setObjeto(objetoContratacion);
         entidad.setTipoEntidad(tipoEntidadService.findById(tipoEntidad));
         entidad.setEstado("ACTIVO");
         entidad.setRegistro(new Date());
@@ -177,7 +176,6 @@ public class AdminController {
         entidad.setModificacionIdUsuario(usuario.getId());
         entidadService.save(entidad);
 
-        // ===== PERSONA 1 =====
         Persona persona1 = new Persona();
         persona1.setNombre(nombreResponsable1);
         persona1.setPaterno(paternoResponsable1);
@@ -194,7 +192,7 @@ public class AdminController {
         try {
             String foto1Rel = storage.save(fotoResponsable1, Bucket.RESPONSABLES,
                     nombreResponsable1 + " " + paternoResponsable1 + " " + maternoResponsable1);
-            persona1.setFoto(foto1Rel); // ruta relativa (null si no subió)
+            persona1.setFoto(foto1Rel);
         } catch (IOException e) {
             logger.warn("No se pudo guardar foto de responsable 1: {}", e.getMessage());
             persona1.setFoto(null);
@@ -211,7 +209,6 @@ public class AdminController {
         responsable1.setModificacionIdUsuario(usuario.getId());
         responsableService.save(responsable1);
 
-        // ===== PERSONA 2 (opcional) =====
         boolean hayResp2 =
             notBlank(nombreResponsable2) || notBlank(paternoResponsable2) || notBlank(maternoResponsable2) ||
             notBlank(ciResponsable2) || notBlank(correoResponsable2) || notBlank(celularResponsable2) ||
@@ -252,7 +249,6 @@ public class AdminController {
             responsableService.save(responsable2);
         }
 
-        // ===== INSCRIPCIÓN =====
         Inscripcion inscripcion = new Inscripcion();
         inscripcion.setEntidad(entidad);
         inscripcion.setFechaCompra(LocalDateTime.now());
@@ -274,7 +270,7 @@ public class AdminController {
             inscripcion.setNumComprobante(numComprobante);
             try {
                 String compRel = storage.save(comprobante, Bucket.COMPROBANTES, entidad.getNombre());
-                inscripcion.setImgComprobante(compRel); // puede ser null si no subieron
+                inscripcion.setImgComprobante(compRel);
             } catch (IOException e) {
                 logger.warn("No se pudo guardar comprobante: {}", e.getMessage());
                 inscripcion.setImgComprobante(null);
@@ -310,8 +306,20 @@ public class AdminController {
                 inscripcionPuestoService.save(ip);
             }
         }
-        flash.addFlashAttribute("inscripcionId", inscripcion.getId());
-        return "redirect:/index";
+       flash.addAttribute("inscripcionId", inscripcion.getId());
+        return "redirect:/vistaR";
+    }
+
+    @ValidarUsuarioAutenticado
+    @GetMapping("/ver/inscripcion/{id}/recibo.pdf")
+    public void verRecibo(
+            @PathVariable Long id,
+            HttpServletResponse response) throws Exception {
+
+        response.setContentType("application/pdf");
+        response.setHeader("Content-Disposition", "attachment; filename=recibo-" + id + ".pdf");
+        reciboPdfService.generarRecibo(id, response.getOutputStream());
+        response.flushBuffer();
     }
 
     // Helpers

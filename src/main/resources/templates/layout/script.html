@@ -172,6 +172,20 @@
 
             });
 
+            $("#opcion_promo").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/promotores/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_promo");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
             function cargarContenido(url) {
 
                 $.ajax({

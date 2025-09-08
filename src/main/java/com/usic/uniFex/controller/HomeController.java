@@ -11,47 +11,23 @@ import com.usic.uniFex.model.IService.ICategoriaService;
 import com.usic.uniFex.model.IService.IPuestoService;
 import com.usic.uniFex.model.IService.ITipoEntidadService;
 
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 
 @Controller
 @RequiredArgsConstructor
 public class HomeController {
 
-  private final ITipoEntidadService tipoEntidadService;
-  private final ICategoriaService categoriaService;
+    private final ITipoEntidadService tipoEntidadService;
+    private final ICategoriaService categoriaService;
     private final IPuestoService puestoService;
 
     @GetMapping("/")
-  public String home(Model model) {
-    model.addAttribute("personaForm", new PersonaForm());
-    model.addAttribute("tiposEntidads", tipoEntidadService.findAll());
+    public String home(HttpServletRequest request, Model model) {
+        model.addAttribute("tiposEntidads", tipoEntidadService.findAll());
         model.addAttribute("categorias", categoriaService.findAll());
         model.addAttribute("puestos", puestoService.findAll());
-    System.out.println("publico mijo");
-    return "publico/index"; // templates/publico/index.html
-  }
-
-  @PostMapping("/persona")
-  public String registrarPersona(@ModelAttribute PersonaForm personaForm, RedirectAttributes ra) {
-    // Por ahora, solo demo: no guardamos en BD. Luego lo conectas a tu servicio.
-    ra.addFlashAttribute("ok", "Formulario enviado (demo).");
-    return "redirect:/";
-  }
-
-  // DTO simple para el form (puedes usar tu entidad si prefieres)
-  public static class PersonaForm {
-    private String nombre;
-    private String paterno;
-    private String materno;
-    private String ci;
-    private String correo;
-    private String celular;
-    // getters/setters
-    public String getNombre(){return nombre;} public void setNombre(String v){nombre=v;}
-    public String getPaterno(){return paterno;} public void setPaterno(String v){paterno=v;}
-    public String getMaterno(){return materno;} public void setMaterno(String v){materno=v;}
-    public String getCi(){return ci;} public void setCi(String v){ci=v;}
-    public String getCorreo(){return correo;} public void setCorreo(String v){correo=v;}
-    public String getCelular(){return celular;} public void setCelular(String v){celular=v;}
-  }
+        System.out.println("vista inicial");
+        return "publico/index"; // templates/publico/index.html
+    }
 }

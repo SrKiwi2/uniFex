@@ -2,10 +2,18 @@ package com.usic.uniFex.model.service;
 
 import java.io.OutputStream;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.List;
 
 import org.springframework.stereotype.Service;
 
+import com.itextpdf.text.*;
+import com.itextpdf.text.Font.FontFamily;
+import com.itextpdf.text.pdf.*;
 import com.usic.uniFex.model.IService.IEntidadService;
 import com.usic.uniFex.model.IService.IInscripcionService;
 import com.usic.uniFex.model.IService.IResponsableService;
@@ -23,44 +31,56 @@ public class ReciboPdfService {
     
     private final IInscripcionService inscripcionService;
     private final FuncionesInscripcion funcionesInscripcion;
-    private final IResponsableService responsableService; // si necesitas recuperar responsables
-    private final IEntidadService entidadService;
+    private final IResponsableService responsableService;
 
-    // Utiliza iText 5 / OpenPDF (mismo código base)
     public void generarRecibo(Long idInscripcion, OutputStream os) throws Exception {
         Inscripcion ins = inscripcionService.findById(idInscripcion);
         if (ins == null) throw new IllegalArgumentException("Inscripción no encontrada");
 
         Entidad entidad = ins.getEntidad();
 
-        // PUESTOS
+        // PUESTOS + TOTAL
         List<Map<String, Object>> puestos = funcionesInscripcion.obtener_puestos_por_inscripcion(idInscripcion);
         BigDecimal total = puestos.stream()
                 .map(m -> m.get("costo") != null ? new BigDecimal(((Number)m.get("costo")).toString()) : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // Responsables (si tu modelo guarda Responsable por entidad)
-        List<Responsable> responsables = responsableService.findByEntidadId(entidad.getId()); 
-        // o si no, arma los responsables desde otra consulta
+        // RESPONSABLES
+        List<Responsable> responsables = responsableService.findByEntidadId(entidad.getId());
 
-        // ====== PDF ======
-        com.itextpdf.text.Document doc = new com.itextpdf.text.Document(com.itextpdf.text.PageSize.A4, 36, 36, 36, 36);
-        com.itextpdf.text.pdf.PdfWriter.getInstance(doc, os);
+        // === Documento en tamaño CARTA (LETTER) ===
+        Document doc = new Document(PageSize.LETTER, 36, 36, 36, 36);
+        PdfWriter writer = PdfWriter.getInstance(doc, os);
+
+        // === Membrete de fondo QUE CUBRE TODA LA HOJA, en cada página ===
+        Image background = null;
+        try {
+            Path projectPath = Paths.get("").toAbsolutePath();
+            String imagePath = projectPath + "/src/main/resources/static/assets/img/fondo/0.jpg";
+            background = Image.getInstance(imagePath);
+            // **NO** lo añadimos directo al doc; lo dibuja el PageEvent por debajo del contenido:
+            writer.setPageEvent(new BackgroundEvent(background));
+        } catch (Exception e) {
+            System.err.println("No se pudo cargar el membrete: " + e.getMessage());
+        }
+
         doc.open();
 
-        // Fuentes
-        com.itextpdf.text.Font fTitle = new com.itextpdf.text.Font(com.itextpdf.text.Font.FontFamily.HELVETICA, 14, com.itextpdf.text.Font.BOLD);
-        com.itextpdf.text.Font fBold  = new com.itextpdf.text.Font(com.itextpdf.text.Font.FontFamily.HELVETICA, 10, com.itextpdf.text.Font.BOLD);
-        com.itextpdf.text.Font fNorm  = new com.itextpdf.text.Font(com.itextpdf.text.Font.FontFamily.HELVETICA, 10);
-        com.itextpdf.text.Font fSmall = new com.itextpdf.text.Font(com.itextpdf.text.Font.FontFamily.HELVETICA, 9);
+        doc.add(new Paragraph("\n\n"));
 
-        // Encabezado
-        com.itextpdf.text.Paragraph titulo = new com.itextpdf.text.Paragraph("FEXPO UAP V.1.0\nRECIBO / COMPROBANTE DE INSCRIPCIÓN", fTitle);
-        titulo.setAlignment(com.itextpdf.text.Element.ALIGN_CENTER);
+        // Fuentes
+        Font fTitle = new Font(Font.FontFamily.HELVETICA, 14, Font.BOLD);
+        Font fBold  = new Font(Font.FontFamily.HELVETICA, 10, Font.BOLD);
+        Font fNorm  = new Font(Font.FontFamily.HELVETICA, 10);
+        Font fSmall = new Font(Font.FontFamily.HELVETICA, 9);
+
+        // Título
+        Paragraph titulo = new Paragraph("FEXPO UAP V.1.0\nRECIBO / COMPROBANTE DE INSCRIPCIÓN", fTitle);
+        titulo.setAlignment(Element.ALIGN_CENTER);
         doc.add(titulo);
 
-        doc.add(new com.itextpdf.text.Paragraph(" "));
-        com.itextpdf.text.pdf.PdfPTable tCab = new com.itextpdf.text.pdf.PdfPTable(new float[]{28,72});
+        doc.add(new Paragraph(" "));
+        PdfPTable tCab = new PdfPTable(new float[]{28,72});
         tCab.setWidthPercentage(100);
 
         tCab.addCell(cell("Nro. Inscripción:", fBold));
@@ -74,25 +94,24 @@ public class ReciboPdfService {
 
         tCab.addCell(cell("Estado:", fBold));
         tCab.addCell(cell(nvl(ins.getInscripcionEstado()), fNorm));
-
         doc.add(tCab);
 
         // Datos Entidad
         doc.add(spacer());
-        doc.add(new com.itextpdf.text.Paragraph("Datos de la Entidad", fBold));
-        com.itextpdf.text.pdf.PdfPTable tEnt = new com.itextpdf.text.pdf.PdfPTable(new float[]{28,72});
+        doc.add(new Paragraph("Datos de la Entidad", fBold));
+        PdfPTable tEnt = new PdfPTable(new float[]{28,72});
         tEnt.setWidthPercentage(100);
         tEnt.addCell(cell("Entidad:", fBold));             tEnt.addCell(cell(nvl(entidad.getNombre()), fNorm));
         tEnt.addCell(cell("NIT:", fBold));                 tEnt.addCell(cell(nvl(entidad.getNit()), fNorm));
         tEnt.addCell(cell("Tipo:", fBold));                tEnt.addCell(cell(nvl(entidad.getTipoEntidad()!=null? entidad.getTipoEntidad().getNombre(): null), fNorm));
-        tEnt.addCell(cell("Descripción:", fBold));         tEnt.addCell(cell(nvl(entidad.getDescripcion()), fNorm));
+        tEnt.addCell(cell("Objetivo:", fBold));         tEnt.addCell(cell(nvl(entidad.getObjeto()), fNorm));
         doc.add(tEnt);
 
         // Responsables
         if (responsables != null && !responsables.isEmpty()) {
             doc.add(spacer());
-            doc.add(new com.itextpdf.text.Paragraph("Responsables", fBold));
-            com.itextpdf.text.pdf.PdfPTable tResp = new com.itextpdf.text.pdf.PdfPTable(new float[]{8,25,25,12,30});
+            doc.add(new Paragraph("Responsables", fBold));
+            PdfPTable tResp = new PdfPTable(new float[]{8,25,25,12,30});
             tResp.setWidthPercentage(100);
             header(tResp, "N°", "Nombres", "Apellidos", "CI", "Contacto");
 
@@ -112,99 +131,155 @@ public class ReciboPdfService {
 
         // Detalle de puestos
         doc.add(spacer());
-        doc.add(new com.itextpdf.text.Paragraph("Detalle de Puestos Adquiridos", fBold));
-        com.itextpdf.text.pdf.PdfPTable tDet = new com.itextpdf.text.pdf.PdfPTable(new float[]{15,25,25,35});
+        doc.add(new Paragraph("Detalle de Puestos Adquiridos", fBold));
+        PdfPTable tDet = new PdfPTable(new float[]{15,25,25,35});
         tDet.setWidthPercentage(100);
-        header(tDet, "Código", "Tamaño", "Estado", "Costo (Bs)");
+        header(tDet, "Código", "Tamaño", "Categoria", "Costo (Bs)");
 
         for (Map<String,Object> m : puestos) {
             String cod   = nvl(m.get("codigo"));
             String tam   = nvl(m.get("tamano"));
-            String est   = nvl(m.get("estado_puesto")); // O/L según tu consulta
+            String cat   = nvl(m.get("categoria"));
             String costo = money(m.get("costo"));
             tDet.addCell(cell(cod, fNorm));
             tDet.addCell(cell(tam, fNorm));
-            tDet.addCell(cell(est, fNorm));
+            tDet.addCell(cell(cat, fNorm));
             tDet.addCell(cellRight(costo, fNorm));
         }
-        // Total
-        com.itextpdf.text.pdf.PdfPCell cTotalLbl = cellRight("TOTAL (Bs):", fBold);
+
+        PdfPCell cTotalLbl = cellRight("TOTAL (Bs):", fBold);
         cTotalLbl.setColspan(3);
         tDet.addCell(cTotalLbl);
         tDet.addCell(cellRight(money(total), fBold));
         doc.add(tDet);
 
-        // Observaciones / leyenda
+        // Leyenda
         doc.add(spacer());
-        com.itextpdf.text.Paragraph leyenda = new com.itextpdf.text.Paragraph(
+        Paragraph leyenda = new Paragraph(
             "Este documento constituye el recibo/comprobante de inscripción a la FEXPO UAP V.1.0. " +
             "La inscripción comprende los puestos detallados y su costo total. " +
             "La Unidad responsable se comunicará con usted para la formalización del contrato correspondiente. " +
             "Conserve este comprobante para futuras referencias.",
             fSmall
         );
-        leyenda.setAlignment(com.itextpdf.text.Element.ALIGN_JUSTIFIED);
+        leyenda.setAlignment(Element.ALIGN_JUSTIFIED);
         doc.add(leyenda);
 
-        // Si deseas, agrega líneas de firma
+        // Sello de autenticación (lema + código + QR)
         doc.add(spacer());
-        com.itextpdf.text.pdf.PdfPTable firmas = new com.itextpdf.text.pdf.PdfPTable(2);
-        firmas.setWidthPercentage(100);
-        com.itextpdf.text.pdf.PdfPCell fc1 = cellCenter("_____________________________\nResponsable de la Entidad", fSmall);
-        com.itextpdf.text.pdf.PdfPCell fc2 = cellCenter("_____________________________\nFEXPO UAP", fSmall);
-        fc1.setBorder(com.itextpdf.text.Rectangle.NO_BORDER);
-        fc2.setBorder(com.itextpdf.text.Rectangle.NO_BORDER);
-        firmas.addCell(fc1); firmas.addCell(fc2);
-        doc.add(firmas);
+        java.util.Date ahora = new java.util.Date();
+        String fechaHoraEmision = formatFechaHora(ahora);
+        String nitEntidad = nvl(entidad.getNit());
+        String cadenaBase = ins.getId() + "|" + nitEntidad + "|" + fechaHoraEmision;
+
+        String hash = sha256Hex(cadenaBase).substring(0, 16).toUpperCase();
+        String codigoAut = "UAP-FEXPO-" + ins.getId() + "-" + hash;
+
+        PdfPTable sello = new PdfPTable(new float[]{70, 30});
+        sello.setWidthPercentage(100);
+
+        String infoCodigo = "Código de autenticación: " + codigoAut + "\n" +
+                            "Generado: " + fechaHoraEmision;
+        PdfPCell cInfo = cell(infoCodigo, fSmall);
+        cInfo.setBorder(Rectangle.NO_BORDER);
+        cInfo.setPaddingTop(4f);
+        sello.addCell(cInfo);
+
+        BarcodeQRCode qr = new BarcodeQRCode(cadenaBase, 150, 150, null);
+        Image qrImg = qr.getImage();
+        qrImg.scaleAbsolute(80, 80);
+        PdfPCell cQR = new PdfPCell(qrImg, false);
+        cQR.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        cQR.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        cQR.setBorder(Rectangle.NO_BORDER);
+        sello.addCell(cQR);
+
+        doc.add(sello);
 
         doc.close();
     }
 
+    private static String sha256Hex(String input) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : digest) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Exception e) {
+            throw new RuntimeException("Error generando SHA-256", e);
+        }
+    }
+
     // ===== Helpers =====
-    private com.itextpdf.text.pdf.PdfPCell cell(String txt, com.itextpdf.text.Font f) {
-        com.itextpdf.text.pdf.PdfPCell c = new com.itextpdf.text.pdf.PdfPCell(new com.itextpdf.text.Phrase(nvl(txt), f));
+    private PdfPCell cell(String txt, Font f) {
+        PdfPCell c = new PdfPCell(new Phrase(nvl(txt), f));
         c.setPadding(6f);
         return c;
     }
-    private com.itextpdf.text.pdf.PdfPCell cellRight(String txt, com.itextpdf.text.Font f) {
-        com.itextpdf.text.pdf.PdfPCell c = cell(txt, f);
-        c.setHorizontalAlignment(com.itextpdf.text.Element.ALIGN_RIGHT);
+    private PdfPCell cellRight(String txt, Font f) {
+        PdfPCell c = cell(txt, f);
+        c.setHorizontalAlignment(Element.ALIGN_RIGHT);
         return c;
     }
-    private com.itextpdf.text.pdf.PdfPCell cellCenter(String txt, com.itextpdf.text.Font f) {
-        com.itextpdf.text.pdf.PdfPCell c = cell(txt, f);
-        c.setHorizontalAlignment(com.itextpdf.text.Element.ALIGN_CENTER);
+    private PdfPCell cellCenter(String txt, Font f) {
+        PdfPCell c = cell(txt, f);
+        c.setHorizontalAlignment(Element.ALIGN_CENTER);
         return c;
     }
-    private void header(com.itextpdf.text.pdf.PdfPTable t, String... cols) {
-        com.itextpdf.text.Font fH = new com.itextpdf.text.Font(com.itextpdf.text.Font.FontFamily.HELVETICA, 10, com.itextpdf.text.Font.BOLD);
+    private void header(PdfPTable t, String... cols) {
+        Font fH = new Font(FontFamily.HELVETICA, 10, Font.BOLD);
         for (String s : cols) {
-            com.itextpdf.text.pdf.PdfPCell h = cell(s, fH);
-            h.setBackgroundColor(new com.itextpdf.text.BaseColor(240,240,240));
+            PdfPCell h = cell(s, fH);
+            h.setBackgroundColor(new BaseColor(240,240,240));
             t.addCell(h);
         }
     }
-    private com.itextpdf.text.Paragraph spacer() { return new com.itextpdf.text.Paragraph(" "); }
+    private Paragraph spacer() { return new Paragraph(" "); }
+
     private static String nvl(Object o){ return o==null? "": String.valueOf(o); }
+
     private static String join(String sep, String... parts){
         return java.util.Arrays.stream(parts).filter(s -> s!=null && !s.trim().isEmpty())
                 .reduce((a,b)->a+sep+b).orElse("");
     }
+
     private static String money(Object n){
         if(n==null) return "0.00";
-        java.math.BigDecimal bd = new java.math.BigDecimal(n.toString());
-        return bd.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
+        BigDecimal bd = new BigDecimal(n.toString());
+        return bd.setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
-    private static String formatFecha(java.util.Date d){
+
+    private static String formatFecha(Date d){
         if (d==null) return "";
-        return new java.text.SimpleDateFormat("dd/MM/yyyy").format(d);
+        return new SimpleDateFormat("dd/MM/yyyy").format(d);
     }
-    private static String formatFecha(java.sql.Date d){
-        if (d==null) return "";
-        return new java.text.SimpleDateFormat("dd/MM/yyyy").format(d);
-    }
+
     private static String formatFechaHora(java.util.Date d){
         if (d==null) return "";
-        return new java.text.SimpleDateFormat("dd/MM/yyyy HH:mm").format(d);
+        return new SimpleDateFormat("dd/MM/yyyy HH:mm").format(d);
+    }
+
+    static class BackgroundEvent extends PdfPageEventHelper {
+        private final Image bg;
+
+        BackgroundEvent(Image bg) {
+            this.bg = bg;
+        }
+
+        @Override
+        public void onEndPage(PdfWriter writer, Document document) {
+            if (bg == null) return;
+            try {
+                Rectangle page = document.getPageSize();
+                Image img = Image.getInstance(bg); // clonar instancia para no mutar la original
+                img.scaleAbsolute(page.getWidth(), page.getHeight()); // cubrir total (ancho/alto exactos)
+                img.setAbsolutePosition(0, 0);                        // esquina inferior izquierda
+                PdfContentByte canvas = writer.getDirectContentUnder();
+                canvas.addImage(img);
+            } catch (Exception ex) {
+                System.err.println("No se pudo dibujar el membrete: " + ex.getMessage());
+            }
+        }
     }
 }

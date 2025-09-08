@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.usic.uniFex.model.entity.Persona;
 import com.usic.uniFex.model.entity.Puesto;
@@ -16,5 +17,9 @@ public interface IPuestoDao extends JpaRepository <Puesto, Long>{
     @Query("SELECT p FROM Puesto p WHERE p.estadoPuesto = 'L' ORDER BY p.codigo ASC")
     List<Puesto> listarPuestos();
 
-    List<Puesto> findByEstadoPuestoAndCategoriaIdOrderByCodigoAsc(String estadoPuesto, Long categoriaId);
+    @Query("SELECT p FROM Puesto p " +
+       "WHERE p.estadoPuesto = :estadoPuesto AND p.categoria.id = :categoriaId " +
+       "ORDER BY CAST(p.codigo AS integer) ASC")
+List<Puesto> findLibresPorCategoriaOrdenados(@Param("estadoPuesto") String estadoPuesto,
+                                             @Param("categoriaId") Long categoriaId);
 }

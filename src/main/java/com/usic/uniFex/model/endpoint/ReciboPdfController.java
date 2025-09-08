@@ -14,11 +14,11 @@ import lombok.RequiredArgsConstructor;
 public class ReciboPdfController {
     private final ReciboPdfService reciboPdfService;
 
-    @GetMapping("/ver/inscripcion/{id}/recibo.pdf")
-    public void verRecibo(@PathVariable Long id, HttpServletResponse resp) throws Exception {
-        resp.setContentType("application/pdf");
-        resp.setHeader("Content-Disposition", "attachment; filename=recibo-" + id + ".pdf");
-        reciboPdfService.generarRecibo(id, resp.getOutputStream());
-        resp.flushBuffer();
-    }
+    // @GetMapping("/ver/inscripcion/{id}/recibo.pdf")
+    // public void verRecibo(@PathVariable Long id, HttpServletResponse resp) throws Exception {
+    //     resp.setContentType("application/pdf");
+    //     resp.setHeader("Content-Disposition", "attachment; filename=recibo-" + id + ".pdf");
+    //     reciboPdfService.generarRecibo(id, resp.getOutputStream());
+    //     resp.flushBuffer();
+    // }
 }

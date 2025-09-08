@@ -11,7 +11,7 @@ import com.usic.uniFex.model.dao.IAdministrativoDao;
 import com.usic.uniFex.model.entity.Administrativo;
 
 @Service
-public class AdminsitrativoServiceImpl implements IAdministrativoService {
+public class AdministrativoServiceImpl implements IAdministrativoService {
 
     @Autowired private IAdministrativoDao dao;
 

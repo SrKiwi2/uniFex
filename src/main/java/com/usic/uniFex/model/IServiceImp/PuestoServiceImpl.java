@@ -53,7 +53,7 @@ public class PuestoServiceImpl implements IPuestoService {
 
     @Override
     public List<Puesto> listarLibresPorCategoria(Long categoriaId) {
-        return puestoDao.findByEstadoPuestoAndCategoriaIdOrderByCodigoAsc("L", categoriaId);
+        return puestoDao.findLibresPorCategoriaOrdenados("L", categoriaId);
     }
 
 }

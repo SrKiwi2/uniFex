@@ -7,7 +7,7 @@
         <thead>
           <tr>
             <th>#</th>
-            <th>Usuario</th>
+            <th>Nombre</th>
             <th>Categoría</th>
             <th class="text-end">Inscripciones</th>
             <th class="text-end">Puestos</th>
@@ -17,7 +17,7 @@
         <tbody>
           <tr th:each="row, i : ${data}">
             <td th:text="${i.index + 1}"></td>
-            <td th:text="${row.username}"></td>
+            <td th:text="${row.nombreCompleto}"></td>
             <td th:text="${row.categoria}"></td>
             <td class="text-end" th:text="${row.cantidadInscripciones}"></td>
             <td class="text-end" th:text="${row.cantidadPuestos}"></td>
