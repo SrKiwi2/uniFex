@@ -225,23 +225,39 @@
                                     </div>
                                     <div class="row g-3">
                                         <div class="col-sm-6">
-                                            <label class="form-label" for="formValidationNombreEntidad">Nombre de la
-                                                Entidad</label>
-                                            <input type="text" name="nombreEntidad" id="formValidationNombreEntidad" class="form-control" />
+                                            <label class="form-label" for="formValidationNombreEntidad">Nombre de la Entidad</label>
+                                            <input type="text" name="nombreEntidad" id="formValidationNombreEntidad"
+                                                class="form-control" placeholder="Ej.: PANDEÑA S.R.L." 
+                                                aria-describedby="ayudaNombreEntidad" required>
+                                            <small id="ayudaNombreEntidad" class="form-text text-muted">
+                                            Nombre comercial o razón social con el que se emitirá el recibo/credencial.
+                                            </small>
                                         </div>
                                         <div class="col-sm-6">
                                             <label class="form-label" for="formValidationNit">NIT/C.I.</label>
-                                            <input type="number" name="nitEntidad" id="formValidationNit" class="form-control" />
+                                            <input type="number" name="nitEntidad" id="formValidationNit" class="form-control"
+                                                inputmode="numeric" aria-describedby="ayudaNit" required>
+                                            <small id="ayudaNit" class="form-text text-muted">
+                                            Si es empresa: NIT. Si es emprendimiento personal: C.I. del responsable (solo números).
+                                            </small>
                                         </div>
                                         <div class="col-sm-6">
-                                            <label class="form-label" for="formValidationDescripcion">Descripción de la
-                                                Entidad</label>
-                                            <input type="text" name="descripcionEntidad" id="formValidationDescripcion" class="form-control" />
+                                            <label class="form-label" for="formValidationDescripcion">Descripción de la Entidad</label>
+                                            <input type="text" name="descripcionEntidad" id="formValidationDescripcion"
+                                                class="form-control" placeholder="Rubro y productos/servicios" 
+                                                aria-describedby="ayudaDescripcion" required>
+                                            <small id="ayudaDescripcion" class="form-text text-muted">
+                                            Describe brevemente tu rubro y lo que exhibirás o venderás (p. ej., “Panadería artesanal, masas dulces y saladas”).
+                                            </small>
                                         </div>
                                         <div class="col-sm-6">
-                                            <label class="form-label" for="formValidationDescripcion">Objeto de
-                                                contratación</label>
-                                            <input type="text" name="objetoContratacion" id="formValidationObjeto" class="form-control" />
+                                            <label class="form-label" for="formValidationDescripcion">Objeto de contratación</label>
+                                            <input type="text" name="objetoContratacion" id="formValidationObjeto"
+                                                class="form-control" placeholder="¿Qué harás en la feria?" 
+                                                aria-describedby="ayudaObjeto" required>
+                                            <small id="ayudaObjeto" class="form-text text-muted">
+                                            Finalidad específica durante la feria (p. ej., “Venta de alimentos preparados”, “Exhibición de maquinaria”, “Servicios de impresión”).
+                                            </small>
                                         </div>
                                         <div class="col-sm-6">
                                             <label for="rangoFechas" class="form-label">Fecha designadas</label>
@@ -250,6 +266,9 @@
                                             <span class="mx-2">a</span>
                                             <input type="date" name="fechaFin" id="fechaFin" readonly
                                                 class="form-control d-inline-block w-auto" />
+                                                <small id="ayudaFechas" class="form-text text-muted d-block">
+                                                Las fechas son definidas por la organización. Si las ves vacías o incorrectas, contacta a soporte.
+                                                </small>
                                         </div>
                                         <div class="col-sm-6">
                                             <label class="form-label" for="formValidationTipoEntidad">Tipo de
