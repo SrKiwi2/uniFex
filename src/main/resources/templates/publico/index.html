@@ -169,14 +169,57 @@
                         </div>
                     </div>
 
-                    <div class="card">
-                        <div class="card-header d-flex justify-content-lg-between">
-                            <h5>Registro puestoario</h5>
-                            <button type="button" class="btn btn-primary" onclick="carpuestorFormulario()"
-                                data-bs-toggle="modal" data-bs-target="#modalFormulariopuestoario">
-                                <i class="fa-solid fa-user-plus"></i> Agrepuestor puestoario
-                            </button>
+                    <!-- Botón para abrir el mapa en modal -->
+                    <div class="text-center my-3">
+                        <button class="btn btn-primary btn-lg w-100 w-sm-auto"
+                                data-bs-toggle="modal"
+                                data-bs-target="#modalMapa">
+                            🗺️ Ver mapa de puestos
+                        </button>
+                    </div>
+
+                    <div class="modal fade" id="modalMapa" tabindex="-1" aria-labelledby="modalMapaLabel" aria-hidden="true">
+                        <div class="modal-dialog modal-fullscreen-sm-down modal-xl">
+                            <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="modalMapaLabel">Mapa de puestos</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                            </div>
+
+                            <div class="modal-body p-0 position-relative">
+                                <!-- Spinner mientras carga -->
+                                <div id="pdfSpinner" class="d-flex align-items-center justify-content-center w-100" style="height: 80vh;">
+                                <div class="spinner-border" role="status" aria-label="Cargando">
+                                    <span class="visually-hidden">Cargando…</span>
+                                </div>
+                                </div>
+
+                                <!-- PDF en iframe -->
+                                <iframe id="pdfFrame"
+                                        class="w-100 d-none border-0"
+                                        title="Mapa de puestos"
+                                        allowfullscreen
+                                        th:data-src="${mapaPdf} != null ?
+                                        ( @{/files/{f}(f=${mapaPdf})} + '#page=1&zoom=page-fit' ) :
+                                        ( @{/files/mapa.pdf} + '#page=1&zoom=page-fit' )">
+                                </iframe>
+
+
+                            </div>
+                            <div class="modal-footer justify-content-between">
+                                <a class="btn btn-outline-secondary"
+                                    th:href="${mapaPdf} != null ? @{/files/{f}(f=${mapaPdf})} : @{/files/mapa.pdf}"
+                                    target="_blank" rel="noopener">
+                                    Abrir en nueva pestaña
+                                </a>
+                                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Cerrar</button>
+                            </div>
+                            </div>
                         </div>
+                    </div>
+
+
+                    <div class="card">
                         <div class="card-datatable table-responsive pt-0">
                             <table class="table table-hover" id="data-table">
                                 <thead>
@@ -186,37 +229,17 @@
                                         <th>Tamaño</th>
                                         <th>Categoría</th>
                                         <th>Estado</th>
-                                        <th class="text-end">Opciones</th>
                                     </tr>
                                 </thead>
                                 <tbody class="animate__animated animate__bounceInDown">
-                                    <tr th:each="p, i : ${puestos}">
+                                    <tr th:each="p, i : ${puestos_libres}">
                                         <td th:text="${i.index + 1}"></td>
-                                        <td th:text="${p.codigo}">P-001</td>
-                                        <td th:text="${p.tamano}">3x3</td>
-                                        <!-- si tu campo se llama tamaño en Java, cambia a p.tamaño -->
-                                        <td th:text="${p.categoria != null ? p.categoria.nombre : 'Sin categoría'}">
-                                        </td>
-
-                                        <!-- Estado: L = Libre (verde), O = Ocupado (rojo), otros = Gris -->
+                                        <td th:text="${p['codigo'] ?: '-'}"></td>
+                                        <td th:text="${p['tamano'] ?: '-'}"></td>
+                                        <td th:text="${p['categoria'] ?: 'Sin categoría'}"></td>
                                         <td>
-                                            <span th:if="${p.estadoPuesto == 'L'}" class="badge bg-success">Libre</span>
-                                            <span th:if="${p.estadoPuesto == 'O'}"
-                                                class="badge bg-danger">Ocupado</span>
-                                            <span th:if="${p.estadoPuesto != 'L' and p.estadoPuesto != 'O'}"
-                                                class="badge bg-secondary" th:text="${p.estadoPuesto}">-</span>
-                                        </td>
-
-                                        <td class="text-end">
-                                            <button type="button" class="btn btn-sm btn-primary"
-                                                th:onclick="cargarFormularioEdit([[${p.id}]])" data-bs-toggle="modal"
-                                                data-bs-target="#modalformularioGaseta">
-                                                <i class="fa-solid fa-pen-to-square"></i> Editar
-                                            </button>
-                                            <button type="button" class="btn btn-sm btn-danger"
-                                                th:onclick="eliminar([[${p.codigo}]], [[${p.id}]])">
-                                                <i class="fa-solid fa-trash"></i> Eliminar
-                                            </button>
+                                            <span th:if="${p['estado_puesto'] == 'L'}" class="badge bg-success">Libre</span>
+                                            <span th:if="${p['estado_puesto'] == 'O'}" class="badge bg-danger">Ocupado</span>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -545,20 +568,43 @@
 
     <script th:inline="javascript">
 
-        $(document).ready(function () {
-        cargarTabla();
+        document.addEventListener('DOMContentLoaded', () => {
+            const modal   = document.getElementById('modalMapa');
+            const iframe  = document.getElementById('pdfFrame');
+            const spinner = document.getElementById('pdfSpinner');
 
+            function adjustIframeHeight() {
+                const isSmall = window.matchMedia('(max-width: 576px)').matches;
+                iframe.style.height = isSmall ? '100vh' : '80vh';
+            }
+
+            modal.addEventListener('shown.bs.modal', () => {
+            const ds = iframe.dataset.src && iframe.dataset.src.trim();
+            if (!iframe.src) {
+                iframe.src = ds || '/files/mapa.pdf#page=1&zoom=page-fit';
+                iframe.addEventListener('load', () => {
+                spinner.classList.add('d-none');
+                iframe.classList.remove('d-none');
+                adjustIframeHeight();
+                }, { once: true });
+            } else {
+                adjustIframeHeight();
+            }
             });
 
-            function cargarTabla() {
-                $.ajax({
-                    type: 'POST',
-                    url: "/administracion/gaseta/tabla-registros-index",  // Ruta del metodo del controlador en Spring Boot
-                    success: function (response) {
-                        $("#tablaRegistro").html(response);  // Actualiza el contenido del div con la respuesta del servidor
-                    }
-                });
-            }
+            // (Opcional) Liberar memoria en móviles al cerrar
+            modal.addEventListener('hidden.bs.modal', () => {
+            iframe.src = '';
+            iframe.classList.add('d-none');
+            spinner.classList.remove('d-none');
+            });
+
+            document.getElementById('pdfFrame').getAttribute('data-src')
+            
+            window.addEventListener('resize', () => {
+                if (iframe && iframe.src) adjustIframeHeight();
+            });
+        });
 
         document.addEventListener('DOMContentLoaded', () => {
             // 1) Define las referencias (antes de usarlas)
