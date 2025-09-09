@@ -169,6 +169,84 @@
                         </div>
                     </div>
 
+                    <!-- Botón para abrir el mapa en modal -->
+                    <div class="text-center my-3">
+                        <button class="btn btn-primary btn-lg w-100 w-sm-auto"
+                                data-bs-toggle="modal"
+                                data-bs-target="#modalMapa">
+                            🗺️ Ver mapa de puestos
+                        </button>
+                    </div>
+
+                    <div class="modal fade" id="modalMapa" tabindex="-1" aria-labelledby="modalMapaLabel" aria-hidden="true">
+                        <div class="modal-dialog modal-fullscreen-sm-down modal-xl">
+                            <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="modalMapaLabel">Mapa de puestos</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                            </div>
+
+                            <div class="modal-body p-0 position-relative">
+                                <!-- Spinner mientras carga -->
+                                <div id="pdfSpinner" class="d-flex align-items-center justify-content-center w-100" style="height: 80vh;">
+                                <div class="spinner-border" role="status" aria-label="Cargando">
+                                    <span class="visually-hidden">Cargando…</span>
+                                </div>
+                                </div>
+
+                                <!-- PDF en iframe -->
+                                <iframe id="pdfFrame"
+                                        class="w-100 d-none border-0"
+                                        title="Mapa de puestos"
+                                        allowfullscreen
+                                        th:data-src="${mapaPdf} != null ?
+                                        ( @{/files/{f}(f=${mapaPdf})} + '#page=1&zoom=page-fit' ) :
+                                        ( @{/files/mapa.pdf} + '#page=1&zoom=page-fit' )">
+                                </iframe>
+
+
+                            </div>
+                            <div class="modal-footer justify-content-between">
+                                <a class="btn btn-outline-secondary"
+                                    th:href="${mapaPdf} != null ? @{/files/{f}(f=${mapaPdf})} : @{/files/mapa.pdf}"
+                                    target="_blank" rel="noopener">
+                                    Abrir en nueva pestaña
+                                </a>
+                                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Cerrar</button>
+                            </div>
+                            </div>
+                        </div>
+                    </div>
+
+
+                    <div class="card">
+                        <div class="card-datatable table-responsive pt-0">
+                            <table class="table table-hover" id="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Código</th>
+                                        <th>Tamaño</th>
+                                        <th>Categoría</th>
+                                        <th>Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="animate__animated animate__bounceInDown">
+                                    <tr th:each="p, i : ${puestos_libres}">
+                                        <td th:text="${i.index + 1}"></td>
+                                        <td th:text="${p['codigo'] ?: '-'}"></td>
+                                        <td th:text="${p['tamano'] ?: '-'}"></td>
+                                        <td th:text="${p['categoria'] ?: 'Sin categoría'}"></td>
+                                        <td>
+                                            <span th:if="${p['estado_puesto'] == 'L'}" class="badge bg-success">Libre</span>
+                                            <span th:if="${p['estado_puesto'] == 'O'}" class="badge bg-danger">Ocupado</span>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <div id="wizard-validation" class="bs-stepper mt-2"
                         th:if="${session.nombre_rol == 'ADMINISTRATIVO'}">
                         <div class="bs-stepper-header">
@@ -430,10 +508,11 @@
                                         </div>
                                     </div>
                                 </div>
-                                
+
                                 <div id="pago-links-validation" class="content">
                                     <div class="content-header mb-3">
-                                        <h6 class="card-header">ADJUNTAR COMPROBANTE | TOTAL A PAGAR : <span id="totalPagar" class="badge bg-success ms-2">Bs 0.00</span></h6>
+                                        <h6 class="card-header">ADJUNTAR COMPROBANTE | TOTAL A PAGAR : <span
+                                                id="totalPagar" class="badge bg-success ms-2">Bs 0.00</span></h6>
                                     </div>
                                     <div class="row g-3">
 
@@ -448,7 +527,7 @@
                                         <div id="camposComprobante">
                                             <div class="mb-3">
                                                 <label class="form-label">Número de Comprobante</label>
-                                                <input type="number" name="numComprobante" class="form-control"/>
+                                                <input type="number" name="numComprobante" class="form-control" />
                                             </div>
 
                                             <div class="mb-3">
@@ -484,13 +563,53 @@
     <div th:replace="~{layout/script :: script}"></div>
     <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
     <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css" />
+
     
+
     <script th:inline="javascript">
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const modal   = document.getElementById('modalMapa');
+            const iframe  = document.getElementById('pdfFrame');
+            const spinner = document.getElementById('pdfSpinner');
+
+            function adjustIframeHeight() {
+                const isSmall = window.matchMedia('(max-width: 576px)').matches;
+                iframe.style.height = isSmall ? '100vh' : '80vh';
+            }
+
+            modal.addEventListener('shown.bs.modal', () => {
+            const ds = iframe.dataset.src && iframe.dataset.src.trim();
+            if (!iframe.src) {
+                iframe.src = ds || '/files/mapa.pdf#page=1&zoom=page-fit';
+                iframe.addEventListener('load', () => {
+                spinner.classList.add('d-none');
+                iframe.classList.remove('d-none');
+                adjustIframeHeight();
+                }, { once: true });
+            } else {
+                adjustIframeHeight();
+            }
+            });
+
+            // (Opcional) Liberar memoria en móviles al cerrar
+            modal.addEventListener('hidden.bs.modal', () => {
+            iframe.src = '';
+            iframe.classList.add('d-none');
+            spinner.classList.remove('d-none');
+            });
+
+            document.getElementById('pdfFrame').getAttribute('data-src')
+            
+            window.addEventListener('resize', () => {
+                if (iframe && iframe.src) adjustIframeHeight();
+            });
+        });
 
         document.addEventListener('DOMContentLoaded', () => {
             // 1) Define las referencias (antes de usarlas)
             const $selCategoria = $("#formValidationCategoria");
-            const $selPuestos   = $("#formValidationPuestosDisponibles");
+            const $selPuestos = $("#formValidationPuestosDisponibles");
 
             // 2) Inicializa select2
             $selCategoria.select2();
@@ -505,30 +624,30 @@
                 $selPuestos.prop('disabled', true);
 
                 try {
-                const resp = await fetch(`/api/puestos-libres?categoriaId=${encodeURIComponent(categoriaId)}`);
-                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                    const resp = await fetch(`/api/puestos-libres?categoriaId=${encodeURIComponent(categoriaId)}`);
+                    if (!resp.ok) throw new Error('HTTP ' + resp.status);
 
-                const data = await resp.json(); // [{id,codigo,tamano,categoriaId}, ...]
+                    const data = await resp.json(); // [{id,codigo,tamano,categoriaId}, ...]
 
-                if (!Array.isArray(data) || data.length === 0) {
-                    const opt = new Option('— No hay puestos disponibles en esta categoría —', '', false, false);
+                    if (!Array.isArray(data) || data.length === 0) {
+                        const opt = new Option('— No hay puestos disponibles en esta categoría —', '', false, false);
+                        opt.disabled = true;
+                        $selPuestos.append(opt).trigger("change");
+                    } else {
+                        data.forEach(p => {
+                            const opt = new Option(`${p.codigo} | tamaño: ${p.tamano || '3x3'}`, p.id, false, false);
+                            opt.dataset.tamano = p.tamano || '3x3';
+                            $selPuestos.append(opt);
+                        });
+                        $selPuestos.trigger("change");
+                    }
+                } catch (e) {
+                    console.error('Error cargando puestos libres:', e);
+                    const opt = new Option('— Error al cargar puestos —', '', false, false);
                     opt.disabled = true;
                     $selPuestos.append(opt).trigger("change");
-                } else {
-                    data.forEach(p => {
-                    const opt = new Option(`${p.codigo} | tamaño: ${p.tamano || '3x3'}`, p.id, false, false);
-                    opt.dataset.tamano = p.tamano || '3x3';
-                    $selPuestos.append(opt);
-                    });
-                    $selPuestos.trigger("change");
-                }
-                } catch (e) {
-                console.error('Error cargando puestos libres:', e);
-                const opt = new Option('— Error al cargar puestos —', '', false, false);
-                opt.disabled = true;
-                $selPuestos.append(opt).trigger("change");
                 } finally {
-                $selPuestos.prop('disabled', false);
+                    $selPuestos.prop('disabled', false);
                 }
             };
 
@@ -553,106 +672,106 @@
         const resultado = document.getElementById("resultado");
 
         function mostrarRango() {
-        if (resultado && inicio.value && fin.value) {
-            const opciones = { day: "numeric", month: "long" };
-            const fechaInicio = new Date(inicio.value).toLocaleDateString("es-ES", opciones);
-            const fechaFin    = new Date(fin.value).toLocaleDateString("es-ES", opciones);
-            resultado.textContent = `${fechaInicio} a ${fechaFin}`;
-        }
+            if (resultado && inicio.value && fin.value) {
+                const opciones = { day: "numeric", month: "long" };
+                const fechaInicio = new Date(inicio.value).toLocaleDateString("es-ES", opciones);
+                const fechaFin = new Date(fin.value).toLocaleDateString("es-ES", opciones);
+                resultado.textContent = `${fechaInicio} a ${fechaFin}`;
+            }
         }
 
         inicio?.addEventListener("change", mostrarRango);
         fin?.addEventListener("change", mostrarRango);
         if (inicio && fin) {
-        inicio.value = "2025-09-18";
-        fin.value    = "2025-09-22";
-        mostrarRango();
+            inicio.value = "2025-09-18";
+            fin.value = "2025-09-22";
+            mostrarRango();
         }
 
         /* Cálculo de precio */
-       document.addEventListener('DOMContentLoaded', function () {
-        const selTipoEntidad = document.getElementById('formValidationTipoEntidad');
-        const selCategoria   = document.getElementById('formValidationCategoria');
-        const selPuestos     = document.getElementById('formValidationPuestosDisponibles');
-        const totalSpan      = document.getElementById('totalPagar');
+        document.addEventListener('DOMContentLoaded', function () {
+            const selTipoEntidad = document.getElementById('formValidationTipoEntidad');
+            const selCategoria = document.getElementById('formValidationCategoria');
+            const selPuestos = document.getElementById('formValidationPuestosDisponibles');
+            const totalSpan = document.getElementById('totalPagar');
 
-        function fmt(n) {
-            const num = Number(n ?? 0);
-            return 'Bs ' + num.toFixed(2);
-        }
-
-        function getTamano() {
-            const first = selPuestos.selectedOptions?.[0];
-            return first?.dataset?.tamano || '3x3';
-        }
-
-        // ⚠️ Select2: cantidad segura
-        function getCantidad() {
-            const v = window.jQuery ? jQuery(selPuestos).val() : (selPuestos.value || []);
-            return Array.isArray(v) ? v.length : 0;
-        }
-
-        async function refrescarTotal() {
-            const tipoEntidad = selTipoEntidad?.value;
-            const categoriaId = selCategoria?.value;
-            const cantidad    = getCantidad();
-
-            // Log ANTES del early-return para ver por qué no calcula
-            if (!tipoEntidad || !categoriaId || cantidad === 0) {
-            console.log('No se calcula aún:', { tipoEntidad, categoriaId, cantidad });
-            totalSpan.textContent = fmt(0);
-            return;
+            function fmt(n) {
+                const num = Number(n ?? 0);
+                return 'Bs ' + num.toFixed(2);
             }
 
-            const params = new URLSearchParams({
-            tipoEntidad, categoriaId, tamano: getTamano(), cantidad
+            function getTamano() {
+                const first = selPuestos.selectedOptions?.[0];
+                return first?.dataset?.tamano || '3x3';
+            }
+
+            // ⚠️ Select2: cantidad segura
+            function getCantidad() {
+                const v = window.jQuery ? jQuery(selPuestos).val() : (selPuestos.value || []);
+                return Array.isArray(v) ? v.length : 0;
+            }
+
+            async function refrescarTotal() {
+                const tipoEntidad = selTipoEntidad?.value;
+                const categoriaId = selCategoria?.value;
+                const cantidad = getCantidad();
+
+                // Log ANTES del early-return para ver por qué no calcula
+                if (!tipoEntidad || !categoriaId || cantidad === 0) {
+                    console.log('No se calcula aún:', { tipoEntidad, categoriaId, cantidad });
+                    totalSpan.textContent = fmt(0);
+                    return;
+                }
+
+                const params = new URLSearchParams({
+                    tipoEntidad, categoriaId, tamano: getTamano(), cantidad
+                });
+
+                try {
+                    const resp = await fetch(`/api/costo-puesto?${params.toString()}`, { method: 'GET' });
+                    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                    const data = await resp.json();
+
+                    console.log('consulta:', { tipoEntidad, categoriaId, cantidad, params: params.toString() });
+                    console.log('respuesta /api/costo-puesto:', data);
+
+                    // Opción A (usa total del backend)
+                    // totalSpan.textContent = fmt(data.total);
+
+                    // ✅ Opción B (más robusta): calcula total en el front con la cantidad real
+                    const totalFront = Number(data.unitPrice ?? 0) * cantidad;
+                    totalSpan.textContent = fmt(totalFront);
+                } catch (e) {
+                    console.error('No se pudo calcular el costo:', e);
+                    totalSpan.textContent = fmt(0);
+                }
+            }
+
+            // Listeners
+            selTipoEntidad?.addEventListener('change', refrescarTotal);
+            selCategoria?.addEventListener('change', refrescarTotal);
+            selPuestos?.addEventListener('change', refrescarTotal);
+
+            if (window.jQuery && jQuery.fn && jQuery.fn.select2) {
+                jQuery(selTipoEntidad).on('change.select2', refrescarTotal);
+                jQuery(selCategoria).on('change.select2', refrescarTotal);
+                jQuery(selPuestos).on('change.select2', refrescarTotal);
+            }
+
+            // Si tu stepper no tiene id #wizard-validation, también recalcula al hacer click en "siguiente"
+            document.querySelectorAll('.btn-next').forEach(btn => {
+                btn.addEventListener('click', refrescarTotal);
             });
 
-            try {
-            const resp = await fetch(`/api/costo-puesto?${params.toString()}`, { method: 'GET' });
-            if (!resp.ok) throw new Error('HTTP ' + resp.status);
-            const data = await resp.json();
-
-            console.log('consulta:', { tipoEntidad, categoriaId, cantidad, params: params.toString() });
-            console.log('respuesta /api/costo-puesto:', data);
-
-            // Opción A (usa total del backend)
-            // totalSpan.textContent = fmt(data.total);
-
-            // ✅ Opción B (más robusta): calcula total en el front con la cantidad real
-            const totalFront = Number(data.unitPrice ?? 0) * cantidad;
-            totalSpan.textContent = fmt(totalFront);
-            } catch (e) {
-            console.error('No se pudo calcular el costo:', e);
-            totalSpan.textContent = fmt(0);
-            }
-        }
-
-        // Listeners
-        selTipoEntidad?.addEventListener('change', refrescarTotal);
-        selCategoria?.addEventListener('change', refrescarTotal);
-        selPuestos?.addEventListener('change', refrescarTotal);
-
-        if (window.jQuery && jQuery.fn && jQuery.fn.select2) {
-            jQuery(selTipoEntidad).on('change.select2', refrescarTotal);
-            jQuery(selCategoria).on('change.select2', refrescarTotal);
-            jQuery(selPuestos).on('change.select2', refrescarTotal);
-        }
-
-        // Si tu stepper no tiene id #wizard-validation, también recalcula al hacer click en "siguiente"
-        document.querySelectorAll('.btn-next').forEach(btn => {
-            btn.addEventListener('click', refrescarTotal);
-        });
-
-        // Inicial
-        refrescarTotal();
+            // Inicial
+            refrescarTotal();
         });
     </script>
 
     <script th:if="${inscripcionId != null}" th:inline="javascript">
-        document.addEventListener('DOMContentLoaded', function(){
+        document.addEventListener('DOMContentLoaded', function () {
             const id = /*[[${inscripcionId}]]*/ null;
-            if(id){ window.location.href = '/ver/inscripcion/' + id + '/recibo.pdf'; }
+            if (id) { window.location.href = '/ver/inscripcion/' + id + '/recibo.pdf'; }
         });
     </script>
 </body>

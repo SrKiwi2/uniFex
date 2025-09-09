@@ -25,30 +25,34 @@ public class SecurityConfig {
         http
         .authorizeHttpRequests(auth -> auth
             .requestMatchers("/",
-            "/vistaR/**",
-            "/admin/**",
-            "/iniciar-sesion/**",
-            "/ver/**",
-            "/api/**",
-            "/guardar/**",
-            "/actualizar/**",
-            "/files/**",
-            "/cerrar_sesion",
-            "/administracion/**",
-            "/assets/**",
+                "/vistaR/**",
+                "/admin/**",            // <-- ojo: esto hoy queda público
+                "/iniciar-sesion/**",
+                "/ver/**",
+                "/api/**",
+                "/guardar/**",
+                "/actualizar/**",
+                "/files/**",            // <-- tus PDFs
+                "/cerrar_sesion",
+                "/administracion/**",
+                "/assets/**",
             "/vistaGenerarCredenciales/**")
             .permitAll()
             .anyRequest().authenticated()
         )
         .formLogin(login -> login
-            .loginPage("/")
+            .loginPage("/")                       // tu index con el modal
+            .loginProcessingUrl("/iniciar-sesion")// <-- AQUÍ: procesa el POST del modal
+            .usernameParameter("usuario")         // <-- nombres de tus inputs
+            .passwordParameter("contrasena")
+            .defaultSuccessUrl("/", true)         // vuelve al index tras loguear
+            .failureUrl("/?error")                // puedes hacer que abra el modal si hay error
             .permitAll()
         )
-        .headers(headers -> headers
-            .frameOptions(frame -> frame.sameOrigin())
-        )
+        .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
         .csrf(csrf -> csrf.disable());
 
         return http.build();
     }
+
 }
