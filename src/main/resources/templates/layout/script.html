@@ -186,6 +186,20 @@
 
             });
 
+            $("#opcion_promotor").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/promotor/vista");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_promotor");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
             function cargarContenido(url) {
 
                 $.ajax({
