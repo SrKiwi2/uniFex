@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Credenciales con Textos y QR</title>
+  <style>
+    .editorContainer {
+      position: relative;
+      margin: 20px auto;
+      border: 2px solid #ccc;
+      background-size: cover;
+      background-position: center;
+      width: 816px;   /* ancho carta */
+      height: 1056px; /* alto carta */
+      page-break-after: always; /* importante para impresión */
+    }
+
+    .editable-text {
+      position: absolute;
+      padding: 5px 10px;
+      background: rgba(255, 255, 255, 0.6);
+      cursor: move;
+      user-select: none;
+    }
+
+    .qr-code {
+      position: absolute;
+      width: 150px;
+      height: 150px;
+      cursor: move;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #controls {
+      margin-top: 20px;
+      text-align: center;
+    }
+
+    #bgImage {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- Imagen oculta solo para obtener el tamaño -->
+  <img id="bgImage" src="../../assets/CREDENCIAL3.jpg" alt="credencial">
+
+  <!-- Contenedor 1 -->
+  <div class="editorContainer" style="background-image:url('../../assets/CREDENCIAL3.jpg')">
+    <div class="editable-text" contenteditable="true" style="top:40px; left:40px;">CRISTIAN DIEGO GARCIA QUISPE</div>
+    <div class="editable-text" contenteditable="true" style="top:100px; left:40px; font-size: 30px;">CRISTIAN DIEGO GARCIA QUISPE</div>
+    <div class="editable-text" contenteditable="true" style="top:160px; left:40px; font-size: 30px;">8373578</div>
+    <div class="editable-text" contenteditable="true" style="top:220px; left:40px; font-size: 20px; width:400px; white-space:normal; word-wrap:break-word;">EMPRENDIMIENTO ECOTURISTICO IDU FISU NARANJALITO FRUTOS AMAZONICO</div>
+    <div class="qr-code" style="top:70px; left:595px;"></div>
+  </div>
+
+  <!-- Contenedor 2 (otra credencial con otros datos) -->
+  <div class="editorContainer" style="background-image:url('../../assets/CREDENCIAL3.jpg')">
+    <div class="editable-text" contenteditable="true" style="top:40px; left:40px;">Entidad XYZ</div>
+    <div class="editable-text" contenteditable="true" style="top:100px; left:40px;">Rep. Legal: Juan Pérez</div>
+    <div class="editable-text" contenteditable="true" style="top:160px; left:40px;">CI: 12345678</div>
+    <div class="editable-text" contenteditable="true" style="top:220px; left:40px;">Categoría A</div>
+    <div class="qr-code" style="top:70px; left:595px;"></div>
+  </div>
+
+  <!-- Botón exportar -->
+  <div id="controls">
+    <button id="exportPdf">Exportar a PDF</button>
+  </div>
+
+  <!-- Librerías -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <script>
+    // Hacer arrastrables
+    function makeDraggable(el) {
+      let offsetX, offsetY, isDragging = false;
+      el.addEventListener("mousedown", (e) => {
+        isDragging = true;
+        offsetX = e.clientX - el.offsetLeft;
+        offsetY = e.clientY - el.offsetTop;
+      });
+      document.addEventListener("mousemove", (e) => {
+        if (isDragging) {
+          el.style.left = (e.clientX - offsetX) + "px";
+          el.style.top = (e.clientY - offsetY) + "px";
+        }
+      });
+      document.addEventListener("mouseup", () => isDragging = false);
+    }
+
+    // Inicializar QR y draggable
+    document.querySelectorAll(".editorContainer").forEach((container, index) => {
+      const qrDiv = container.querySelector(".qr-code");
+      const text1 = container.querySelector(".editable-text");
+
+      // Generar QR con contenido inicial
+      let qr = new QRCode(qrDiv, {
+        text: text1.innerText,
+        width: 200,
+        height: 200
+      });
+
+      // Cuando cambia el texto, actualizar QR
+      text1.addEventListener("input", (e) => {
+        qrDiv.innerHTML = "";
+        qr = new QRCode(qrDiv, {
+          text: e.target.innerText,
+          width: 200,
+          height: 200
+        });
+      });
+
+      // Hacer todos arrastrables
+      container.querySelectorAll(".editable-text, .qr-code").forEach(el => {
+        makeDraggable(el);
+      });
+    });
+
+    // Exportar a PDF (cada credencial en página separada)
+    document.getElementById("exportPdf").addEventListener("click", async () => {
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF("p", "pt", "letter");
+
+      const containers = document.querySelectorAll(".editorContainer");
+      for (let i = 0; i < containers.length; i++) {
+        const canvas = await html2canvas(containers[i], { scale: 2 });
+        const imgData = canvas.toDataURL("image/png");
+        if (i > 0) pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, 0, 612, 792);
+      }
+
+      pdf.save("credenciales.pdf");
+    });
+  </script>
+</body>
+</html>

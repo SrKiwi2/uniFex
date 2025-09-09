@@ -64,4 +64,35 @@ public class FuncionesInscripcion {
             return null;
         }
     }
+
+    public Map<String, Object> obtener_datos_inscripcion(Long p_id_inscripcion) {
+        String sql = "SELECT * FROM public.obtener_datos_inscripcion(?)";
+
+        try (Connection conn = jdbcTemplate.getDataSource().getConnection()) {
+
+            return jdbcTemplate.queryForMap(sql, new Object[] {
+                p_id_inscripcion
+            });
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Error al crear array SQL", e);
+        } catch (EmptyResultDataAccessException e) {
+            return null;
+        }
+    }
+
+    public List<Map<String, Object>> fn_inscripciones_por_categoria() {
+        String sql = "SELECT * FROM public.fn_inscripciones_por_categoria()";
+
+        try (Connection conn = jdbcTemplate.getDataSource().getConnection()) {
+
+            return jdbcTemplate.queryForList(sql, new Object[] {
+            });
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Error al crear array SQL", e);
+        } catch (EmptyResultDataAccessException e) {
+            return null;
+        }
+    }
 }

@@ -35,7 +35,8 @@ public class SecurityConfig {
             "/files/**",
             "/cerrar_sesion",
             "/administracion/**",
-            "/assets/**")
+            "/assets/**",
+            "/vistaGenerarCredenciales/**")
             .permitAll()
             .anyRequest().authenticated()
         )
