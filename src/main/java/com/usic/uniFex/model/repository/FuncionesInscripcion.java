@@ -49,4 +49,19 @@ public class FuncionesInscripcion {
             return BigDecimal.ZERO;
         }
     }
+
+    public List<Map<String, Object>> fn_lista_puestos() {
+        String sql = "SELECT * FROM public.fn_lista_puestos()";
+
+        try (Connection conn = jdbcTemplate.getDataSource().getConnection()) {
+
+            return jdbcTemplate.queryForList(sql, new Object[] {
+            });
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Error al crear array SQL", e);
+        } catch (EmptyResultDataAccessException e) {
+            return null;
+        }
+    }
 }
