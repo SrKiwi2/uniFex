@@ -65,12 +65,11 @@ public class FuncionesInscripcion {
         }
     }
 
-    public Map<String, Object> obtener_datos_inscripcion(Long p_id_inscripcion) {
-        String sql = "SELECT * FROM public.obtener_datos_inscripcion(?)";
+    public List<Map<String, Object>> obtener_inscripcion_detalle(Long p_id_inscripcion) {
+        String sql = "SELECT * FROM public.obtener_inscripcion_detalle(?)";
 
         try (Connection conn = jdbcTemplate.getDataSource().getConnection()) {
-
-            return jdbcTemplate.queryForMap(sql, new Object[] {
+            return jdbcTemplate.queryForList(sql, new Object[] {
                 p_id_inscripcion
             });
 

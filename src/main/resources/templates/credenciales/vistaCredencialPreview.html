@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+
+    <th:block th:fragment="modalContent">
+        <img id="bgImage" src="../../assets/CREDENCIAL3.jpg" alt="credencial">
+
+        <th:block th:each="insc : ${inscripciones}">
+
+            <div class="editorContainer" style="background-image:url('../../assets/CREDENCIAL3.jpg')">
+                <div class="editable-text"  style="top:727px; left:562px; font-size: 50px;" th:text="${insc.id}"></div>
+                <div class="editable-text"  style="top:511px; left:119px; font-size: 35px;" th:text="${insc.nombre_persona+' '+insc.paterno_persona+' '+insc.materno_persona}"></div>
+                <div class="editable-text"  style="top:725px; left:119px; font-size: 50px;" th:text="${insc.ci_persona}"></div>
+                <div class="editable-text nombre-entidad" id="nombreEntidad" style="top:610px; left:119px; font-size: 20px; width:550px; height: 80px; white-space:normal; word-wrap:break-word; display: flex; align-items: center; justify-content: flex-start;" th:text="${insc.nombre_entidad}">EMPRENDIMIENTO ECOTURISTICO IDU FISU NARANJALITO FRUTOS AMAZONICO</div>
+
+                <!-- input oculto que define el valor del QR -->
+                <input type="hidden" class="qr-value" th:value="${insc.datoqr}">
+
+                <div class="qr-code" style="top:70px; left:595px;"></div>
+            </div>
+        </th:block>
+
+
+
+        <!-- <div class="editorContainer" style="background-image:url('../../assets/CREDENCIAL3.jpg')">
+            <div class="editable-text" contenteditable="true" style="top:727px; left:562px; font-size: 50px;">19</div>
+            <div class="editable-text" contenteditable="true" style="top:511px; left:119px; font-size: 35px;">CRISTIAN DIEGO GARCIA QUISPE</div>
+            <div class="editable-text" contenteditable="true" style="top:725px; left:119px; font-size: 50px;">8373578</div>
+            <div class="editable-text" contenteditable="true" style="top:619px; left:119px; font-size: 20px; width:550px; white-space:normal; word-wrap:break-word;">EMPRENDIMIENTO ECOTURISTICO IDU FISU NARANJALITO FRUTOS AMAZONICO</div>
+            <input type="hidden" class="qr-value" value="CRISTIAN QR VALOR OCULTO">
+
+            <div class="qr-code" style="top:70px; left:595px;"></div>
+        </div>
+
+        
+        <div class="editorContainer" style="background-image:url('../../assets/CREDENCIAL3.jpg')">
+            <div class="editable-text" contenteditable="true" style="top:40px; left:40px;">Entidad XYZ</div>
+            <div class="editable-text" contenteditable="true" style="top:100px; left:40px;">Rep. Legal: Juan Pérez</div>
+            <div class="editable-text" contenteditable="true" style="top:160px; left:40px;">CI: 12345678</div>
+            <div class="editable-text" contenteditable="true" style="top:220px; left:40px;">Categoría A</div>
+
+            <input type="hidden" class="qr-value" value="DATOS ENTIDAD XYZ QR">
+
+            <div class="qr-code" style="top:70px; left:595px;"></div>
+        </div> -->
+
+
+        <!-- Botón exportar -->
+        <div id="controls">
+            <button id="exportPdf">Exportar a PDF</button>
+        </div>
+    </th:block>
+
+    
+</body>
+</html>
+

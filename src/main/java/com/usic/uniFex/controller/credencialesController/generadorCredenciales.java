@@ -16,7 +16,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 
 @Controller
-@RequiredArgsConstructor
 public class generadorCredenciales {
 
     @Autowired
@@ -37,11 +36,13 @@ public class generadorCredenciales {
         return "credenciales/vistaCredencialesGenerador";
     }
 
-    @GetMapping(value = "/credenciales/{id_inscripcion}")
+    @GetMapping(value = "/vistaGenerarCredenciales/credenciales/{id_inscripcion}")
     public String credenciales(HttpServletRequest request, Model model, @PathVariable("id_inscripcion")Long id_inscripcion) {
         
-        model.addAttribute("inscripciones", funcionesInscripcion.obtener_datos_inscripcion(id_inscripcion));
+        model.addAttribute("inscripciones", funcionesInscripcion.obtener_inscripcion_detalle(id_inscripcion));
 
-        return "credenciales/vistaCredencialesGenerador2";
+        System.out.println(funcionesInscripcion.obtener_inscripcion_detalle(id_inscripcion).size());
+
+        return "credenciales/vistaCredencialPreview :: modalContent";
     }
 }

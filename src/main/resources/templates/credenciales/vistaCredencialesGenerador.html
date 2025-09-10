@@ -4,7 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Credenciales con Textos y QR</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Pacifico&display=swap" rel="stylesheet">
   <style>
+    body {
+      font-family: 'Roboto', sans-serif;
+      font-weight: bold;
+    }
+
     .editorContainer {
       position: relative;
       margin: 20px auto;
@@ -46,36 +52,96 @@
   </style>
 </head>
 <body>
+  
+  <label class="form-label" for="formValidationCategoria">SELECCIONAR LA CATEGORIA: </label>
+  <select name="formValidationCategoria" id="formValidationCategoria">
+    <option value="" selected>-- Seleccione una categoría --</option>
+    <th:block th:each="cats : ${categorias}">
+      <option th:value="${cats.id}" th:text="${cats.nombre}"></option>
+    </th:block>
+  </select>
+
+  <label class="form-label" for="formValidationInscripcionesDisponibles">SELECCIONAR LA INSCRIPCION: </label>
+  <select name="InscripcionesSeleccionados" id="formValidationInscripcionesDisponibles">
+    <!-- Se cargan dinámicamente con JS -->
+  </select>
+
   <!-- Imagen oculta solo para obtener el tamaño -->
-  <img id="bgImage" src="../../assets/CREDENCIAL3.jpg" alt="credencial">
+  
 
-  <!-- Contenedor 1 -->
-  <div class="editorContainer" style="background-image:url('../../assets/CREDENCIAL3.jpg')">
-    <div class="editable-text" contenteditable="true" style="top:40px; left:40px;">CRISTIAN DIEGO GARCIA QUISPE</div>
-    <div class="editable-text" contenteditable="true" style="top:100px; left:40px; font-size: 30px;">CRISTIAN DIEGO GARCIA QUISPE</div>
-    <div class="editable-text" contenteditable="true" style="top:160px; left:40px; font-size: 30px;">8373578</div>
-    <div class="editable-text" contenteditable="true" style="top:220px; left:40px; font-size: 20px; width:400px; white-space:normal; word-wrap:break-word;">EMPRENDIMIENTO ECOTURISTICO IDU FISU NARANJALITO FRUTOS AMAZONICO</div>
-    <div class="qr-code" style="top:70px; left:595px;"></div>
+  
+  <div id="modalContent">
+      
   </div>
-
-  <!-- Contenedor 2 (otra credencial con otros datos) -->
-  <div class="editorContainer" style="background-image:url('../../assets/CREDENCIAL3.jpg')">
-    <div class="editable-text" contenteditable="true" style="top:40px; left:40px;">Entidad XYZ</div>
-    <div class="editable-text" contenteditable="true" style="top:100px; left:40px;">Rep. Legal: Juan Pérez</div>
-    <div class="editable-text" contenteditable="true" style="top:160px; left:40px;">CI: 12345678</div>
-    <div class="editable-text" contenteditable="true" style="top:220px; left:40px;">Categoría A</div>
-    <div class="qr-code" style="top:70px; left:595px;"></div>
-  </div>
-
-  <!-- Botón exportar -->
-  <div id="controls">
-    <button id="exportPdf">Exportar a PDF</button>
-  </div>
-
+  
+  
   <!-- Librerías -->
+  <script src="../../assets/vendor/libs/jquery/jquery.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+   <script th:inline="javascript">
+    /*<![CDATA[*/
+    // Thymeleaf inyecta todos los Inscripciones en un array JS
+    let InscripcionesCategoria = /*[[${InscripcionesCategoria}]]*/[];
+
+    // convertir cada puesto en objeto limpio
+    InscripcionesCategoria = InscripcionesCategoria.map(insc => ({
+      id_categoria: insc.id_categoria,
+      id_inscripcion: insc.id_inscripcion,
+      nombre_entidad: insc.nombre_entidad,
+      representante_legal: insc.representante_legal,
+    }));
+    /*]]>*/
+  </script>
+  <script>
+    $(document).ready(function () {
+      let $InscripcionesSelect = $('#formValidationInscripcionesDisponibles');
+
+      // cuando cambia la categoría
+      $('#formValidationCategoria').on('change', function () {
+        let categoriaId = $(this).val();
+        $InscripcionesSelect.empty();
+
+        if (categoriaId) {
+          let filtrados = InscripcionesCategoria.filter(insc => insc.id_categoria == categoriaId);
+          filtrados.forEach(function (insc) {
+            $InscripcionesSelect.append(
+              new Option(insc.nombre_entidad + ' ---------- ' + insc.representante_legal, insc.id_inscripcion)
+            );
+          });
+        }
+
+        $InscripcionesSelect.trigger('change'); // refrescar
+      });
+
+      // cuando se selecciona una inscripción
+      $InscripcionesSelect.on('change', function () {
+        let inscripcionId = $(this).val();
+
+        if (inscripcionId) {
+          console.log('Inscripción seleccionada ID:', inscripcionId);
+
+          $.ajax({
+            url: '/vistaGenerarCredenciales/credenciales/' + inscripcionId,  // <-- usa el ID seleccionado
+            type: 'GET',
+            success: function (data) {
+
+              $("#modalContent").html(data);
+
+              // Una vez que el contenido se inserta, re-inicializa los QR y drag & drop
+              inicializarCredenciales();
+            },
+            error: function (xhr, status, error) {
+              console.error('Error al cargar inscripción:', error);
+            }
+          });
+        }
+      });
+
+    });
+  </script>
 
   <script>
     // Hacer arrastrables
@@ -95,49 +161,84 @@
       document.addEventListener("mouseup", () => isDragging = false);
     }
 
-    // Inicializar QR y draggable
-    document.querySelectorAll(".editorContainer").forEach((container, index) => {
-      const qrDiv = container.querySelector(".qr-code");
-      const text1 = container.querySelector(".editable-text");
+    function inicializarCredenciales() {
+        document.querySelectorAll(".editorContainer").forEach((container) => {
+          const qrDiv = container.querySelector(".qr-code");
+          const qrInput = container.querySelector(".qr-value"); 
 
-      // Generar QR con contenido inicial
-      let qr = new QRCode(qrDiv, {
-        text: text1.innerText,
-        width: 200,
-        height: 200
-      });
+          if (qrDiv && qrInput) {
+            // Generar QR
+            qrDiv.innerHTML = "";
+            new QRCode(qrDiv, {
+              text: qrInput.value,
+              width: 200,
+              height: 200
+            });
 
-      // Cuando cambia el texto, actualizar QR
-      text1.addEventListener("input", (e) => {
-        qrDiv.innerHTML = "";
-        qr = new QRCode(qrDiv, {
-          text: e.target.innerText,
-          width: 200,
-          height: 200
+            // Actualizar QR si cambia input oculto
+            qrInput.addEventListener("change", (e) => {
+              qrDiv.innerHTML = "";
+              new QRCode(qrDiv, {
+                text: e.target.value,
+                width: 200,
+                height: 200
+              });
+            });
+          }
+
+          // Hacer arrastrables los textos y el QR
+          container.querySelectorAll(".editable-text, .qr-code").forEach(el => {
+            makeDraggable(el);
+          });
         });
-      });
+        $('#exportPdf').click(async function() {
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'pt', 'letter'); // carta US
 
-      // Hacer todos arrastrables
-      container.querySelectorAll(".editable-text, .qr-code").forEach(el => {
-        makeDraggable(el);
-      });
-    });
+            const containers = document.querySelectorAll('.editorContainer');
 
-    // Exportar a PDF (cada credencial en página separada)
-    document.getElementById("exportPdf").addEventListener("click", async () => {
-      const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF("p", "pt", "letter");
+            for (let i = 0; i < containers.length; i++) {
+                const canvas = await html2canvas(containers[i], {
+                    scale: 2, // mejora resolución
+                    useCORS: true // si la imagen es externa
+                });
+                const imgData = canvas.toDataURL('image/png');
 
-      const containers = document.querySelectorAll(".editorContainer");
-      for (let i = 0; i < containers.length; i++) {
-        const canvas = await html2canvas(containers[i], { scale: 2 });
-        const imgData = canvas.toDataURL("image/png");
-        if (i > 0) pdf.addPage();
-        pdf.addImage(imgData, "PNG", 0, 0, 612, 792);
-      }
+                if (i > 0) pdf.addPage(); // agregar nueva página
+                pdf.addImage(imgData, 'PNG', 0, 0, 612, 792); // tamaño carta en puntos
+            }
 
-      pdf.save("credenciales.pdf");
-    });
+            pdf.save('credenciales.pdf');
+        });
+        
+        function ajustarFuente(element, maxFont = 40, minFont = 20) {
+            let fontSize = maxFont; // tamaño inicial máximo
+            element.style.fontSize = fontSize + 'px';
+
+            // Reducir tamaño hasta que el contenido quepa
+            while ((element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight) && fontSize > minFont) {
+                fontSize--;
+                element.style.fontSize = fontSize + 'px';
+            }
+
+            // Aumentar tamaño si hay mucho espacio disponible
+            while ((element.scrollWidth < element.clientWidth && element.scrollHeight < element.clientHeight) && fontSize < maxFont) {
+                fontSize++;
+                element.style.fontSize = fontSize + 'px';
+            }
+        }
+
+        // Aplicar a todos los elementos con la clase "nombre-entidad"
+        document.querySelectorAll('.nombre-entidad').forEach(el => ajustarFuente(el));
+
+    }
+    
+
+    // Inicializar al cargar la página (si ya hay contenido)
+    inicializarCredenciales();
+
+
+
   </script>
 </body>
 </html>
