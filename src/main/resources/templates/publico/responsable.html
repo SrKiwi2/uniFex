@@ -17,11 +17,7 @@
             id="layout-navbar">
             <div class="navbar-nav-right d-flex align-items-center" id="navbar-collapse">
                 <div class="navbar-nav align-items-center">
-                    <a class="nav-item nav-link search-toggler d-flex align-items-center px-0"
-                        href="javascript:void(0);">
-                        <i class="ti ti-search ti-md me-2"></i>
-                        <span class="d-none d-md-inline-block text-muted">Buscar (Ctrl+/)</span>
-                    </a>
+                    
                 </div>
 
                 <ul class="navbar-nav flex-row align-items-center ms-auto">
@@ -640,11 +636,16 @@
                                                         </button>
 
                                                         <!-- ACTUALIZAR siempre visible -->
-                                                        <a class="btn btn-primary d-inline-flex align-items-center gap-1"
+                                                        <!-- <a class="btn btn-primary d-inline-flex align-items-center gap-1"
                                                             th:href="@{|/inscripciones/editar/${row['id_entidad']}|}">
                                                             <i class="bi bi-pencil-square"></i><span
                                                                 class="d-none d-xxl-inline">Actualizar</span>
-                                                        </a>
+                                                        </a> -->
+                                                        
+                                                        <button type="button" class="btn btn-primary d-inline-flex align-items-center gap-1" th:onclick="cargarFormularioEdit([[${row['id_entidad']}]])">
+                                                            <i class="bi bi-pencil-square"></i><span class="d-none d-xxl-inline">Actualizar</span>
+                                                        </button>
+                                                        
                                                     </div>
                                                 </td>
                                             </tr>
@@ -704,12 +705,18 @@
 
 
                                                             <!-- Botón actualizar adicional dentro del panel (opcional en móviles) -->
-                                                            <div class="mt-3 d-md-none">
-                                                                <a class="btn btn-primary w-100"
-                                                                    th:href="@{|/inscripciones/editar/${row['id_entidad']}|}">
+                                                            <!-- <div class="mt-3 d-md-none">
+                                                                <a class="btn btn-primary w-100" th:href="@{|/inscripciones/editar/${row['id_entidad']}|}">
                                                                     <i class="bi bi-pencil-square"></i> Actualizar
                                                                 </a>
-                                                            </div>
+                                                            </div> -->
+
+                                                            <div class="mt-3 d-md-none">
+                                                                <button type="button" class="btn btn-primary w-100" th:onclick="cargarFormularioEdit([[${row['id_entidad']}]])" data-bs-toggle="modal" data-bs-target="#modalFormularioResponsable">
+                                                                    <i class="bi bi-pencil-square"></i><span class="d-none d-xxl-inline">Actualizar</span>
+                                                                </button>
+                                                            </div>                                                            
+
                                                         </div>
                                                     </div>
                                                 </td>
@@ -719,6 +726,11 @@
                                     </tbody>
                                 </table>
                             </div>
+                        </div>
+                    </div>
+                    <div class="modal fade" id="modalFormularioResponsable" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content" id="contenidoModalResponsable"></div>
                         </div>
                     </div>
 
@@ -977,6 +989,20 @@
             // Inicial
             refrescarTotal();
         });
+
+        function cargarFormularioEdit(id) {
+
+            console.log(id);
+
+            $.ajax({
+                url: '/administracion/responsables/formulario-edit/'+id,
+                type: 'GET',
+                success: function(data) {
+                    $("#contenidoModalResponsable").html(data);
+                    $("#modalFormularioResponsable").modal('show');
+                }
+            });
+        }
     </script>
 
     <script th:if="${inscripcionId != null}" th:inline="javascript">
