@@ -218,340 +218,62 @@
                         </div>
                     </div>
 
-
                     <div class="card">
-                        <div class="card-datatable table-responsive pt-0">
-                            <table class="table table-hover" id="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>#</th>
-                                        <th>Código</th>
-                                        <th>Tamaño</th>
-                                        <th>Categoría</th>
-                                        <th>Estado</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="animate__animated animate__bounceInDown">
-                                    <tr th:each="p, i : ${puestos_libres}">
-                                        <td th:text="${i.index + 1}"></td>
-                                        <td th:text="${p['codigo'] ?: '-'}"></td>
-                                        <td th:text="${p['tamano'] ?: '-'}"></td>
-                                        <td th:text="${p['categoria'] ?: 'Sin categoría'}"></td>
-                                        <td>
-                                            <span th:if="${p['estado_puesto'] == 'L'}" class="badge bg-success">Libre</span>
-                                            <span th:if="${p['estado_puesto'] == 'O'}" class="badge bg-danger">Ocupado</span>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
 
-                    <div id="wizard-validation" class="bs-stepper mt-2"
-                        th:if="${session.nombre_rol == 'ADMINISTRATIVO'}">
-                        <div class="bs-stepper-header">
-                            <div class="step" data-target="#account-details-validation">
-                                <button type="button" class="step-trigger">
-                                    <span class="bs-stepper-circle">1</span>
-                                    <span class="bs-stepper-label mt-1">
-                                        <span class="bs-stepper-title">REGISTRO DE LA ENTIDAD</span>
-                                    </span>
-                                </button>
-                            </div>
-                            <div class="line">
-                                <i class="ti ti-chevron-right"></i>
-                            </div>
-                            <div class="step" data-target="#personal-info-validation">
-                                <button type="button" class="step-trigger">
-                                    <span class="bs-stepper-circle">2</span>
-                                    <span class="bs-stepper-label">
-                                        <span class="bs-stepper-title">REGISTRO DE LOS <br />
-                                            RESPONSABLES</span>
-                                    </span>
-                                </button>
-                            </div>
-                            <div class="line">
-                                <i class="ti ti-chevron-right"></i>
-                            </div>
-                            <div class="step" data-target="#social-links-validation">
-                                <button type="button" class="step-trigger">
-                                    <span class="bs-stepper-circle">3</span>
-                                    <span class="bs-stepper-label">
-                                        <span class="bs-stepper-title">REGISTRO DE LOS PUESTOS</span>
-                                    </span>
-                                </button>
-                            </div>
-                            <div class="line">
-                                <i class="ti ti-chevron-right"></i>
-                            </div>
-                            <div class="step" data-target="#pago-links-validation">
-                                <button type="button" class="step-trigger">
-                                    <span class="bs-stepper-circle">4</span>
-                                    <span class="bs-stepper-label">
-                                        <span class="bs-stepper-title">PAGO</span>
-                                    </span>
-                                </button>
+                        <div class="card-body pb-2 d-flex flex-wrap gap-2 align-items-center">
+                            <h5 class="m-0">Puestos disponibles</h5>
+                            
+                            <!-- Filtro opcional "Solo libres" (sin JS extra, usando data-attr + CSS simple más abajo) -->
+                            <div class="ms-auto form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="soloLibresToggle"
+                                    onclick="document.body.classList.toggle('solo-libres', this.checked)">
+                            <label class="form-check-label" for="soloLibresToggle">Mostrar solo libres</label>
                             </div>
                         </div>
-                        <div class="bs-stepper-content">
-                            <form id="wizard-validation-form" action="/guardar" enctype="multipart/form-data"
-                                method="post">
-                                <div id="account-details-validation" class="content">
-                                    <div class="content-header mb-3 text-center">
-                                        <h6 class="mb-0">REGISTRO DE LA ENTIDAD</h6>
-                                        <small>Registrar los campos requeridos</small>
-                                    </div>
-                                    <div class="row g-3">
-                                        <div class="col-sm-6">
-                                            <label class="form-label" for="formValidationNombreEntidad">Nombre de la
-                                                Entidad</label>
-                                            <input type="text" name="nombreEntidad" id="formValidationNombreEntidad"
-                                                class="form-control" />
-                                        </div>
-                                        <div class="col-sm-6">
-                                            <label class="form-label" for="formValidationNit">NIT/C.I.</label>
-                                            <input type="text" name="nitEntidad" id="formValidationNit"
-                                                class="form-control" />
-                                        </div>
-                                        <div class="col-sm-6">
-                                            <label class="form-label" for="formValidationDescripcion">Descripción de la
-                                                Entidad</label>
-                                            <input type="text" name="descripcionEntidad" id="formValidationDescripcion"
-                                                class="form-control" />
-                                        </div>
-                                        <div class="col-sm-6">
-                                            <label class="form-label" for="formValidationDescripcion">Objeto de
-                                                contratación</label>
-                                            <input type="text" name="objetoContratacion" class="form-control" />
-                                        </div>
-                                        <div class="col-sm-6">
-                                            <label for="rangoFechas" class="form-label">Fecha designadas</label>
-                                            <input type="date" name="fechaInicio" id="fechaInicio" readonly
-                                                class="form-control d-inline-block w-auto" />
-                                            <span class="mx-2">a</span>
-                                            <input type="date" name="fechaFin" id="fechaFin" readonly
-                                                class="form-control d-inline-block w-auto" />
-                                        </div>
-                                        <div class="col-sm-6">
-                                            <label class="form-label" for="formValidationTipoEntidad">Tipo de
-                                                Entidad</label>
-                                            <select class="select2" id="formValidationTipoEntidad" name="tipoEntidad">
-                                                <th:block th:each="tes : ${tiposEntidads}">
-                                                    <option th:value="${tes.id}" th:text="${tes.nombre}"></option>
-                                                </th:block>
-                                            </select>
-                                        </div>
-                                        <div class="col-12 d-flex justify-content-between">
-                                            <button class="btn btn-label-secondary btn-prev" disabled>
-                                                <i class="ti ti-arrow-left me-sm-1 me-0"></i>
-                                                <span class="align-middle d-sm-inline-block d-none">ANTERIOR
-                                                    REGISTRO</span>
-                                            </button>
-                                            <button class="btn btn-primary btn-next" type="button">
-                                                <span class="align-middle d-sm-inline-block d-none me-sm-1">CONTINUAR
-                                                    REGISTRO</span>
-                                                <i class="ti ti-arrow-right"></i>
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Personal Info -->
-                                <div id="personal-info-validation" class="content">
-                                    <div class="content-header mb-3 text-center">
-                                        <h6 class="mb-0">REGISTRO DE LOS RESPONSABLES</h6>
-                                        <small>Registrar los campos requeridos</small>
-                                    </div>
-                                    <div class="row g-3">
-                                        <h6><b>RESPONSABLE PRINCIPAL</b></h6>
-                                        <div class="col-sm-4">
-                                            <label class="form-label"
-                                                for="formValidationNombreResponsable1">Nombres</label>
-                                            <input type="text" id="formValidationNombreResponsable1"
-                                                name="nombreResponsable1" class="form-control" />
-                                        </div>
-                                        <div class="col-sm-4">
-                                            <label class="form-label" for="formValidationApResponsable1">Apellido
-                                                Paterno</label>
-                                            <input type="text" id="formValidationApResponsable1"
-                                                name="paternoResponsable1" class="form-control" />
-                                        </div>
-                                        <div class="col-sm-4">
-                                            <label class="form-label" for="formValidationAmResponsable1">Apellido
-                                                Materno</label>
-                                            <input type="text" id="formValidationAmResponsable1"
-                                                name="maternoResponsable1" class="form-control" />
-                                        </div>
-                                        <div class="col-sm-4">
-                                            <label class="form-label" for="formValidationCiResponsable1">Carnet de
-                                                Identidad</label>
-                                            <input type="text" id="formValidationCiResponsable1" name="ciResponsable1"
-                                                class="form-control" />
-                                        </div>
-                                        <div class="col-sm-4">
-                                            <label class="form-label"
-                                                for="formValidationCorreoResponsable1">Correo</label>
-                                            <input type="text" name="correoResponsable1" class="form-control" />
-                                        </div>
-                                        <div class="col-sm-4">
-                                            <label class="form-label"
-                                                for="formValidationCelularResponsable1">Celular</label>
-                                            <input type="text" id="formValidationCelularResponsable1"
-                                                name="celularResponsable1" class="form-control" />
-                                        </div>
-                                        <div class="col-sm-4">
-                                            <label class="form-label" for="fotoResponsable1">Foto</label>
-                                            <input type="file" id="fotoResponsable1" name="fotoResponsable1"
-                                                class="form-control" accept="image/*" />
-                                        </div>
-
-                                        <h6><b>SEGUNDO RESPONSABLE (OPCIONAL)</b></h6>
-
-                                        <div class="col-sm-4">
-                                            <label class="form-label"
-                                                for="formValidationNombreResponsable2">Nombres</label>
-                                            <input type="text" id="formValidationNombreResponsable2"
-                                                name="nombreResponsable2" class="form-control" />
-                                        </div>
-                                        <div class="col-sm-4">
-                                            <label class="form-label" for="formValidationApResponsable2">Apellido
-                                                Paterno</label>
-                                            <input type="text" id="formValidationApResponsable2"
-                                                name="paternoResponsable2" class="form-control" />
-                                        </div>
-                                        <div class="col-sm-4">
-                                            <label class="form-label" for="formValidationAmResponsable2">Apellido
-                                                Materno</label>
-                                            <input type="text" id="formValidationAmResponsable2"
-                                                name="maternoResponsable2" class="form-control" />
-                                        </div>
-                                        <div class="col-sm-4">
-                                            <label class="form-label" for="formValidationCiResponsable2">Carnet de
-                                                Identidad</label>
-                                            <input type="text" id="formValidationCiResponsable2" name="ciResponsable2"
-                                                class="form-control" />
-                                        </div>
-                                        <div class="col-sm-4">
-                                            <label class="form-label"
-                                                for="formValidationCorreoResponsable2">Correo</label>
-                                            <input type="text" name="correoResponsable2" class="form-control" />
-                                        </div>
-                                        <div class="col-sm-4">
-                                            <label class="form-label"
-                                                for="formValidationCelularResponsable2">Celular</label>
-                                            <input type="text" id="formValidationCelularResponsable2"
-                                                name="celularResponsable2" class="form-control" />
-                                        </div>
-
-                                        <!-- 📸 Campo para foto opcional -->
-                                        <div class="col-sm-4">
-                                            <label class="form-label" for="fotoResponsable2">Foto (opcional)</label>
-                                            <input type="file" id="fotoResponsable2" name="fotoResponsable2"
-                                                class="form-control" accept="image/*" />
-                                        </div>
-
-                                        <div class="col-12 d-flex justify-content-between">
-                                            <button class="btn btn-label-secondary btn-prev" type="button">
-                                                <i class="ti ti-arrow-left me-sm-1 me-0"></i>
-                                                <span class="align-middle d-sm-inline-block d-none">ANTERIOR
-                                                    REGISTRO</span>
-                                            </button>
-                                            <button class="btn btn-primary btn-next" type="button">
-                                                <span class="align-middle d-sm-inline-block d-none me-sm-1">CONTINUAR
-                                                    REGISTRO</span>
-                                                <i class="ti ti-arrow-right"></i>
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                                <!-- Social Links -->
-                                <div id="social-links-validation" class="content">
-                                    <div class="content-header mb-3">
-                                        <h6 class="mb-0">REGISTRO DE LOS PUESTOS</h6>
-                                        <small>Registrar los campos requeridos</small>
-                                    </div>
-                                    <div class="row g-3">
-                                        <div class="col-sm-6">
-                                            <label class="form-label" for="formValidationCategoria">Categoría del
-                                                puesto</label>
-                                            <select class="select2" id="formValidationCategoria"
-                                                name="formValidationCategoria">
-                                                <option value="">
-                                                    -- Seleccione una categoría --
-                                                </option>
-                                                <th:block th:each="cats : ${categorias}">
-                                                    <option th:value="${cats.id}" th:text="${cats.nombre}"></option>
-                                                </th:block>
-                                            </select>
-                                        </div>
-
-                                        <div class="col-sm-6">
-                                            <label class="form-label" for="formValidationPuestosDisponibles">Puestos
-                                                Disponibles</label>
-                                            <select name="puestosSeleccionados" id="formValidationPuestosDisponibles"
-                                                class="select2 form-select" multiple>
-                                                <!-- Se cargan dinámicamente con JS -->
-                                            </select>
-                                        </div>
-
-                                        <div class="col-12 d-flex justify-content-between">
-                                            <button class="btn btn-label-secondary btn-prev" type="button">
-                                                <i class="ti ti-arrow-left me-sm-1 me-0"></i>
-                                                <span class="align-middle d-sm-inline-block d-none">ANTERIOR
-                                                    REGISTRO</span>
-                                            </button>
-                                            <button class="btn btn-primary btn-next" type="button">
-                                                <span class="align-middle d-sm-inline-block d-none me-sm-1">CONTINUAR
-                                                    REGISTRO</span>
-                                                <i class="ti ti-arrow-right"></i>
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div id="pago-links-validation" class="content">
-                                    <div class="content-header mb-3">
-                                        <h6 class="card-header">ADJUNTAR COMPROBANTE | TOTAL A PAGAR : <span
-                                                id="totalPagar" class="badge bg-success ms-2">Bs 0.00</span></h6>
-                                    </div>
-                                    <div class="row g-3">
-
-                                        <div class="form-check mb-3">
-                                            <input class="form-check-input" type="checkbox" id="pagoContado"
-                                                name="pagoContado">
-                                            <label class="form-check-label fw-bold" for="pagoContado">
-                                                Pago al contado
-                                            </label>
-                                        </div>
-
-                                        <div id="camposComprobante">
-                                            <div class="mb-3">
-                                                <label class="form-label">Número de Comprobante</label>
-                                                <input type="number" name="numComprobante" class="form-control" />
-                                            </div>
-
-                                            <div class="mb-3">
-                                                <label class="form-label">Adjuntar Imagen del comprobante</label>
-                                                <input type="file" name="comprobante" accept="image/*"
-                                                    class="form-control" />
-                                            </div>
-                                        </div>
-
-                                        <div class="col-12 d-flex justify-content-between">
-                                            <button class="btn btn-label-secondary btn-prev" type="button">
-                                                <i class="ti ti-arrow-left me-sm-1 me-0"></i>
-                                                <span class="align-middle d-sm-inline-block d-none">ANTERIOR
-                                                    REGISTRO</span>
-                                            </button>
-                                            <button class="btn btn-success btn-next btn-submit" type="submit">
-                                                COMPLETAR REGISTRO
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </form>
+                        <div class="card-body pb-2 d-flex flex-wrap gap-2 align-items-center">
+<span style="color: #dc3545;">PARA TENER LOS DATOS MAS EXACTOS POR FAVOR RECARGAR LA PAGINA 🔁</span>
                         </div>
-                    </div>
+                        
+
+                        <div class="card-body pt-0">
+                            <div th:each="entry : ${puestosPorCategoria}">
+                            <!-- Encabezado de categoría -->
+                            <div class="d-flex align-items-center mt-4 mb-2">
+                                <h6 class="me-2 mb-0" th:text="${entry.key}">Categoría</h6>
+                                <span class="badge bg-label-secondary"
+                                    th:text="${#lists.size(entry.value)} + ' puestos'">0 puestos</span>
+                            </div>
+
+                            <!-- Grid de tarjetas -->
+                            <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-xl-4 g-3">
+                                <div class="col" th:each="p : ${entry.value}">
+                                <div class="card h-100 shadow-sm border-0 puesto-card"
+                                    th:attr="data-estado=${p['estado_puesto']}"
+                                    th:classappend="${p['estado_puesto'] == 'O'} ? ' opacity-75' : ''">
+
+                                    <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-muted small">Puesto</span>
+                                        <span class="badge"
+                                            th:classappend="${p['estado_puesto'] == 'L'} ? ' bg-success' : ' bg-danger'"
+                                            th:text="${p['estado_puesto'] == 'L' ? 'Libre' : 'Ocupado'}">Libre</span>
+                                    </div>
+
+                                    <div class="fs-3 fw-bold" th:text="${p['codigo']}">101</div>
+                                    <div class="text-muted"
+                                            th:text="${'Tamaño: ' + #strings.defaultString(p['tamano'], '-')}">
+                                        Tamaño: -
+                                        </div>
+
+                                    </div>
+                                </div>
+                                </div>
+                            </div>
+                            <hr class="text-muted mt-4">
+                            </div>
+                        </div>
+                        </div>
+
                     <span style="display:none" id="debugInsId" th:text="${inscripcionId}"></span>
 
                     <footer th:replace="~{layout/footer :: footer}"></footer>
