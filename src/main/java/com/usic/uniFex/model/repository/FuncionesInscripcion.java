@@ -94,4 +94,19 @@ public class FuncionesInscripcion {
             return null;
         }
     }
+
+    public List<Map<String, Object>> fn_get_inscripciones(Long p_id_usuario) {
+        String sql = "SELECT * FROM public.fn_get_inscripciones(?)";
+
+        try (Connection conn = jdbcTemplate.getDataSource().getConnection()) {
+            return jdbcTemplate.queryForList(sql, new Object[] {
+                p_id_usuario
+            });
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Error al crear array SQL", e);
+        } catch (EmptyResultDataAccessException e) {
+            return null;
+        }
+    }
 }
