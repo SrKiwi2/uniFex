@@ -29,4 +29,17 @@ public class ResponsablesController {
         model.addAttribute("responsables", responsableService.listarParaTabla());
         return "responsables/tabla_registro";
     }
+
+    /* RESPONSABLES RUEDA */
+    @ValidarUsuarioAutenticado
+    @GetMapping("/vistaRA")
+    public String vista_responsablesR() {
+        return "responsable_rueda/vista";
+    }
+
+    @RequestMapping(value = "/tabla-registrosR", method = {RequestMethod.GET, RequestMethod.POST})
+    public String tabla_responsbalesR(Model model) {
+        model.addAttribute("responsables", responsableService.listarVista());
+        return "responsable_rueda/tabla_registro";
+    }
 }

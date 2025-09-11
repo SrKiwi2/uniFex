@@ -1,5 +1,5 @@
 <!-- Menu -->
-<aside th:fragment="sidebar" id="layout-menu" class="layout-menu menu-vertical menu bg-menu-theme" th:if="${session.nombre_rol == 'ADMINISTRADOR' or session.nombre_rol == 'SUPER USUARIO'}">
+<aside th:fragment="sidebar" id="layout-menu" class="layout-menu menu-vertical menu bg-menu-theme" th:if="${session.nombre_rol == 'ADMINISTRADOR' or session.nombre_rol == 'SUPER USUARIO' or session.nombre_rol == 'CONTROL'}">
     <style>
         .app-brand-logo {
   height: auto !important;   /* evita altura fija */
@@ -14,7 +14,8 @@
     <div class="app-brand demo">
         <a href="/admin" class="app-brand-link">
             <span class="app-brand-logo demo">
-            <img src="/assets/img/logo/logoUAP.png" alt="UAP" style="height:45px; width:auto; display:block;">
+            <img th:src="@{/assets/img/logo/logoUap.png}" alt="UAP" style="height:45px; width:auto; display:block;">
+
             </span>
             <span class="app-brand-text demo menu-text fw-bold">UAP</span>
         </a>
@@ -23,6 +24,10 @@
 
     <ul class="menu-inner py-1">
         <!-- VISTA ADMINISTRADOR Y SUPER USUARIO -->
+         <li class="menu-header small text-uppercase" th:if="${session.nombre_rol == 'CONTROL'}">
+            <span class="menu-header-text">No hay funciones</span>
+            <span class="menu-header-text">para el rol que tienes</span>
+        </li>
         <li class="menu-header small text-uppercase" th:if="${session.nombre_rol == 'ADMINISTRADOR'}">
             <span class="menu-header-text">ADMINISTARCIÓN</span>
         </li>
@@ -90,6 +95,27 @@
                         <div>Seguimiento registro</div>
                     </a>
                 </li>
+            </ul>
+            <ul class="menu-sub">
+                <li class="menu-item" id="opcion_credencial">
+                    <a class="menu-link">
+                        <div>Credencial</div>
+                    </a>
+                </li>
+            </ul>
+        </li>
+
+        <li class="menu-item" id="opcion_admin" th:if="${session.nombre_rol == 'ADMINISTRADOR' or session.nombre_rol == 'SUPER USUARIO'}">
+            <a href="#" class="menu-link menu-toggle">
+                <i class="menu-icon tf-icons ti ti-users"></i>
+                <div>RESPONSABLES</div>
+            </a>
+            <ul class="menu-sub">
+                <li class="menu-item" id="opcion_responsables_incritos">
+                    <a class="menu-link">
+                        <div>INSCRITOS</div>
+                    </a>
+                </li>   
             </ul>
         </li>
     </ul>

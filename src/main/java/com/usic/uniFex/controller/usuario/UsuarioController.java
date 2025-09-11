@@ -13,8 +13,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
-import com.usic.uniFex.anotacion.ValidarUsuarioAutenticado;
 import com.usic.uniFex.Config.Encriptar;
+import com.usic.uniFex.anotacion.ValidarUsuarioAutenticado;
 import com.usic.uniFex.model.IService.IPersonaService;
 import com.usic.uniFex.model.IService.IRolService;
 import com.usic.uniFex.model.IService.IUsuarioService;
@@ -59,7 +59,7 @@ public class UsuarioController {
     @ValidarUsuarioAutenticado
     @PostMapping("/formulario")
     public String formulario(Model model, Usuario usuario) {
-
+        model.addAttribute("usuario", new Usuario());
         model.addAttribute("listaPersonas", personaService.listarPersonas());
         model.addAttribute("listaRoles", rolService.findAll());
 
@@ -78,6 +78,65 @@ public class UsuarioController {
 
         return "usuario/formulario";
     }
+
+    @ValidarUsuarioAutenticado
+    @PostMapping("/registrar-usuario")
+    public ResponseEntity<String> registrarUsuario(
+            HttpServletRequest request,
+            @RequestParam("username") String username,
+            @RequestParam("password") String rawPassword,
+            @RequestParam("persona") Long personaId,
+            @RequestParam("rol") Long rolId) {
+
+        // Normalizar sin re-asignar la variable usada en el lambda
+        final String usernameNorm = (username == null) ? null : username.trim();
+
+        // 1) Validaciones básicas
+        if (usernameNorm == null || usernameNorm.isBlank())
+            return ResponseEntity.badRequest().body("El nombre de usuario es obligatorio.");
+        if (rawPassword == null || rawPassword.isBlank())
+            return ResponseEntity.badRequest().body("La contraseña es obligatoria.");
+        if (personaId == null)
+            return ResponseEntity.badRequest().body("Debe seleccionar una persona.");
+        if (rolId == null)
+            return ResponseEntity.badRequest().body("Debe seleccionar un rol.");
+
+        // 2) Reglas de negocio
+        boolean usernameExiste = usuarioService.findAll().stream()
+                .anyMatch(u -> u.getUsername() != null && u.getUsername().equalsIgnoreCase(usernameNorm));
+        if (usernameExiste)
+            return ResponseEntity.badRequest().body("El nombre de usuario ya está en uso.");
+
+        boolean personaYaTieneUsuario = usuarioService.findAll().stream()
+                .anyMatch(u -> u.getPersona() != null
+                        && u.getPersona().getId().equals(personaId)
+                        && !"ELIMINADO".equalsIgnoreCase(u.getEstado()));
+        if (personaYaTieneUsuario)
+            return ResponseEntity.badRequest().body("La persona seleccionada ya tiene un usuario asignado.");
+
+        // 3) Cargar Persona y Rol
+        var persona = personaService.findById(personaId);
+        if (persona == null) return ResponseEntity.badRequest().body("Persona no encontrada.");
+
+        var rol = rolService.findById(rolId);
+        if (rol == null) return ResponseEntity.badRequest().body("Rol no encontrado.");
+
+        // 4) Guardar
+        Usuario nuevo = new Usuario();
+        nuevo.setUsername(usernameNorm);                         // usar el normalizado
+        nuevo.setPassword(passwordEncoder.encode(rawPassword));  // encriptar
+        nuevo.setPersona(persona);
+        nuevo.setRol(rol);
+        nuevo.setEstado("ACTIVO");
+
+        Usuario logueado = (Usuario) request.getSession().getAttribute("usuario");
+        if (logueado != null) nuevo.setRegistroIdUsuario(logueado.getId());
+
+        usuarioService.save(nuevo);
+        return ResponseEntity.ok("Usuario registrado correctamente.");
+    }
+
+
 
     @ValidarUsuarioAutenticado
     @PostMapping("/modificar-usuario")

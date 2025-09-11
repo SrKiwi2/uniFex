@@ -1,0 +1,57 @@
+<div class="card">
+    <div class="card-header d-flex justify-content-lg-between">
+        <h5>DATOS DE RESPONSABLES INSCRITOS</h5>
+    </div>
+    <div class="card-datatable table-responsive pt-0">
+        <table class="table table-striped table-bordered align-middle text-center" id="data-table">
+            <thead class="table-dark">
+                <tr>
+                    <th>#</th>
+                    <th>Entidad</th>
+                    <th>Nombre Completo</th>
+                    <th>C.I.</th>
+                    <th>Celular</th>
+                </tr>
+            </thead>
+            <tbody class="animate__animated animate__fadeIn">
+                <tr th:each="resp, i : ${responsables}">
+                    <td style="text-align: left;" th:text="${i.index + 1}"></td>
+                    <td style="text-align: left;" th:text="${resp.entidadNombre}"></td>
+                    <td style="text-align: left;" th:text="${resp.nombreCompleto}"></td>
+                    <td th:text="${resp.ci}"></td>
+                    <td th:text="${resp.celular}"></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    if (window.$ && $.fn.DataTable) {
+        const id = "#data-table";
+        if ($.fn.DataTable.isDataTable(id)) {
+            $(id).DataTable().destroy();
+        }
+        $(id).DataTable({
+            language: {
+                sProcessing: "Procesando...",
+                sLengthMenu: "Mostrar _MENU_ registros",
+                sZeroRecords: "No se encontraron resultados",
+                sInfo: "Mostrando _START_ a _END_ de _TOTAL_",
+                sInfoEmpty: "Mostrando 0 a 0 de 0",
+                sInfoFiltered: "(filtrado de _MAX_ totales)",
+                sSearch: "Buscar:",
+                oPaginate: {
+                    sFirst: "Primero",
+                    sLast: "Último",
+                    sNext: "Siguiente",
+                    sPrevious: "Anterior",
+                },
+                oAria: {
+                    sSortAscending: ": Orden ascendente",
+                    sSortDescending: ": Orden descendente",
+                },
+            },
+        });
+    }
+</script>

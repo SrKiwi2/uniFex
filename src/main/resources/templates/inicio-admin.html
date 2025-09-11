@@ -55,7 +55,36 @@
                                             </p>
                                         </div>
                                     </div>
-                                    <div id="wizard-validation" class="bs-stepper mt-2">
+
+                                    <div class="card" th:if="${session.nombre_rol == 'CONTROL'}">
+                                        <div class="card-header d-flex justify-content-lg-between">
+                                            <h5>DATOS DE RESPONSABLES INSCRITOS</h5>
+                                            <span>Puede que se esten inscribiendo más, recarga la pagina 🔁</span>
+                                        </div>
+                                        <div class="card-datatable table-responsive pt-0">
+                                            <table class="table table-striped table-bordered align-middle text-center" id="data-table">
+                                                <thead class="table-dark">
+                                                    <tr>
+                                                        <th>#</th>
+                                                        <th>Entidad</th>
+                                                        <th>Nombre Completo</th>
+                                                        <th>C.I.</th>
+                                                        <th>Celular</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody class="animate__animated animate__fadeIn">
+                                                    <tr th:each="resp, i : ${responsables}">
+                                                        <td style="text-align: left;" th:text="${i.index + 1}"></td>
+                                                        <td style="text-align: left;" th:text="${resp.entidadNombre}"></td>
+                                                        <td style="text-align: left;" th:text="${resp.nombreCompleto}"></td>
+                                                        <td th:text="${resp.ci}"></td>
+                                                        <td th:text="${resp.celular}"></td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    <div id="wizard-validation" class="bs-stepper mt-2" th:if="${session.nombre_rol != 'CONTROL'}">
                                         <div class="bs-stepper-header">
                                             <div class="step" data-target="#account-details-validation">
                                                 <button type="button" class="step-trigger">

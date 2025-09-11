@@ -1,5 +1,7 @@
 package com.usic.uniFex.model.entity;
 
+import java.beans.Transient;
+
 import com.usic.uniFex.Config.AuditoriaConfig;
 
 import jakarta.persistence.Entity;
@@ -25,4 +27,12 @@ public class Persona extends AuditoriaConfig{
     private String correo;
     private String celular;
     private String foto;
+
+    @Transient
+    public String getNombreCompleto() {
+        String n = nombre != null ? nombre.trim() : "";
+        String p = paterno != null ? paterno.trim() : "";
+        String m = materno != null ? materno.trim() : "";
+        return String.join(" ", n, p, m).replaceAll("\\s{2,}", " ").trim();
+    }
 }

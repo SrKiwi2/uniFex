@@ -186,6 +186,34 @@
 
             });
 
+            $("#opcion_credencial").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/vistaGenerarCredenciales/");
+
+                if (botonPulsado.classList.contains("active")) {
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_credencial");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
+            $("#opcion_responsables_incritos").click(function (e) {
+                e.preventDefault();
+                cargarContenido("/administracion/responsables/vistaRA");
+
+                if (botonPulsado.classList.contains("active")) {    
+                    botonPulsado.classList.remove("active");
+                }
+
+                botonPulsado = document.getElementById("opcion_responsables_incritos");;
+
+                botonPulsado.classList.add("active");
+
+            });
+
             $("#opcion_promotor").click(function (e) {
                 e.preventDefault();
                 cargarContenido("/administracion/promotor/vista");

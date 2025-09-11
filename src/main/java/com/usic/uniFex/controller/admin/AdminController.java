@@ -83,6 +83,7 @@ public class AdminController {
         model.addAttribute("categorias", categoriaService.findAll());
         request.getSession().setAttribute("persona", persona);
         logger.info("Usuario en sesión: {}", usuario.getPersona().getNombre());
+        model.addAttribute("responsables", responsableService.listarVista());
         return "inicio-admin";
     }
 
