@@ -3,10 +3,12 @@ package com.usic.uniFex.controller.admin;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -111,14 +113,19 @@ public class AdminController {
         model.addAttribute("categorias", categoriaService.findAll());
         model.addAttribute("puestos", puestoService.findAll());
         model.addAttribute("inscripcionId", inscripcionId);
-        logger.info("Usuario en sesión: {}", usuario.getPersona().getNombre());
-
+        
         Persona persona = usuario.getPersona();
-
         request.getSession().setAttribute("persona", persona);
-        logger.info("inscripcionId (flash): {}", inscripcionId);
 
-        System.out.println("vista logueada con responsable");
+        List<Map<String, Object>> inscripciones =
+                Optional.ofNullable(funcionesInscripcion.fn_get_inscripciones(usuario.getId()))
+                        .orElse(Collections.emptyList());
+
+        model.addAttribute("inscripciones", inscripciones);
+
+        logger.info("Usuario en sesión: {}", usuario.getPersona().getNombre());
+        logger.info("inscripcionId (flash): {}", inscripcionId);
+        System.out.println("vista responsable");
         return "publico/responsable";
     }
 

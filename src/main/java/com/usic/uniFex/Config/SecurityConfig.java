@@ -66,6 +66,7 @@ public class SecurityConfig {
                         "/guardar/**",
                         "/actualizar/**",
                         "/files/**",
+                        "/inscripciones/**",
                         "/cerrar_sesion",
                         "/administracion/**",
                         "/vistaGenerarCredenciales/**",

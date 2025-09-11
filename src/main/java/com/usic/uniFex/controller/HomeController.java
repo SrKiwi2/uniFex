@@ -11,6 +11,8 @@ import com.usic.uniFex.model.repository.FuncionesInscripcion;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.RequestParam;
+
 
 @Controller
 @RequiredArgsConstructor
@@ -31,4 +33,5 @@ public class HomeController {
         model.addAttribute("mapaPdf", "mapa.pdf");
         return "publico/index"; // templates/publico/index.html
     }
+
 }
