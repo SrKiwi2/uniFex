@@ -3,23 +3,23 @@
     <a type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></a>
 </div>
 <form id="formularioPersona" method="post" th:action="@{/administracion/persona/registrar-admin}">
-  <div class="modal-body">
-    <div class="row g-3">
-      <div class="col-12 col-md-6">
-        <label class="form-label">Código Funcionario *</label>
-        <input type="text" name="codFuncionario" class="form-control" required />
-      </div>
-      <div class="col-12 col-md-6">
-        <label class="form-label">C.I. *</label>
-        <input type="text" name="ci" class="form-control" required />
-      </div>
+    <div class="modal-body">
+        <div class="row g-3">
+            <div class="col-12 col-md-6">
+                <label class="form-label">Código Funcionario *</label>
+                <input type="text" name="codFuncionario" class="form-control" required />
+            </div>
+            <div class="col-12 col-md-6">
+                <label class="form-label">C.I. *</label>
+                <input type="text" name="ci" class="form-control" required />
+            </div>
+        </div>
     </div>
-  </div>
 
-  <div class="modal-footer">
-    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-    <button type="submit" class="btn btn-success">Guardar Registro</button>
-  </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-success">Guardar Registro</button>
+    </div>
 </form>
 
 

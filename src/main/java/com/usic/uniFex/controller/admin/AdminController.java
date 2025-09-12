@@ -3,6 +3,7 @@ package com.usic.uniFex.controller.admin;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -14,10 +15,12 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Controller;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -38,6 +41,7 @@ import com.usic.uniFex.model.IService.IPuestoService;
 import com.usic.uniFex.model.IService.IResponsableService;
 import com.usic.uniFex.model.IService.ITipoEntidadService;
 import com.usic.uniFex.model.IService.IUsuarioService;
+import com.usic.uniFex.model.dto.UiMessage;
 import com.usic.uniFex.model.entity.Entidad;
 import com.usic.uniFex.model.entity.Inscripcion;
 import com.usic.uniFex.model.entity.InscripcionPuesto;
@@ -167,154 +171,185 @@ public class AdminController {
 
         Usuario usuario = (Usuario) request.getSession().getAttribute("usuario");
 
-        Entidad entidad = new Entidad();
-        entidad.setNombre(nombreEntidad);
-        entidad.setNit(nitEntidad);
-        entidad.setDescripcion(descripcionEntidad);
-        entidad.setObjeto(objetoContratacion);
-        entidad.setRepresentanteLegal(nombreR);
-        entidad.setCiRepresentante(ciR);
-        entidad.setTipoEntidad(tipoEntidadService.findById(tipoEntidad));
-        entidad.setEstado("ACTIVO");
-        entidad.setRegistro(new Date());
-        entidad.setRegistroIdUsuario(usuario.getId());
-        entidad.setModificacion(new Date());
-        entidad.setModificacionIdUsuario(usuario.getId());
-        entidadService.save(entidad);
-
-        Persona persona1 = new Persona();
-        persona1.setNombre(nombreResponsable1);
-        persona1.setPaterno(paternoResponsable1);
-        persona1.setMaterno(maternoResponsable1);
-        persona1.setCi(ciResponsable1);
-        persona1.setCorreo(correoResponsable1);
-        persona1.setCelular(celularResponsable1);
-        persona1.setEstado("RESPONSABLE");
-        persona1.setRegistro(new Date());
-        persona1.setRegistroIdUsuario(usuario.getId());
-        persona1.setModificacion(new Date());
-        persona1.setModificacionIdUsuario(usuario.getId());
-
+        List<UiMessage> messages = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
+        
         try {
-            String foto1Rel = storage.save(fotoResponsable1, Bucket.RESPONSABLES,
-                    nombreResponsable1 + " " + paternoResponsable1 + " " + maternoResponsable1);
-            persona1.setFoto(foto1Rel);
-        } catch (IOException e) {
-            logger.warn("No se pudo guardar foto de responsable 1: {}", e.getMessage());
-            persona1.setFoto(null);
-        }
-        personaService.save(persona1);
+            Entidad entidad = new Entidad();
+            entidad.setNombre(nombreEntidad);
+            entidad.setNit(nitEntidad);
+            entidad.setDescripcion(descripcionEntidad);
+            entidad.setObjeto(objetoContratacion);
+            entidad.setRepresentanteLegal(nombreR);
+            entidad.setCiRepresentante(ciR);
+            entidad.setTipoEntidad(tipoEntidadService.findById(tipoEntidad));
+            entidad.setEstado("ACTIVO");
+            entidad.setRegistro(new Date());
+            entidad.setRegistroIdUsuario(usuario.getId());
+            entidad.setModificacion(new Date());
+            entidad.setModificacionIdUsuario(usuario.getId());
+            entidadService.save(entidad);
 
-        Responsable responsable1 = new Responsable();
-        responsable1.setEntidad(entidad);
-        responsable1.setPersona(persona1);
-        responsable1.setEstado("RESPONSABLE");
-        responsable1.setRegistro(new Date());
-        responsable1.setRegistroIdUsuario(usuario.getId());
-        responsable1.setModificacion(new Date());
-        responsable1.setModificacionIdUsuario(usuario.getId());
-        responsableService.save(responsable1);
-
-        boolean hayResp2 =
-            notBlank(nombreResponsable2) || notBlank(paternoResponsable2) || notBlank(maternoResponsable2) ||
-            notBlank(ciResponsable2) || notBlank(correoResponsable2) || notBlank(celularResponsable2) ||
-            (fotoResponsable2 != null && !fotoResponsable2.isEmpty());
-
-        if (hayResp2) {
-            Persona persona2 = new Persona();
-            persona2.setNombre(nvl(nombreResponsable2));
-            persona2.setPaterno(nvl(paternoResponsable2));
-            persona2.setMaterno(nvl(maternoResponsable2));
-            persona2.setCi(nvl(ciResponsable2));
-            persona2.setCorreo(nvl(correoResponsable2));
-            persona2.setCelular(nvl(celularResponsable2));
-            persona2.setEstado("RESPONSABLE");
-            persona2.setRegistro(new Date());
-            persona2.setRegistroIdUsuario(usuario.getId());
-            persona2.setModificacion(new Date());
-            persona2.setModificacionIdUsuario(usuario.getId());
+            Persona persona1 = new Persona();
+            persona1.setNombre(nombreResponsable1);
+            persona1.setPaterno(paternoResponsable1);
+            persona1.setMaterno(maternoResponsable1);
+            persona1.setCi(ciResponsable1);
+            persona1.setCorreo(correoResponsable1);
+            persona1.setCelular(celularResponsable1);
+            persona1.setEstado("RESPONSABLE");
+            persona1.setRegistro(new Date());
+            persona1.setRegistroIdUsuario(usuario.getId());
+            persona1.setModificacion(new Date());
+            persona1.setModificacionIdUsuario(usuario.getId());
 
             try {
-                String foto2Rel = storage.save(fotoResponsable2, Bucket.RESPONSABLES,
-                        (nombreResponsable2 + " " + paternoResponsable2 + " " + maternoResponsable2).trim());
-                persona2.setFoto(foto2Rel);
+                String foto1Rel = storage.save(fotoResponsable1, Bucket.RESPONSABLES,
+                        nombreResponsable1 + " " + paternoResponsable1 + " " + maternoResponsable1);
+                persona1.setFoto(foto1Rel);
             } catch (IOException e) {
-                logger.warn("No se pudo guardar foto de responsable 2: {}", e.getMessage());
-                persona2.setFoto(null);
+                logger.warn("No se pudo guardar foto de responsable 1: {}", e.getMessage());
+                persona1.setFoto(null);
             }
-            personaService.save(persona2);
+            personaService.save(persona1);
 
-            Responsable responsable2 = new Responsable();
-            responsable2.setEntidad(entidad);
-            responsable2.setPersona(persona2);
-            responsable2.setEstado("RESPONSABLE");
-            responsable2.setRegistro(new Date());
-            responsable2.setRegistroIdUsuario(usuario.getId());
-            responsable2.setModificacion(new Date());
-            responsable2.setModificacionIdUsuario(usuario.getId());
-            responsableService.save(responsable2);
-        }
+            Responsable responsable1 = new Responsable();
+            responsable1.setEntidad(entidad);
+            responsable1.setPersona(persona1);
+            responsable1.setEstado("RESPONSABLE");
+            responsable1.setRegistro(new Date());
+            responsable1.setRegistroIdUsuario(usuario.getId());
+            responsable1.setModificacion(new Date());
+            responsable1.setModificacionIdUsuario(usuario.getId());
+            responsableService.save(responsable1);
 
-        Inscripcion inscripcion = new Inscripcion();
-        inscripcion.setEntidad(entidad);
-        inscripcion.setFechaCompra(LocalDateTime.now());
-        inscripcion.setInscripcionEstado("PENDIENTE");
-        inscripcion.setEstado("ACTIVO");
-        inscripcion.setRegistro(new Date());
-        inscripcion.setRegistroIdUsuario(usuario.getId());
-        inscripcion.setModificacion(new Date());
-        inscripcion.setModificacionIdUsuario(usuario.getId());
-        inscripcion.setFechaInicio(java.sql.Date.valueOf(fechaInicio));
-        inscripcion.setFechaFin(java.sql.Date.valueOf(fechaFin));
-        inscripcion.setEntidadBancaria(entidadBancaria);
+            boolean hayResp2 =
+                notBlank(nombreResponsable2) || notBlank(paternoResponsable2) || notBlank(maternoResponsable2) ||
+                notBlank(ciResponsable2) || notBlank(correoResponsable2) || notBlank(celularResponsable2) ||
+                (fotoResponsable2 != null && !fotoResponsable2.isEmpty());
 
-        if (pagoContado) {
-            inscripcion.setPagoContado(true);
-            inscripcion.setNumComprobante(null);
-            inscripcion.setImgComprobante(null);
-        } else {
-            inscripcion.setPagoContado(false);
-            inscripcion.setNumComprobante(numComprobante);
-            try {
-                String compRel = storage.save(comprobante, Bucket.COMPROBANTES, entidad.getNombre());
-                inscripcion.setImgComprobante(compRel);
-            } catch (IOException e) {
-                logger.warn("No se pudo guardar comprobante: {}", e.getMessage());
+            if (hayResp2) {
+                Persona persona2 = new Persona();
+                persona2.setNombre(nvl(nombreResponsable2));
+                persona2.setPaterno(nvl(paternoResponsable2));
+                persona2.setMaterno(nvl(maternoResponsable2));
+                persona2.setCi(nvl(ciResponsable2));
+                persona2.setCorreo(nvl(correoResponsable2));
+                persona2.setCelular(nvl(celularResponsable2));
+                persona2.setEstado("RESPONSABLE");
+                persona2.setRegistro(new Date());
+                persona2.setRegistroIdUsuario(usuario.getId());
+                persona2.setModificacion(new Date());
+                persona2.setModificacionIdUsuario(usuario.getId());
+
+                try {
+                    String foto2Rel = storage.save(fotoResponsable2, Bucket.RESPONSABLES,
+                            (nombreResponsable2 + " " + paternoResponsable2 + " " + maternoResponsable2).trim());
+                    persona2.setFoto(foto2Rel);
+                } catch (IOException e) {
+                    logger.warn("No se pudo guardar foto de responsable 2: {}", e.getMessage());
+                    persona2.setFoto(null);
+                }
+                personaService.save(persona2);
+
+                Responsable responsable2 = new Responsable();
+                responsable2.setEntidad(entidad);
+                responsable2.setPersona(persona2);
+                responsable2.setEstado("RESPONSABLE");
+                responsable2.setRegistro(new Date());
+                responsable2.setRegistroIdUsuario(usuario.getId());
+                responsable2.setModificacion(new Date());
+                responsable2.setModificacionIdUsuario(usuario.getId());
+                responsableService.save(responsable2);
+            }
+
+            Inscripcion inscripcion = new Inscripcion();
+            inscripcion.setEntidad(entidad);
+            inscripcion.setFechaCompra(LocalDateTime.now());
+            inscripcion.setInscripcionEstado("PENDIENTE");
+            inscripcion.setEstado("ACTIVO");
+            inscripcion.setRegistro(new Date());
+            inscripcion.setRegistroIdUsuario(usuario.getId());
+            inscripcion.setModificacion(new Date());
+            inscripcion.setModificacionIdUsuario(usuario.getId());
+            inscripcion.setFechaInicio(java.sql.Date.valueOf(fechaInicio));
+            inscripcion.setFechaFin(java.sql.Date.valueOf(fechaFin));
+            inscripcion.setEntidadBancaria(entidadBancaria);
+
+            if (pagoContado) {
+                inscripcion.setPagoContado(true);
+                inscripcion.setNumComprobante(null);
                 inscripcion.setImgComprobante(null);
+            } else {
+                inscripcion.setPagoContado(false);
+                inscripcion.setNumComprobante(numComprobante);
+                try {
+                    String compRel = storage.save(comprobante, Bucket.COMPROBANTES, entidad.getNombre());
+                    inscripcion.setImgComprobante(compRel);
+                } catch (IOException e) {
+                    logger.warn("No se pudo guardar comprobante: {}", e.getMessage());
+                    inscripcion.setImgComprobante(null);
+                }
             }
-        }
-        inscripcionService.save(inscripcion);
+            inscripcionService.save(inscripcion);
 
-        // ===== PUESTOS =====
-        if (puestosSeleccionados != null) {
-            for (Long puestoId : puestosSeleccionados) {
-                Puesto puesto = puestoService.findById(puestoId);
-                puesto.setEstadoPuesto("O");
-                puesto.setRegistro(new Date());
-                puesto.setRegistroIdUsuario(usuario.getId());
-                puesto.setModificacion(new Date());
-                puesto.setModificacionIdUsuario(usuario.getId());
-                puestoService.save(puesto);
+            // ===== PUESTOS =====
+            if (puestosSeleccionados != null) {
+                for (Long puestoId : puestosSeleccionados) {
+                    Puesto puesto = puestoService.findById(puestoId);
+                    puesto.setEstadoPuesto("O");
+                    puesto.setRegistro(new Date());
+                    puesto.setRegistroIdUsuario(usuario.getId());
+                    puesto.setModificacion(new Date());
+                    puesto.setModificacionIdUsuario(usuario.getId());
+                    puestoService.save(puesto);
 
-                InscripcionPuesto ip = new InscripcionPuesto();
-                ip.setPuesto(puesto);
-                ip.setInscripcion(inscripcion);
-                ip.setRegistro(new Date());
-                ip.setRegistroIdUsuario(usuario.getId());
-                ip.setModificacion(new Date());
-                ip.setModificacionIdUsuario(usuario.getId());
-                ip.setEstado("ACTIVO");
-                ip.setCosto(funcionesInscripcion.obtenerCostoPuesto(
-                        entidad.getTipoEntidad().getId(),
-                        puesto.getTamano(),
-                        puesto.getCategoria().getId()
-                ));
+                    InscripcionPuesto ip = new InscripcionPuesto();
+                    ip.setPuesto(puesto);
+                    ip.setInscripcion(inscripcion);
+                    ip.setRegistro(new Date());
+                    ip.setRegistroIdUsuario(usuario.getId());
+                    ip.setModificacion(new Date());
+                    ip.setModificacionIdUsuario(usuario.getId());
+                    ip.setEstado("ACTIVO");
+                    ip.setCosto(funcionesInscripcion.obtenerCostoPuesto(
+                            entidad.getTipoEntidad().getId(),
+                            puesto.getTamano(),
+                            puesto.getCategoria().getId()
+                    ));
 
-                inscripcionPuestoService.save(ip);
+                    inscripcionPuestoService.save(ip);
+                }
             }
+
+            // ★ Mensaje de éxito + anexar warnings
+            messages.add(new UiMessage("success", "Registro completado",
+                    "La inscripción se registró correctamente."));
+            if (!warnings.isEmpty()) {
+                warnings.forEach(w -> messages.add(new UiMessage("warning", "Atención", w)));
+            }
+
+            // ★ Pasar datos por flash
+            flash.addFlashAttribute("messages", messages);
+            flash.addAttribute("inscripcionId", inscripcion.getId());
+            return "redirect:/vistaR";
+
+        } catch (DataIntegrityViolationException ex) {
+            logger.error("Violación de integridad al guardar inscripción", ex);
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            messages.add(new UiMessage("danger", "Error de datos",
+                    "No se pudo completar el registro: datos duplicados o no válidos."));
+            flash.addFlashAttribute("messages", messages);
+            return "redirect:/vistaR";
+
+        } catch (Exception ex) {
+            logger.error("Error inesperado al guardar inscripción", ex);
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            messages.add(new UiMessage("danger", "Error inesperado",
+                    "Ocurrió un problema y no se guardaron los cambios."));
+            flash.addFlashAttribute("messages", messages);
+            return "redirect:/vistaR";
         }
-       flash.addAttribute("inscripcionId", inscripcion.getId());
-        return "redirect:/vistaR";
     }
 
     @ValidarUsuarioAutenticado

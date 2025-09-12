@@ -1,0 +1,24 @@
+<!-- fragments/alerts.html -->
+<div th:fragment="alerts">
+  <!-- Alertas "inline" (simples) -->
+  <div th:if="${not #lists.isEmpty(messages)}" class="mb-3">
+    <div th:each="m : ${messages}"
+         th:class="'alert alert-'+${m.type}+' alert-dismissible fade show'"
+         role="alert">
+      <strong th:text="${m.title}">Aviso</strong>
+      <span th:text="' '+${m.text}"></span>
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+  </div>
+
+  <!-- Auto-cierre opcional (6s). Si no quieres auto-cierre, elimina este script -->
+  <script th:inline="javascript">
+    /*<![CDATA[*/
+    setTimeout(() => {
+      document.querySelectorAll('.alert-dismissible').forEach(el => {
+        if (el.classList.contains('show')) el.classList.remove('show');
+      });
+    }, 6000);
+    /*]]>*/
+  </script>
+</div>

@@ -148,6 +148,7 @@
         <div class="layout-container">
             <div class="container">
                 <div class="content-wrapper">
+                    
                     <div
                         class="card animated-card position-relative p-0 mb-4 overflow-hidden shadow-sm border-0 glass-card card-bg">
                         <div
@@ -165,8 +166,9 @@
                         </div>
                     </div>
 
-                    <div id="wizard-validation" class="bs-stepper mt-2"
-                        th:if="${session.nombre_rol == 'ADMINISTRATIVO'}">
+                    <div th:replace="~{fragments/alerts :: alerts}"></div>  
+
+                    <div id="wizard-validation" class="bs-stepper mt-2" th:if="${session.nombre_rol == 'ADMINISTRATIVO'}">
                         <div class="bs-stepper-header">
                             <div class="step" data-target="#account-details-validation">
                                 <button type="button" class="step-trigger">
@@ -217,85 +219,65 @@
                                 <div id="account-details-validation" class="content">
                                     <div class="content-header mb-3 text-center">
                                         <h6 class="mb-0">REGISTRO DE LA ENTIDAD</h6>
-                                        <small>Registrar los campos requeridos</small>
+                                        <small>Registrar los campos requeridos</small><br>
+                                        <span style="color: rgb(255, 0, 0);">No olvides recargar la pagina antes de registrar 🔁😉</span>
                                     </div>
                                     <div class="row g-3">
                                         <div class="col-sm-6">
-                                            <label class="form-label" for="formValidationNombreEntidad">Nombre de la
-                                                Entidad</label>
-                                            <input type="text" name="nombreEntidad" id="formValidationNombreEntidad"
-                                                class="form-control" placeholder="Ej.: PANDEÑA S.R.L."
-                                                aria-describedby="ayudaNombreEntidad" required>
-                                            <small id="ayudaNombreEntidad" class="form-text text-muted">
-                                                Nombre comercial o razón social con el que se emitirá el
-                                                recibo/credencial.
+                                            <label class="form-label" for="formValidationNombreEntidad">Nombre de la Entidad</label>
+                                            <input type="text" name="nombreEntidad" id="formValidationNombreEntidad" class="form-control" placeholder="Ej.: PANDEÑA S.R.L." aria-describedby="ayudaNombreEntidad" required>
+                                            <small id="ayudaNombreEntidad" class="form-text text-muted"> 
+                                                Nombre comercial o razón social con el que se emitirá el recibo/credencial.
                                             </small>
                                         </div>
                                         <div class="col-sm-6">
                                             <label class="form-label" for="formValidationNit">NIT/C.I.</label>
-                                            <input type="number" name="nitEntidad" id="formValidationNit"
-                                                class="form-control" inputmode="numeric" aria-describedby="ayudaNit"
-                                                required>
+                                            <input type="number" name="nitEntidad" id="formValidationNit" class="form-control" inputmode="numeric" aria-describedby="ayudaNit" required>
                                             <small id="ayudaNit" class="form-text text-muted">
-                                                Si es empresa: NIT. Si es emprendimiento personal: C.I. del responsable
-                                                (solo números).
+                                                Si es empresa: NIT. Si es emprendimiento personal: C.I. del responsable (solo números).
                                             </small>
                                         </div>
                                         <div class="col-sm-6">
-                                            <label class="form-label" for="formValidationDescripcion">Descripción de la
-                                                Entidad</label>
-                                            <input type="text" name="descripcionEntidad" id="formValidationDescripcion"
-                                                class="form-control" placeholder="Rubro y productos/servicios"
-                                                aria-describedby="ayudaDescripcion" required>
-                                            <small id="ayudaDescripcion" class="form-text text-muted">
-                                                Describe brevemente tu rubro y lo que exhibirás o venderás (p. ej.,
-                                                “Panadería artesanal, masas dulces y saladas”).
+                                            <label class="form-label" for="formValidationDescripcion">Descripción de la Entidad</label>
+                                            <input type="text" name="descripcionEntidad" id="formValidationDescripcion" class="form-control" placeholder="Rubro y productos/servicios" aria-describedby="ayudaDescripcion" required>
+                                            <small id="ayudaDescripcion" class="form-text text-muted"> 
+                                                Describe brevemente tu rubro y lo que exhibirás o venderás (p. ej., “Panadería artesanal, masas dulces y saladas”).
                                             </small>
                                         </div>
                                         <div class="col-sm-6">
-                                            <label class="form-label" for="formValidationDescripcion">Objeto de
-                                                contratación</label>
-                                            <input type="text" name="objetoContratacion" id="formValidationObjeto"
-                                                class="form-control" placeholder="¿Qué harás en la feria?"
-                                                aria-describedby="ayudaObjeto" required>
+                                            <label class="form-label" for="formValidationDescripcion">Objeto de contratación</label>
+                                            <input type="text" name="objetoContratacion" id="formValidationObjeto" class="form-control" placeholder="¿Qué harás en la feria?" aria-describedby="ayudaObjeto" required>
                                             <small id="ayudaObjeto" class="form-text text-muted">
                                                 Finalidad específica durante la feria (p. ej., “Venta de alimentos
                                                 preparados”, “Exhibición de maquinaria”, “Servicios de impresión”).
                                             </small>
                                         </div>
                                         <div class="col-sm-6">
-                                            <label class="form-label" for="formValidationNombreResponsable2">Nombres
-                                                completo representante legal</label>
-                                            <input type="text" id="formValidationNombreResponsable2" name="nombreR"
-                                                class="form-control" />
+                                            <label class="form-label" for="formValidationNombreResponsable2">Nombres completo representante legal</label>
+                                            <input type="text" id="formValidationNombreResponsable2" name="nombreR" class="form-control" />
                                             <small id="ayudaObjeto" class="form-text text-muted">
                                                 Nombre Completo del propietario o representante legal de la entidad.
                                             </small>
                                         </div>
                                         <div class="col-sm-6">
-                                            <label class="form-label"
-                                                for="formValidationNombreResponsable2">C.I.</label>
-                                            <input type="number" id="formValidationNombreResponsable2" name="ciR"
-                                                class="form-control" />
+                                            <label class="form-label" for="formValidationNombreResponsable2">C.I.</label>
+                                            <input type="number" id="formValidationNombreResponsable2" name="ciR" class="form-control" />
                                             <small id="ayudaObjeto" class="form-text text-muted">
                                                 C.I. del propietario o representante legal de la entidad (solo números).
                                             </small>
                                         </div>
                                         <div class="col-sm-6">
                                             <label for="rangoFechas" class="form-label">Fecha designadas</label>
-                                            <input type="date" name="fechaInicio" id="fechaInicio" readonly
-                                                class="form-control d-inline-block w-auto" />
+                                            <input type="date" name="fechaInicio" id="fechaInicio" readonly class="form-control d-inline-block w-auto" />
                                             <span class="mx-2">a</span>
-                                            <input type="date" name="fechaFin" id="fechaFin" readonly
-                                                class="form-control d-inline-block w-auto" />
+                                            <input type="date" name="fechaFin" id="fechaFin" readonly class="form-control d-inline-block w-auto" />
                                             <small id="ayudaFechas" class="form-text text-muted d-block">
                                                 Las fechas son definidas por la organización. Si las ves vacías o
                                                 incorrectas, contacta a soporte.
                                             </small>
                                         </div>
                                         <div class="col-sm-6">
-                                            <label class="form-label" for="formValidationTipoEntidad">Tipo de
-                                                Entidad</label>
+                                            <label class="form-label" for="formValidationTipoEntidad">Tipo de Entidad</label>
                                             <select class="select2" id="formValidationTipoEntidad" name="tipoEntidad">
                                                 <th:block th:each="tes : ${tiposEntidads}">
                                                     <option th:value="${tes.id}" th:text="${tes.nombre}"></option>
@@ -305,12 +287,10 @@
                                         <div class="col-12 d-flex justify-content-between">
                                             <button class="btn btn-label-secondary btn-prev" disabled>
                                                 <i class="ti ti-arrow-left me-sm-1 me-0"></i>
-                                                <span class="align-middle d-sm-inline-block d-none">ANTERIOR
-                                                    REGISTRO</span>
+                                                <span class="align-middle d-sm-inline-block d-none">ANTERIOR REGISTRO</span>
                                             </button>
                                             <button class="btn btn-primary btn-next" type="button">
-                                                <span class="align-middle d-sm-inline-block d-none me-sm-1">CONTINUAR
-                                                    REGISTRO</span>
+                                                <span class="align-middle d-sm-inline-block d-none me-sm-1">CONTINUAR REGISTRO</span>
                                                 <i class="ti ti-arrow-right"></i>
                                             </button>
                                         </div>
@@ -326,105 +306,79 @@
                                     <div class="row g-3">
                                         <h6><b>RESPONSABLE PRINCIPAL</b></h6>
                                         <div class="col-sm-4">
-                                            <label class="form-label"
-                                                for="formValidationNombreResponsable1">Nombres</label>
-                                            <input type="text" id="formValidationNombreResponsable1"
-                                                name="nombreResponsable1" class="form-control" />
+                                            <label class="form-label" for="formValidationNombreResponsable1">Nombres</label>
+                                            <input type="text" id="formValidationNombreResponsable1" name="nombreResponsable1" class="form-control" />
                                         </div>
                                         <div class="col-sm-4">
-                                            <label class="form-label" for="formValidationApResponsable1">Apellido
-                                                Paterno</label>
-                                            <input type="text" id="formValidationApResponsable1"
-                                                name="paternoResponsable1" class="form-control" />
+                                            <label class="form-label" for="formValidationApResponsable1">Apellido Paterno</label>
+                                            <input type="text" id="formValidationApResponsable1" name="paternoResponsable1" class="form-control" />
                                         </div>
                                         <div class="col-sm-4">
-                                            <label class="form-label" for="formValidationAmResponsable1">Apellido
-                                                Materno</label>
-                                            <input type="text" id="formValidationAmResponsable1"
-                                                name="maternoResponsable1" class="form-control" />
+                                            <label class="form-label" for="formValidationAmResponsable1">Apellido Materno</label>
+                                            <input type="text" id="formValidationAmResponsable1" name="maternoResponsable1" class="form-control" />
                                         </div>
                                         <div class="col-sm-4">
-                                            <label class="form-label" for="formValidationCiResponsable1">Carnet de
-                                                Identidad</label>
-                                            <input type="number" id="formValidationCiResponsable1" name="ciResponsable1"
-                                                class="form-control" />
+                                            <label class="form-label" for="formValidationCiResponsable1">Carnet de Identidad</label>
+                                            <input type="number" id="formValidationCiResponsable1" name="ciResponsable1" class="form-control" />
                                         </div>
                                         <div class="col-sm-4">
-                                            <label class="form-label"
-                                                for="formValidationCorreoResponsable1">Correo</label>
+                                            <label class="form-label" for="formValidationCorreoResponsable1">Correo</label>
                                             <input type="email" name="correoResponsable1" class="form-control" />
                                         </div>
                                         <div class="col-sm-4">
-                                            <label class="form-label"
-                                                for="formValidationCelularResponsable1">Celular</label>
-                                            <input type="number" id="formValidationCelularResponsable1"
-                                                name="celularResponsable1" class="form-control" />
+                                            <label class="form-label" for="formValidationCelularResponsable1">Celular</label>
+                                            <input type="number" id="formValidationCelularResponsable1" name="celularResponsable1" class="form-control" />
                                         </div>
                                         <div class="col-sm-4">
                                             <label class="form-label" for="fotoResponsable1">Foto</label>
-                                            <input type="file" id="fotoResponsable1" name="fotoResponsable1"
-                                                class="form-control" accept="image/*" />
+                                            <input type="file" id="fotoResponsable1" name="fotoResponsable1" class="form-control" accept="image/*" />
                                         </div>
 
                                         <h6><b>SEGUNDO RESPONSABLE (OPCIONAL)</b></h6>
 
                                         <div class="col-sm-4">
-                                            <label class="form-label"
-                                                for="formValidationNombreResponsable2">Nombres</label>
-                                            <input type="text" id="formValidationNombreResponsable2"
-                                                name="nombreResponsable2" class="form-control" />
+                                            <label class="form-label" for="formValidationNombreResponsable2">Nombres</label>
+                                            <input type="text" id="formValidationNombreResponsable2" name="nombreResponsable2" class="form-control" />
                                         </div>
                                         <div class="col-sm-4">
-                                            <label class="form-label" for="formValidationApResponsable2">Apellido
-                                                Paterno</label>
-                                            <input type="text" id="formValidationApResponsable2"
-                                                name="paternoResponsable2" class="form-control" />
+                                            <label class="form-label" for="formValidationApResponsable2">Apellido Paterno</label>
+                                            <input type="text" id="formValidationApResponsable2" name="paternoResponsable2" class="form-control" />
                                         </div>
                                         <div class="col-sm-4">
-                                            <label class="form-label" for="formValidationAmResponsable2">Apellido
-                                                Materno</label>
-                                            <input type="text" id="formValidationAmResponsable2"
-                                                name="maternoResponsable2" class="form-control" />
+                                            <label class="form-label" for="formValidationAmResponsable2">Apellido  Materno</label>
+                                            <input type="text" id="formValidationAmResponsable2" name="maternoResponsable2" class="form-control" />
                                         </div>
                                         <div class="col-sm-4">
-                                            <label class="form-label" for="formValidationCiResponsable2">Carnet de
-                                                Identidad</label>
-                                            <input type="number" id="formValidationCiResponsable2" name="ciResponsable2"
-                                                class="form-control" />
+                                            <label class="form-label" for="formValidationCiResponsable2">Carnet de Identidad</label>
+                                            <input type="number" id="formValidationCiResponsable2" name="ciResponsable2" class="form-control" />
                                         </div>
                                         <div class="col-sm-4">
-                                            <label class="form-label"
-                                                for="formValidationCorreoResponsable2">Correo</label>
+                                            <label class="form-label" for="formValidationCorreoResponsable2">Correo</label>
                                             <input type="email" name="correoResponsable2" class="form-control" />
                                         </div>
                                         <div class="col-sm-4">
-                                            <label class="form-label"
-                                                for="formValidationCelularResponsable2">Celular</label>
-                                            <input type="number" id="formValidationCelularResponsable2"
-                                                name="celularResponsable2" class="form-control" />
+                                            <label class="form-label" for="formValidationCelularResponsable2">Celular</label>
+                                            <input type="number" id="formValidationCelularResponsable2" name="celularResponsable2" class="form-control" />
                                         </div>
 
                                         <!-- 📸 Campo para foto opcional -->
                                         <div class="col-sm-4">
                                             <label class="form-label" for="fotoResponsable2">Foto (opcional)</label>
-                                            <input type="file" id="fotoResponsable2" name="fotoResponsable2"
-                                                class="form-control" accept="image/*" />
+                                            <input type="file" id="fotoResponsable2" name="fotoResponsable2" class="form-control" accept="image/*" />
                                         </div>
-
                                         <div class="col-12 d-flex justify-content-between">
                                             <button class="btn btn-label-secondary btn-prev" type="button">
                                                 <i class="ti ti-arrow-left me-sm-1 me-0"></i>
-                                                <span class="align-middle d-sm-inline-block d-none">ANTERIOR
-                                                    REGISTRO</span>
+                                                <span class="align-middle d-sm-inline-block d-none">ANTERIOR REGISTRO</span>
                                             </button>
                                             <button class="btn btn-primary btn-next" type="button">
-                                                <span class="align-middle d-sm-inline-block d-none me-sm-1">CONTINUAR
-                                                    REGISTRO</span>
+                                                <span class="align-middle d-sm-inline-block d-none me-sm-1">CONTINUAR REGISTRO</span>
                                                 <i class="ti ti-arrow-right"></i>
                                             </button>
                                         </div>
                                     </div>
                                 </div>
+
                                 <!-- Social Links -->
                                 <div id="social-links-validation" class="content">
                                     <div class="content-header mb-3">
@@ -433,24 +387,17 @@
                                     </div>
                                     <div class="row g-3">
                                         <div class="col-sm-6">
-                                            <label class="form-label" for="formValidationCategoria">Categoría del
-                                                puesto</label>
-                                            <select class="select2" id="formValidationCategoria"
-                                                name="formValidationCategoria">
-                                                <option value="">
-                                                    -- Seleccione una categoría --
-                                                </option>
+                                            <label class="form-label" for="formValidationCategoria">Categoría del puesto</label>
+                                            <select class="select2" id="formValidationCategoria" name="formValidationCategoria">
+                                                <option value=""> -- Seleccione una categoría -- </option>
                                                 <th:block th:each="cats : ${categorias}">
                                                     <option th:value="${cats.id}" th:text="${cats.nombre}"></option>
                                                 </th:block>
                                             </select>
                                         </div>
-
                                         <div class="col-sm-6">
-                                            <label class="form-label" for="formValidationPuestosDisponibles">Puestos
-                                                Disponibles</label>
-                                            <select name="puestosSeleccionados" id="formValidationPuestosDisponibles"
-                                                class="select2 form-select" multiple>
+                                            <label class="form-label" for="formValidationPuestosDisponibles">Puestos Disponibles</label>
+                                            <select name="puestosSeleccionados" id="formValidationPuestosDisponibles" class="select2 form-select" multiple>
                                                 <!-- Se cargan dinámicamente con JS -->
                                             </select>
                                         </div>
@@ -458,12 +405,10 @@
                                         <div class="col-12 d-flex justify-content-between">
                                             <button class="btn btn-label-secondary btn-prev" type="button">
                                                 <i class="ti ti-arrow-left me-sm-1 me-0"></i>
-                                                <span class="align-middle d-sm-inline-block d-none">ANTERIOR
-                                                    REGISTRO</span>
+                                                <span class="align-middle d-sm-inline-block d-none">ANTERIOR REGISTRO</span>
                                             </button>
                                             <button class="btn btn-primary btn-next" type="button">
-                                                <span class="align-middle d-sm-inline-block d-none me-sm-1">CONTINUAR
-                                                    REGISTRO</span>
+                                                <span class="align-middle d-sm-inline-block d-none me-sm-1">CONTINUAR REGISTRO</span>
                                                 <i class="ti ti-arrow-right"></i>
                                             </button>
                                         </div>
@@ -472,15 +417,13 @@
 
                                 <div id="pago-links-validation" class="content">
                                     <div class="content-header mb-3">
-                                        <h6 class="card-header">ADJUNTAR COMPROBANTE | TOTAL A PAGAR : <span
-                                                id="totalPagar" class="badge bg-success ms-2">Bs 0.00</span></h6>
-                                                <h4>10000000637922 CAT. CTE M/N FISCAL</h4>
+                                        <h6 class="card-header">ADJUNTAR COMPROBANTE | TOTAL A PAGAR : <span id="totalPagar" class="badge bg-success ms-2">Bs 0.00</span></h6>
+                                        <h4>10000000637922 CAT. CTE M/N FISCAL</h4>
                                     </div>
                                     <div class="row g-3">
 
                                         <div class="form-check mb-3">
-                                            <input class="form-check-input" type="checkbox" id="pagoContado"
-                                                name="pagoContado">
+                                            <input class="form-check-input" type="checkbox" id="pagoContado" name="pagoContado">
                                             <label class="form-check-label fw-bold" for="pagoContado">
                                                 Pago al contado
                                             </label>
@@ -492,20 +435,18 @@
                                                 <select name="entidadBancaria" class="form-control">
                                                     <option value="">-- Seleccione una entidad bancaria --</option>
                                                     <option value="Banco Unión">Banco Unión</option>
+                                                    <option value="Promotora">Promotora</option>
                                                     <option value="Banco Solidario">BancoSol</option>
                                                     <option value="Banco Ganadero">Banco Ganadero</option>
                                                     <option value="Banco fie">BancoFie</option>
                                                     <option value="Ecofuturo">Ecofuturo</option>
-                                                    <option value="Banco Nacional de Bolivia">Banco Nacional de Bolivia
-                                                        (BNB)</option>
-                                                    <option value="Banco Mercantil Santa Cruz">Banco Mercantil Santa
-                                                        Cruz</option>
+                                                    <option value="Banco Nacional de Bolivia">Banco Nacional de Bolivia (BNB)</option>
+                                                    <option value="Banco Mercantil Santa Cruz">Banco Mercantil Santa Cruz</option>
                                                     <option value="Banco Económico">Banco Económico</option>
                                                     <option value="Banco PRODEM">Banco PRODEM</option>
                                                     <option value="Banco Bisa">Banco Bisa</option>
                                                 </select>
                                             </div>
-
 
                                             <div class="mb-3">
                                                 <label class="form-label">Número de comprobante</label>
@@ -514,16 +455,14 @@
 
                                             <div class="mb-3">
                                                 <label class="form-label">Adjuntar imagen del comprobante</label>
-                                                <input type="file" name="comprobante" accept="image/*"
-                                                    class="form-control" />
+                                                <input type="file" name="comprobante" accept="image/*" class="form-control" />
                                             </div>
                                         </div>
 
                                         <div class="col-12 d-flex justify-content-between">
                                             <button class="btn btn-label-secondary btn-prev" type="button">
                                                 <i class="ti ti-arrow-left me-sm-1 me-0"></i>
-                                                <span class="align-middle d-sm-inline-block d-none">ANTERIOR
-                                                    REGISTRO</span>
+                                                <span class="align-middle d-sm-inline-block d-none">ANTERIOR REGISTRO</span>
                                             </button>
                                             <button class="btn btn-success btn-next btn-submit" type="submit">
                                                 COMPLETAR REGISTRO
@@ -538,7 +477,6 @@
                         <br>
                     </div>
 
-                    <!-- Filtro arriba (opcional) -->
                     <div class="d-flex align-items-center justify-content-between mb-3">
                         <h5 class="mb-0">Mis inscripciones</h5>
                         <div class="input-group" style="max-width: 320px;">
@@ -554,30 +492,23 @@
 
                     <div th:if="${!#lists.isEmpty(inscripciones)}" class="card">
                         <div class="card-body p-0">
-
-                            <!-- Contenedor scrollable, pero con Acciones pegajoso -->
                             <div class="table-responsive position-relative">
                                 <table class="table table-hover align-middle mb-0">
                                     <thead class="table-dark">
                                         <tr>
                                             <th style="width:56px">#</th>
-
-                                            <!-- Columnas esenciales (si quieres, oculta algunas en sm) -->
                                             <th style="min-width:220px">Entidad</th>
                                             <th class="d-none d-md-table-cell" style="min-width:120px">Categoría</th>
                                             <th class="d-none d-lg-table-cell" style="min-width:160px">Objeto</th>
-                                            <th class="d-none d-xl-table-cell" style="min-width:160px">Representante
-                                            </th>
+                                            <th class="d-none d-xl-table-cell" style="min-width:160px">Representante</th>
                                             <th class="d-none d-xl-table-cell" style="min-width:110px">NIT</th>
                                             <th style="min-width:110px">Pago</th>
                                             <th style="min-width:120px" class="text-end">Total (Bs)</th>
                                             <th style="min-width:150px">Fecha</th>
-
-                                            <!-- Columna acciones “sticky” a la derecha -->
                                             <th class="sticky-col-right text-center" style="width:150px">Acciones</th>
                                         </tr>
                                     </thead>
-
+                                    
                                     <tbody id="tablaInscripciones">
                                         <th:block th:each="row, i : ${inscripciones}">
                                             <tr>
@@ -623,10 +554,8 @@
                                                         th:text="${#dates.format(row['fecha_registro'], 'dd/MM/yyyy HH:mm')}"></span>
                                                 </td>
 
-                                                <!-- Acciones sticky -->
                                                 <td class="sticky-col-right text-center bg-body">
                                                     <div class="btn-group btn-group-sm">
-                                                        <!-- Botón de “Detalles” para desplegar panel interno -->
                                                         <button class="btn btn-outline-secondary" type="button"
                                                             data-bs-toggle="collapse"
                                                             th:attr="data-bs-target=${'#det-' + i.index}"
@@ -654,7 +583,6 @@
                                                     <div class="collapse border-top" th:id="${'det-' + i.index}">
                                                         <div class="p-3">
                                                             <div class="kv-grid small">
-                                                                <!-- Campo largo ocupa todo el ancho -->
                                                                 <div class="kv-item kv-item--wide">
                                                                     <div class="kv-label">Objeto</div>
                                                                     <div class="kv-value kv-multiline" th:text="${row['objeto']}"></div>
@@ -702,11 +630,9 @@
                                                                     </div>
                                                                 </div>
                                                             </div>
-
-
-                                                            <!-- Botón actualizar adicional dentro del panel (opcional en móviles) -->
-                                                            <!-- <div class="mt-3 d-md-none">
-                                                                <a class="btn btn-primary w-100" th:href="@{|/inscripciones/editar/${row['id_entidad']}|}">
+                                                            <div class="mt-3 d-md-none">
+                                                                <a class="btn btn-primary w-100"
+                                                                    th:href="@{|/inscripciones/editar/${row['id_entidad']}|}">
                                                                     <i class="bi bi-pencil-square"></i> Actualizar
                                                                 </a>
                                                             </div> -->
@@ -722,8 +648,7 @@
                                                 </td>
                                             </tr>
                                         </th:block>
-                                        <!-- FIN each -->
-                                    </tbody>
+                                    </tbody> 
                                 </table>
                             </div>
                         </div>
@@ -814,6 +739,8 @@
                             });
                         }
                     </script>
+                    <!-- En tu layout o en la vista final -->
+                    
 
                     <span style="display:none" id="debugInsId" th:text="${inscripcionId}"></span>
 
@@ -822,7 +749,6 @@
             </div>
         </div>
     </div>
-
     <div th:replace="~{layout/script :: script}"></div>
     <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
     <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css" />
