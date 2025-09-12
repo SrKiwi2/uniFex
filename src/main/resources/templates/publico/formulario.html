@@ -3,36 +3,70 @@
         <h4 class="modal-title" th:text="${edit}? 'Modificar Responsable' : 'Registrar Responsable'"></h4>
         <a type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></a>
     </div>
-    <form id="formularioResponsable" method="post" th:object="${inscripcion}" novalidate>
+    
+    <form id="formularioResponsable" th:object="${inscripcion}" enctype="multipart/form-data">
         <input type="hidden" th:if="${edit != null}" th:field="*{id}">
 
-    <div class="modal-body">
-        <div class="row">
-            <div class="col-12 col-md-6">
-                <label class="form-label">Nombre de Entidad Bancaria</label>
-                <input type="text" th:field="*{entidadBancaria}" class="form-control" required />
-                <div class="valid-feedback">Correcto!</div>
-                <div class="invalid-feedback">Por favor introduzca un Dato.</div>
+        <div class="modal-body">
+            <div class="row">
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Nombre de Entidad Bancaria</label>
+                    <input type="text" th:field="*{entidadBancaria}" class="form-control" required />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Número de comprobante</label>
+                    <input type="number" th:field="*{numComprobante}" class="form-control" required />
+                </div>
             </div>
-            <div class="col-12 col-md-6">
-                <label class="form-label">Numero de comprobante</label>
-                <input type="text" th:field="*{numComprobante}" class="form-control" required />
-                <div class="valid-feedback">Correcto!</div>
-                <div class="invalid-feedback">Por favor introduzca un Dato.</div>
+            <div class="row">
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Imagen del comprobante</label>
+                    <input type="file" name="comprobante" accept="image/*" class="form-control" />
+                    
+                    <div th:if="*{imgComprobante != null}">
+                        <small class="text-muted">Archivo actual: <span th:text="*{imgComprobante}"></span></small>
+                    </div>
+                </div>
             </div>
+
+            <hr>
+
+            <div class="row">
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Nombre de Entidad</label>
+                    <input type="text" th:field="*{entidad.nombre}" class="form-control" required />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Número de Nit</label>
+                    <input type="number" th:field="*{entidad.nit}" class="form-control" required />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Descripcion de la Entidad</label>
+                    <input type="text" th:field="*{entidad.descripcion}" class="form-control" required />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Objetivo del Rubro</label>
+                    <input type="text" th:field="*{entidad.Objeto}" class="form-control" required />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Nombre del Representante Legal</label>
+                    <input type="text" th:field="*{entidad.RepresentanteLegal}" class="form-control" required />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label">C.I. del Representate Legal</label>
+                    <input type="text" th:field="*{entidad.ciRepresentante}" class="form-control" required />
+                </div>
+            </div>
+
         </div>
-        <div class="row">
-            <div class="col-12 col-md-6">
-                <label class="form-label">Imagen del comprobante</label>
-                <input type="file" name="comprobante" accept="image/*" class="form-control" />
-            </div>
+
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <input type="submit" class="btn btn-success" th:value="${edit}? 'Guardar Cambios' : 'Guardar Registro'">
         </div>
-    </div>
-    <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-        <input type="submit" class="btn btn-success" th:value="${edit}? 'Guardar Cambios' : 'Guardar Registro'">
-    </div>
-    
     </form>
 </th:block>
-

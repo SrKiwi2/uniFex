@@ -3,17 +3,23 @@ package com.usic.uniFex.controller.responsables;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.usic.uniFex.Config.Encriptar;
 import com.usic.uniFex.anotacion.ValidarUsuarioAutenticado;
+import com.usic.uniFex.model.IService.IEntidadService;
 import com.usic.uniFex.model.IService.IInscripcionPuestoService;
 import com.usic.uniFex.model.IService.IInscripcionService;
 import com.usic.uniFex.model.IService.IResponsableService;
+import com.usic.uniFex.model.entity.Entidad;
 import com.usic.uniFex.model.entity.Inscripcion;
 import com.usic.uniFex.model.entity.Usuario;
 
@@ -28,6 +34,8 @@ public class ResponsablesController {
     private final IResponsableService responsableService;
 
     private final IInscripcionService inscripcionService;
+
+    private final IEntidadService entidadService;
     
     @ValidarUsuarioAutenticado
     @GetMapping("/vista")
@@ -93,22 +101,39 @@ public class ResponsablesController {
     }
 
 
-    @ValidarUsuarioAutenticado
     @PostMapping("/modificar-inscripcion")
-    public ResponseEntity<String> modificar(HttpServletRequest request, Inscripcion inscripcion) {
-        // Inscripcion original = usuarioService.findById(usuario.getId());
-        // if (original == null) return ResponseEntity.badRequest().body("Usuario no encontrado.");
+    public ResponseEntity<String> modificar(
+            @ModelAttribute Inscripcion inscripcion,
+            @RequestParam(value = "comprobante", required = false) MultipartFile comprobante) {
 
-        // // copia campos editables excepto password
-        // original.setUsername(usuario.getUsername());
-        // original.setPersona(usuario.getPersona());
-        // original.setRol(usuario.getRol());
-        // original.setEstado("ACTIVO");
+        Inscripcion existente = inscripcionService.findById(inscripcion.getId());
 
-        // Usuario usuarioLogueado = (Usuario) request.getSession().getAttribute("usuario");
-        // original.setModificacionIdUsuario(usuarioLogueado.getId());
+        // actualizar datos de la inscripción
+        existente.setEntidadBancaria(inscripcion.getEntidadBancaria());
+        existente.setNumComprobante(inscripcion.getNumComprobante());
 
-        // usuarioService.save(original);
+        // actualizar datos de la entidad asociada
+        Entidad entidadExistente = existente.getEntidad();
+        if (entidadExistente == null) {
+            entidadExistente = new Entidad();
+        }
+        entidadExistente.setNombre(inscripcion.getEntidad().getNombre());
+        entidadExistente.setNit(inscripcion.getEntidad().getNit());
+        entidadExistente.setDescripcion(inscripcion.getEntidad().getDescripcion());
+        entidadExistente.setObjeto(inscripcion.getEntidad().getObjeto());
+        existente.setEntidad(entidadExistente);
+
+        // manejar comprobante
+        if (comprobante != null && !comprobante.isEmpty()) {
+            String fileName = comprobante.getOriginalFilename();
+            existente.setImgComprobante(fileName);
+        }
+
+        inscripcionService.save(existente); // gracias a cascada también guarda entidad
+
         return ResponseEntity.ok("Se realizó la modificación correctamente");
     }
+
+
+
 }

@@ -929,6 +929,39 @@
                 }
             });
         }
+
+        $(document).on("submit", "#formularioResponsable", function(e) {
+            e.preventDefault();
+
+            let form = $(this)[0];
+            let formData = new FormData(form);
+
+            // verificar archivo
+            let fileInput = form.querySelector('input[name="comprobante"]');
+            if (fileInput.files.length > 0) {
+                console.log("Archivo seleccionado:", fileInput.files[0].name);
+            } else {
+                console.log("No se subió ningún archivo");
+            }
+
+            $.ajax({
+                url: "/administracion/responsables/modificar-inscripcion",
+                type: "POST",
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    alert(response);
+                },
+                error: function(xhr) {
+                    alert("Error: " + xhr.responseText);
+                }
+            });
+        });
+
+
+
+        
     </script>
 
     <script th:if="${inscripcionId != null}" th:inline="javascript">
