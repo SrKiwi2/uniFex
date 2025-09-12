@@ -82,6 +82,11 @@ public class ResponsableServiceImpl implements IResponsableService{
         return responsableDao.listarVista();
     }
 
+    @Override
+    public List<Responsable> findByEntidadIdWithPersona(Long entidadId) {
+        return responsableDao.findByEntidadIdWithPersona(entidadId);
+    }
+
 
     
 }

@@ -9,6 +9,41 @@
 
         <div class="modal-body">
             <div class="row">
+                <h4>DATOS DE LA ENTIDAD</h4>
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Nombre entidad</label>
+                    <input type="text" th:field="*{entidad.nombre}" class="form-control" required />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label">NIT</label>
+                    <input type="text" th:field="*{entidad.nit}" class="form-control" required />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Descripcion de la entidad</label>
+                    <input type="text" th:field="*{entidad.descripcion}" class="form-control" required />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Objetivo de contratacion</label>
+                    <input type="text" th:field="*{entidad.Objeto}" class="form-control" required />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Representante legal</label>
+                    <input type="text" th:field="*{entidad.RepresentanteLegal}" class="form-control" required />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label">C.I representante legal</label>
+                    <input type="text" th:field="*{entidad.ciRepresentante}" class="form-control" required />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Tipo entidad</label>
+                    <select id="select2Basic" class="select2 form-select form-select-lg" th:field="*{entidad.tipoEntidad.id}" required>
+                        <option value="" disabled selected>— Seleccione —</option>
+                        <option th:each="te : ${tipoEntidades}"
+                                th:value="${te.id}"
+                                th:text="${te.nombre}">
+                        </option>
+                    </select>
+                </div>
                 <div class="col-12 col-md-6">
                     <label class="form-label">Nombre de Entidad Bancaria</label>
                     <input type="text" th:field="*{entidadBancaria}" class="form-control" required />
@@ -16,6 +51,26 @@
                 <div class="col-12 col-md-6">
                     <label class="form-label">Número de comprobante</label>
                     <input type="number" th:field="*{numComprobante}" class="form-control" required />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Tipo entidad</label>
+                    <select id="select2Basic" class="select2 form-select form-select-lg" th:field="*{inscripcion.inscripcionPuestos.puesto.codigo}" required>
+                        <option value="" disabled selected>— Seleccione —</option>
+                        <option th:each="te : ${tipoEntidades}"
+                                th:value="${te.id}"
+                                th:text="${te.nombre}">
+                        </option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Tipo entidad</label>
+                    <select id="select2Basic" class="select2 form-select form-select-lg" th:field="*{entidad.tipoEntidad.id}" required>
+                        <option value="" disabled selected>— Seleccione —</option>
+                        <option th:each="te : ${tipoEntidades}"
+                                th:value="${te.id}"
+                                th:text="${te.nombre}">
+                        </option>
+                    </select>
                 </div>
             </div>
             <div class="row">
@@ -28,42 +83,49 @@
                     </div>
                 </div>
             </div>
-
             <hr>
-
-            <div class="row">
-                <div class="col-12 col-md-6">
-                    <label class="form-label">Nombre de Entidad</label>
-                    <input type="text" th:field="*{entidad.nombre}" class="form-control" required />
-                </div>
-                <div class="col-12 col-md-6">
-                    <label class="form-label">Número de Nit</label>
-                    <input type="number" th:field="*{entidad.nit}" class="form-control" required />
-                </div>
-            </div>
-            <div class="row">
-                <div class="col-12 col-md-6">
-                    <label class="form-label">Descripcion de la Entidad</label>
-                    <input type="text" th:field="*{entidad.descripcion}" class="form-control" required />
-                </div>
-                <div class="col-12 col-md-6">
-                    <label class="form-label">Objetivo del Rubro</label>
-                    <input type="text" th:field="*{entidad.Objeto}" class="form-control" required />
-                </div>
-            </div>
-            <div class="row">
-                <div class="col-12 col-md-6">
-                    <label class="form-label">Nombre del Representante Legal</label>
-                    <input type="text" th:field="*{entidad.RepresentanteLegal}" class="form-control" required />
-                </div>
-                <div class="col-12 col-md-6">
-                    <label class="form-label">C.I. del Representate Legal</label>
-                    <input type="text" th:field="*{entidad.ciRepresentante}" class="form-control" required />
-                </div>
-            </div>
-
         </div>
+    </form>
+    <form id="formResponsables" th:object="${responsablesForm}">
+        <input type="hidden" th:field="*{entidadId}">
+        <input type="hidden" th:field="*{inscripcionId}">
+        
+        <h6 class="mt-3">Responsables de la entidad (máx. 2)</h6>
+        <div class="row g-3">
+            <div class="col-12 col-md-6" th:each="r,idx : *{responsables}">
+            <div class="card h-100">
+                <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="fw-semibold">Responsable [[${idx.index + 1}]]</span>
+                    <div class="form-check">
+                    <input class="form-check-input" type="checkbox" th:field="*{responsables[__${idx.index}__].eliminar}">
+                    <label class="form-check-label">Eliminar</label>
+                    </div>
+                </div>
+                <input type="hidden" th:field="*{responsables[__${idx.index}__].responsableId}">
+                <input type="hidden" th:field="*{responsables[__${idx.index}__].personaId}">
 
+                <label class="form-label">Nombre</label>
+                <input class="form-control mb-2" th:field="*{responsables[__${idx.index}__].nombre}" />
+
+                <label class="form-label">Paterno</label>
+                <input class="form-control mb-2" th:field="*{responsables[__${idx.index}__].paterno}" />
+
+                <label class="form-label">Materno</label>
+                <input class="form-control mb-2" th:field="*{responsables[__${idx.index}__].materno}" />
+
+                <label class="form-label">CI</label>
+                <input class="form-control mb-2" th:field="*{responsables[__${idx.index}__].ci}" />
+
+                <label class="form-label">Correo</label>
+                <input class="form-control mb-2" th:field="*{responsables[__${idx.index}__].correo}" />
+
+                <label class="form-label">Celular</label>
+                <input class="form-control" th:field="*{responsables[__${idx.index}__].celular}" />
+                </div>
+            </div>
+            </div>
+        </div>
         <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
             <input type="submit" class="btn btn-success" th:value="${edit}? 'Guardar Cambios' : 'Guardar Registro'">

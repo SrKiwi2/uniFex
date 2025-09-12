@@ -1,9 +1,10 @@
 package com.usic.uniFex.controller.responsables;
 
+import java.util.List;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -13,17 +14,18 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.usic.uniFex.Config.Encriptar;
 import com.usic.uniFex.anotacion.ValidarUsuarioAutenticado;
 import com.usic.uniFex.model.IService.IEntidadService;
-import com.usic.uniFex.model.IService.IInscripcionPuestoService;
 import com.usic.uniFex.model.IService.IInscripcionService;
 import com.usic.uniFex.model.IService.IResponsableService;
+import com.usic.uniFex.model.IService.ITipoEntidadService;
+import com.usic.uniFex.model.dto.ResponsablePersonaDTO;
+import com.usic.uniFex.model.dto.ResponsablesEditForm;
 import com.usic.uniFex.model.entity.Entidad;
 import com.usic.uniFex.model.entity.Inscripcion;
-import com.usic.uniFex.model.entity.Usuario;
+import com.usic.uniFex.model.entity.Persona;
+import com.usic.uniFex.model.entity.Responsable;
 
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 
 @Controller
@@ -34,6 +36,7 @@ public class ResponsablesController {
     private final IResponsableService responsableService;
 
     private final IInscripcionService inscripcionService;
+    private final ITipoEntidadService tipoEntidadService;
 
     private final IEntidadService entidadService;
     
@@ -85,21 +88,47 @@ public class ResponsablesController {
     //     return "publico/formulario";
     // }
 
-
-
-
     @ValidarUsuarioAutenticado
     @GetMapping("/formulario-edit/{id_inscripcion}")
     public String modalResponsable(@PathVariable("id_inscripcion") Long id_inscripcion,Model model) {
+        Inscripcion ins = inscripcionService.findById(id_inscripcion);
+        if (ins.getEntidad() == null) ins.setEntidad(new Entidad());
+
+        List<Responsable> lista = ins.getEntidad().getId() == null
+            ? List.of()
+            : responsableService.findByEntidadIdWithPersona(ins.getEntidad().getId());
         
-        model.addAttribute("inscripcion", inscripcionService.findById(id_inscripcion));
+        ResponsablesEditForm respForm = new ResponsablesEditForm();
+        respForm.setEntidadId(ins.getEntidad().getId());
+        respForm.setInscripcionId(ins.getId());
 
+        for (Responsable r : lista) {
+            Persona p = r.getPersona();
+            ResponsablePersonaDTO dto = new ResponsablePersonaDTO();
+            dto.setResponsableId(r.getId());
+            if (p != null) {
+            dto.setPersonaId(p.getId());
+            dto.setNombre(p.getNombre());
+            dto.setPaterno(p.getPaterno());
+            dto.setMaterno(p.getMaterno());
+            dto.setCi(p.getCi());
+            dto.setCorreo(p.getCorreo());
+            dto.setCelular(p.getCelular());
+            }
+            respForm.getResponsables().add(dto);
+        }
 
+        // Rellenar hasta 2 slots para el UI
+        while (respForm.getResponsables().size() < 2) {
+            respForm.getResponsables().add(new ResponsablePersonaDTO());
+        }
+
+        model.addAttribute("inscripcion", ins);
+        model.addAttribute("tipoEntidades", tipoEntidadService.findAll());
+        model.addAttribute("responsablesForm", respForm);
         model.addAttribute("edit", "true");
-
         return "publico/formulario :: modalContent";
     }
-
 
     @PostMapping("/modificar-inscripcion")
     public ResponseEntity<String> modificar(
