@@ -1,5 +1,10 @@
 package com.usic.uniFex.controller.responsables;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -18,9 +23,12 @@ import com.usic.uniFex.anotacion.ValidarUsuarioAutenticado;
 import com.usic.uniFex.model.IService.IEntidadService;
 import com.usic.uniFex.model.IService.IInscripcionPuestoService;
 import com.usic.uniFex.model.IService.IInscripcionService;
+import com.usic.uniFex.model.IService.IPersonaService;
 import com.usic.uniFex.model.IService.IResponsableService;
 import com.usic.uniFex.model.entity.Entidad;
 import com.usic.uniFex.model.entity.Inscripcion;
+import com.usic.uniFex.model.entity.Persona;
+import com.usic.uniFex.model.entity.Responsable;
 import com.usic.uniFex.model.entity.Usuario;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -36,6 +44,8 @@ public class ResponsablesController {
     private final IInscripcionService inscripcionService;
 
     private final IEntidadService entidadService;
+
+    private final IPersonaService personaService;
     
     @ValidarUsuarioAutenticado
     @GetMapping("/vista")
@@ -94,9 +104,6 @@ public class ResponsablesController {
         
         model.addAttribute("inscripcion", inscripcionService.findById(id_inscripcion));
 
-
-        model.addAttribute("edit", "true");
-
         return "publico/formulario :: modalContent";
     }
 
@@ -105,6 +112,9 @@ public class ResponsablesController {
     public ResponseEntity<String> modificar(
             @ModelAttribute Inscripcion inscripcion,
             @RequestParam(value = "comprobante", required = false) MultipartFile comprobante) {
+
+
+        System.out.println(inscripcion.getId());
 
         Inscripcion existente = inscripcionService.findById(inscripcion.getId());
 
@@ -116,7 +126,9 @@ public class ResponsablesController {
         Entidad entidadExistente = existente.getEntidad();
         if (entidadExistente == null) {
             entidadExistente = new Entidad();
+            entidadExistente.setResponsables(new ArrayList<>()); // <- importante
         }
+
         entidadExistente.setNombre(inscripcion.getEntidad().getNombre());
         entidadExistente.setNit(inscripcion.getEntidad().getNit());
         entidadExistente.setDescripcion(inscripcion.getEntidad().getDescripcion());
@@ -129,11 +141,55 @@ public class ResponsablesController {
             existente.setImgComprobante(fileName);
         }
 
-        inscripcionService.save(existente); // gracias a cascada también guarda entidad
+        List<Responsable> nuevosResponsables = inscripcion.getEntidad().getResponsables();
+        if (nuevosResponsables != null) {
+            List<Responsable> filtrados = nuevosResponsables.stream()
+                .filter(r -> r.getPersona() != null && r.getPersona().getNombre() != null && !r.getPersona().getNombre().trim().isEmpty())
+                .collect(Collectors.toList());
 
-        return ResponseEntity.ok("Se realizó la modificación correctamente");
-    }
+            if (entidadExistente.getResponsables() == null) {
+                entidadExistente.setResponsables(new ArrayList<>());
+            }
 
+            // Map de existentes
+            Map<Long, Responsable> responsablesExistentesMap = entidadExistente.getResponsables()
+                    .stream()
+                    .collect(Collectors.toMap(Responsable::getId, r -> r));
 
+            List<Responsable> responsablesActualizados = new ArrayList<>();
+
+            for (Responsable r : filtrados) {
+                if (r.getId() != null) {
+                    // actualizar responsable existente
+                    Responsable respExistente = responsablesExistentesMap.get(r.getId());
+                    if (respExistente != null) {
+                        Persona p = r.getPersona();
+                        if (p != null && p.getId() != null) {
+                            Persona personaExistente = personaService.findById(p.getId());
+                            if (personaExistente != null) {
+                                personaExistente.setNombre(p.getNombre());
+                                respExistente.setPersona(personaExistente);
+                            }
+                        }
+                        responsablesActualizados.add(respExistente);
+                    }
+                } else {
+                    // nuevo responsable válido
+                    Persona p = r.getPersona();
+                    if (p != null && (p.getId() == null || p.getId() == 0)) {
+                        personaService.save(p);
+                    }
+                    r.setEntidad(entidadExistente);
+                    responsablesActualizados.add(r);
+                }
+            }
+
+            entidadExistente.setResponsables(responsablesActualizados);
+        }
+
+            inscripcionService.save(existente); // gracias a cascada también guarda entidad
+
+            return ResponseEntity.ok("Se realizó la modificación correctamente");
+        }
 
 }

@@ -5,7 +5,7 @@
     </div>
     
     <form id="formularioResponsable" th:object="${inscripcion}" enctype="multipart/form-data">
-        <input type="hidden" th:if="${edit != null}" th:field="*{id}">
+        <input type="hidden" th:field="*{id}">
 
         <div class="modal-body">
             <div class="row">
@@ -61,6 +61,44 @@
                     <input type="text" th:field="*{entidad.ciRepresentante}" class="form-control" required />
                 </div>
             </div>
+
+            <hr>
+
+            <!-- Mostrar responsables existentes -->
+<th:block th:each="resp, iterStat : *{entidad.responsables}">
+    <div class="row">
+        <input type="hidden" th:field="*{entidad.responsables[__${iterStat.index}__].id}" />
+        <input type="hidden" th:field="*{entidad.responsables[__${iterStat.index}__].persona.id}" />
+
+        <div class="col-12 col-md-4">
+            <label class="form-label"
+                   th:text="${iterStat.index == 0 ? 'Nombre del Primer Responsable' : 'Nombre del Segundo Responsable (Opcional)'}">
+            </label>
+            <input type="text" th:field="*{entidad.responsables[__${iterStat.index}__].persona.nombre}" class="form-control" />
+        </div>
+    </div>
+</th:block>
+
+<!-- Si hay menos de 2 responsables, agregar un slot para el segundo -->
+<th:block th:if="${#lists.size(inscripcion.entidad.responsables) < 2}">
+    <div class="row">
+        <input type="hidden" th:field="*{entidad.responsables[__${#lists.size(inscripcion.entidad.responsables)}__].id}" />
+        <input type="hidden" th:field="*{entidad.responsables[__${#lists.size(inscripcion.entidad.responsables)}__].persona.id}" />
+
+        <div class="col-12 col-md-4">
+            <label class="form-label">Nombre del Segundo Responsable (Opcional)</label>
+            <input type="text" th:field="*{entidad.responsables[__${#lists.size(inscripcion.entidad.responsables)}__].persona.nombre}" class="form-control" />
+        </div>
+    </div>
+</th:block>
+
+
+            
+
+
+
+
+ 
 
         </div>
 
