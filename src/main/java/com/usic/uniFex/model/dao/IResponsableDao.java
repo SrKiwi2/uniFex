@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.usic.uniFex.model.dto.ResponsableListadoView;
 import com.usic.uniFex.model.entity.Responsable;
@@ -53,4 +54,14 @@ public interface IResponsableDao extends JpaRepository <Responsable, Long>{
         order by e.nombre asc, p.paterno asc, p.nombre asc
     """)
     List<ResponsableListadoView> listarVista();
+
+
+    @EntityGraph(attributePaths = {"persona"}) // evita LazyInitialization en la vista
+    @Query("""
+            select r
+            from Responsable r
+            where r.entidad.id = :entidadId
+            order by r.persona.paterno, r.persona.materno, r.persona.nombre
+            """)
+    List<Responsable> findByEntidadIdWithPersona(@Param("entidadId") Long entidadId);
 }

@@ -8,7 +8,6 @@ import java.util.stream.Collectors;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,20 +17,20 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.usic.uniFex.Config.Encriptar;
 import com.usic.uniFex.anotacion.ValidarUsuarioAutenticado;
 import com.usic.uniFex.model.IService.IEntidadService;
-import com.usic.uniFex.model.IService.IInscripcionPuestoService;
 import com.usic.uniFex.model.IService.IInscripcionService;
 import com.usic.uniFex.model.IService.IPersonaService;
 import com.usic.uniFex.model.IService.IResponsableService;
+import com.usic.uniFex.model.IService.ITipoEntidadService;
+import com.usic.uniFex.model.dto.ResponsablePersonaDTO;
+import com.usic.uniFex.model.dto.ResponsablesEditForm;
 import com.usic.uniFex.model.entity.Entidad;
 import com.usic.uniFex.model.entity.Inscripcion;
 import com.usic.uniFex.model.entity.Persona;
 import com.usic.uniFex.model.entity.Responsable;
 import com.usic.uniFex.model.entity.Usuario;
 
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 
 @Controller
@@ -42,6 +41,7 @@ public class ResponsablesController {
     private final IResponsableService responsableService;
 
     private final IInscripcionService inscripcionService;
+    private final ITipoEntidadService tipoEntidadService;
 
     private final IEntidadService entidadService;
 
@@ -95,9 +95,6 @@ public class ResponsablesController {
     //     return "publico/formulario";
     // }
 
-
-
-
     @ValidarUsuarioAutenticado
     @GetMapping("/formulario-edit/{id_inscripcion}")
     public String modalResponsable(@PathVariable("id_inscripcion") Long id_inscripcion,Model model) {
@@ -106,7 +103,6 @@ public class ResponsablesController {
 
         return "publico/formulario :: modalContent";
     }
-
 
     @PostMapping("/modificar-inscripcion")
     public ResponseEntity<String> modificar(

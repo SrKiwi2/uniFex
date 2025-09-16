@@ -630,19 +630,6 @@
                                                                     </div>
                                                                 </div>
                                                             </div>
-                                                            <div class="mt-3 d-md-none">
-                                                                <a class="btn btn-primary w-100"
-                                                                    th:href="@{|/inscripciones/editar/${row['id_entidad']}|}">
-                                                                    <i class="bi bi-pencil-square"></i> Actualizar
-                                                                </a>
-                                                            </div> -->
-
-                                                            <div class="mt-3 d-md-none">
-                                                                <button type="button" class="btn btn-primary w-100" th:onclick="cargarFormularioEdit([[${row['id_entidad']}]])" data-bs-toggle="modal" data-bs-target="#modalFormularioResponsable">
-                                                                    <i class="bi bi-pencil-square"></i><span class="d-none d-xxl-inline">Actualizar</span>
-                                                                </button>
-                                                            </div>                                                            
-
                                                         </div>
                                                     </div>
                                                 </td>
@@ -654,7 +641,7 @@
                         </div>
                     </div>
                     <div class="modal fade" id="modalFormularioResponsable" tabindex="-1" aria-hidden="true">
-                        <div class="modal-dialog modal-lg">
+                        <div class="modal-dialog modal-xl">
                             <div class="modal-content" id="contenidoModalResponsable"></div>
                         </div>
                     </div>
