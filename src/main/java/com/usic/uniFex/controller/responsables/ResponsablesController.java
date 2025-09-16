@@ -3,8 +3,10 @@ package com.usic.uniFex.controller.responsables;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -16,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.usic.uniFex.anotacion.ValidarUsuarioAutenticado;
 import com.usic.uniFex.model.IService.IEntidadService;
@@ -29,7 +32,6 @@ import com.usic.uniFex.model.entity.Entidad;
 import com.usic.uniFex.model.entity.Inscripcion;
 import com.usic.uniFex.model.entity.Persona;
 import com.usic.uniFex.model.entity.Responsable;
-import com.usic.uniFex.model.entity.Usuario;
 
 import lombok.RequiredArgsConstructor;
 
@@ -46,14 +48,14 @@ public class ResponsablesController {
     private final IEntidadService entidadService;
 
     private final IPersonaService personaService;
-    
+
     @ValidarUsuarioAutenticado
     @GetMapping("/vista")
     public String vista_responsables() {
         return "responsables/vista";
     }
 
-    @RequestMapping(value = "/tabla-registros", method = {RequestMethod.GET, RequestMethod.POST})
+    @RequestMapping(value = "/tabla-registros", method = { RequestMethod.GET, RequestMethod.POST })
     public String tabla_responsbales(Model model) {
         model.addAttribute("responsables", responsableService.listarParaTabla());
         return "responsables/tabla_registro";
@@ -66,7 +68,7 @@ public class ResponsablesController {
         return "responsable_rueda/vista";
     }
 
-    @RequestMapping(value = "/tabla-registrosR", method = {RequestMethod.GET, RequestMethod.POST})
+    @RequestMapping(value = "/tabla-registrosR", method = { RequestMethod.GET, RequestMethod.POST })
     public String tabla_responsbalesR(Model model) {
         model.addAttribute("responsables", responsableService.listarVista());
         return "responsable_rueda/tabla_registro";
@@ -75,40 +77,103 @@ public class ResponsablesController {
     // @ValidarUsuarioAutenticado
     // @PostMapping("/formulario")
     // public String formulario(Model model, Usuario usuario) {
-    //     model.addAttribute("usuario", new Usuario());
-    //     // model.addAttribute("listaPersonas", personaService.listarPersonas());
-    //     // model.addAttribute("listaRoles", rolService.findAll());
+    // model.addAttribute("usuario", new Usuario());
+    // // model.addAttribute("listaPersonas", personaService.listarPersonas());
+    // // model.addAttribute("listaRoles", rolService.findAll());
 
-    //     return "publico/formulario";
+    // return "publico/formulario";
     // }
 
     // @ValidarUsuarioAutenticado
     // @PostMapping("/formulario-edit/{id_usuario}")
-    // public String formularioEdit(Model model, @PathVariable("id_usuario") String idUsuario) throws Exception {
+    // public String formularioEdit(Model model, @PathVariable("id_usuario") String
+    // idUsuario) throws Exception {
 
-    //     Long id = Long.parseLong(Encriptar.decrypt(idUsuario));
-    //     // model.addAttribute("usuario", usuarioService.findById(id));
-    //     // model.addAttribute("listaPersonas", personaService.listarPersonas());
-    //     // model.addAttribute("listaRoles", rolService.findAll());
-    //     model.addAttribute("edit", "true");
+    // Long id = Long.parseLong(Encriptar.decrypt(idUsuario));
+    // // model.addAttribute("usuario", usuarioService.findById(id));
+    // // model.addAttribute("listaPersonas", personaService.listarPersonas());
+    // // model.addAttribute("listaRoles", rolService.findAll());
+    // model.addAttribute("edit", "true");
 
-    //     return "publico/formulario";
+    // return "publico/formulario";
+    // }
+
+    // @ValidarUsuarioAutenticado
+    // @GetMapping("/formulario-edit/{id_inscripcion}")
+    // public String modalResponsable(@PathVariable("id_inscripcion") Long
+    // id_inscripcion, Model model) {
+
+    // model.addAttribute("inscripcion",
+    // inscripcionService.findById(id_inscripcion));
+    // model.addAttribute("responsables", responsableService.listarVista());
+    // return "publico/formulario :: modalContent";
     // }
 
     @ValidarUsuarioAutenticado
     @GetMapping("/formulario-edit/{id_inscripcion}")
-    public String modalResponsable(@PathVariable("id_inscripcion") Long id_inscripcion,Model model) {
-        
-        model.addAttribute("inscripcion", inscripcionService.findById(id_inscripcion));
+    public String modalResponsable(@PathVariable("id_inscripcion") Long idInscripcion,
+                                Model model) {
 
+        // 1) Buscar inscripción (404 si no existe)
+        Inscripcion ins = inscripcionService.findById(idInscripcion);
+        if (ins == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Inscripción no encontrada");
+        }
+
+        // 2) Asegurar entidad no nula
+        if (ins.getEntidad() == null) {
+            ins.setEntidad(new Entidad());
+        }
+
+        // 3) Cargar responsables de la entidad (si tiene ID)
+        List<Responsable> responsables = Optional
+                .ofNullable(ins.getEntidad().getId())
+                .map(entidadId -> responsableService.findByEntidadIdWithPersona(entidadId))
+                .orElseGet(List::of);
+
+        // 4) Armar formulario/DTO
+        ResponsablesEditForm respForm = new ResponsablesEditForm();
+        respForm.setEntidadId(ins.getEntidad().getId());
+        respForm.setInscripcionId(ins.getId());
+
+        for (Responsable r : responsables) {
+            ResponsablePersonaDTO dto = new ResponsablePersonaDTO();
+            dto.setResponsableId(r.getId());
+
+            Persona p = r.getPersona();
+            if (p != null) {
+                dto.setPersonaId(p.getId());
+                dto.setNombre(p.getNombre());
+                dto.setPaterno(p.getPaterno());
+                dto.setMaterno(p.getMaterno());
+                dto.setCi(p.getCi());
+                dto.setCorreo(p.getCorreo());
+                dto.setCelular(p.getCelular());
+            }
+
+            respForm.getResponsables().add(dto);
+        }
+
+        // 5) Rellenar hasta 2 slots para el UI
+        while (respForm.getResponsables().size() < 2) {
+            respForm.getResponsables().add(new ResponsablePersonaDTO());
+        }
+
+        // 6) Atributos para la vista
+        model.addAttribute("inscripcion", ins);
+        model.addAttribute("tipoEntidades", tipoEntidadService.findAll());
+        model.addAttribute("responsablesForm", respForm);
+        model.addAttribute("edit", "true");
+
+        // 7) Fragmento a renderizar
         return "publico/formulario :: modalContent";
     }
+
 
     @PostMapping("/modificar-inscripcion")
     public ResponseEntity<String> modificar(
             @ModelAttribute Inscripcion inscripcion,
             @RequestParam(value = "comprobante", required = false) MultipartFile comprobante) {
-
 
         System.out.println(inscripcion.getId());
 
@@ -140,8 +205,9 @@ public class ResponsablesController {
         List<Responsable> nuevosResponsables = inscripcion.getEntidad().getResponsables();
         if (nuevosResponsables != null) {
             List<Responsable> filtrados = nuevosResponsables.stream()
-                .filter(r -> r.getPersona() != null && r.getPersona().getNombre() != null && !r.getPersona().getNombre().trim().isEmpty())
-                .collect(Collectors.toList());
+                    .filter(r -> r.getPersona() != null && r.getPersona().getNombre() != null
+                            && !r.getPersona().getNombre().trim().isEmpty())
+                    .collect(Collectors.toList());
 
             if (entidadExistente.getResponsables() == null) {
                 entidadExistente.setResponsables(new ArrayList<>());
@@ -183,9 +249,9 @@ public class ResponsablesController {
             entidadExistente.setResponsables(responsablesActualizados);
         }
 
-            inscripcionService.save(existente); // gracias a cascada también guarda entidad
+        inscripcionService.save(existente); // gracias a cascada también guarda entidad
 
-            return ResponseEntity.ok("Se realizó la modificación correctamente");
-        }
+        return ResponseEntity.ok("Se realizó la modificación correctamente");
+    }
 
 }

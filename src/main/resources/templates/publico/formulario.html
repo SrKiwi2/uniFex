@@ -52,26 +52,6 @@
                     <label class="form-label">Número de comprobante</label>
                     <input type="number" th:field="*{numComprobante}" class="form-control" required />
                 </div>
-                <div class="col-12 col-md-6">
-                    <label class="form-label">Tipo entidad</label>
-                    <select id="select2Basic" class="select2 form-select form-select-lg" th:field="*{inscripcion.inscripcionPuestos.puesto.codigo}" required>
-                        <option value="" disabled selected>— Seleccione —</option>
-                        <option th:each="te : ${tipoEntidades}"
-                                th:value="${te.id}"
-                                th:text="${te.nombre}">
-                        </option>
-                    </select>
-                </div>
-                <div class="col-12 col-md-6">
-                    <label class="form-label">Tipo entidad</label>
-                    <select id="select2Basic" class="select2 form-select form-select-lg" th:field="*{entidad.tipoEntidad.id}" required>
-                        <option value="" disabled selected>— Seleccione —</option>
-                        <option th:each="te : ${tipoEntidades}"
-                                th:value="${te.id}"
-                                th:text="${te.nombre}">
-                        </option>
-                    </select>
-                </div>
             </div>
             <div class="row">
                 <div class="col-12 col-md-6">
@@ -87,8 +67,6 @@
         </div>
     </form>
     <form id="formResponsables" th:object="${responsablesForm}">
-        <input type="hidden" th:field="*{entidadId}">
-        <input type="hidden" th:field="*{inscripcionId}">
         
         <h6 class="mt-3">Responsables de la entidad (máx. 2)</h6>
         <div class="row g-3">
@@ -129,40 +107,33 @@
             <hr>
 
             <!-- Mostrar responsables existentes -->
-<th:block th:each="resp, iterStat : *{entidad.responsables}">
-    <div class="row">
-        <input type="hidden" th:field="*{entidad.responsables[__${iterStat.index}__].id}" />
-        <input type="hidden" th:field="*{entidad.responsables[__${iterStat.index}__].persona.id}" />
+            <!-- <th:block th:each="resp, iterStat : *{entidad.responsables}">
+                <div class="row">
+                    <input type="hidden" th:field="*{entidad.responsables[__${iterStat.index}__].id}" />
+                    <input type="hidden" th:field="*{entidad.responsables[__${iterStat.index}__].persona.id}" />
 
-        <div class="col-12 col-md-4">
-            <label class="form-label"
-                   th:text="${iterStat.index == 0 ? 'Nombre del Primer Responsable' : 'Nombre del Segundo Responsable (Opcional)'}">
-            </label>
-            <input type="text" th:field="*{entidad.responsables[__${iterStat.index}__].persona.nombre}" class="form-control" />
-        </div>
-    </div>
-</th:block>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label"
+                            th:text="${iterStat.index == 0 ? 'Nombre del Primer Responsable' : 'Nombre del Segundo Responsable (Opcional)'}">
+                        </label>
+                        <input type="text" th:field="*{entidad.responsables[__${iterStat.index}__].persona.nombre}" class="form-control" />
+                    </div>
+                </div>
+            </th:block> -->
 
-<!-- Si hay menos de 2 responsables, agregar un slot para el segundo -->
-<th:block th:if="${#lists.size(inscripcion.entidad.responsables) < 2}">
-    <div class="row">
-        <input type="hidden" th:field="*{entidad.responsables[__${#lists.size(inscripcion.entidad.responsables)}__].id}" />
-        <input type="hidden" th:field="*{entidad.responsables[__${#lists.size(inscripcion.entidad.responsables)}__].persona.id}" />
+            <!-- Si hay menos de 2 responsables, agregar un slot para el segundo -->
+            <!-- <th:block th:if="${#lists.size(inscripcion.entidad.responsables) < 2}">
+                <div class="row">
+                    <input type="hidden" th:field="*{entidad.responsables[__${#lists.size(inscripcion.entidad.responsables)}__].id}" />
+                    <input type="hidden" th:field="*{entidad.responsables[__${#lists.size(inscripcion.entidad.responsables)}__].persona.id}" />
 
-        <div class="col-12 col-md-4">
-            <label class="form-label">Nombre del Segundo Responsable (Opcional)</label>
-            <input type="text" th:field="*{entidad.responsables[__${#lists.size(inscripcion.entidad.responsables)}__].persona.nombre}" class="form-control" />
-        </div>
-    </div>
-</th:block>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label">Nombre del Segundo Responsable (Opcional)</label>
+                        <input type="text" th:field="*{entidad.responsables[__${#lists.size(inscripcion.entidad.responsables)}__].persona.nombre}" class="form-control" />
+                    </div>
+                </div>
+            </th:block> -->
 
-
-            
-
-
-
-
- 
 
         </div>
         <div class="modal-footer">
