@@ -160,21 +160,25 @@
                     <div class="col-12">
                         <label class="form-label">Foto del Responsable</label>
                         <input type="file" th:name="${'fotoResp_2'}" accept="image/*" class="form-control" />
-                        
-                        <div th:if="*{entidad.responsables[__${iterStat.index}__].persona.foto != null}">
+                        <!-- <div th:if="*{entidad.responsables[__${iterStat.index}__].persona.foto != null}">
                             <small class="text-muted">Archivo actual: <span th:text="*{entidad.responsables[__${iterStat.index}__].persona.foto}"></span></small>
-                        </div>
+                        </div> -->
+                        <th:block th:each="resp, iterStat : *{entidad.responsables}">
+                            <div th:if="${resp.persona != null and resp.persona.foto != null}">
+                                <small class="text-muted">
+                                Archivo actual:
+                                <span th:text="${resp.persona.foto}">foto.jpg</span>
+                                </small>
+                            </div>
+                        </th:block>
+
                     </div>
                 </div>
             </th:block>
-
         </div>
-
         <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
             <input type="submit" class="btn btn-success" th:value="${edit}? 'Guardar Cambios' : 'Guardar Registro'">
         </div>
     </form>
-
-   
 </th:block>

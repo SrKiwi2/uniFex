@@ -269,7 +269,6 @@ public class ResponsablesController {
             @RequestParam(value = "comprobante", required = false) MultipartFile comprobante,
             @RequestParam Map<String, MultipartFile> fotos) {
 
-
         System.out.println(inscripcion.getId());
         Inscripcion existente = inscripcionService.findById(inscripcion.getId());
         existente.setEntidadBancaria(inscripcion.getEntidadBancaria());
@@ -369,14 +368,9 @@ public class ResponsablesController {
                 }
                 index++;
             }
-
             entidadExistente.setResponsables(responsablesActualizados);
         }
-
         inscripcionService.save(existente); // gracias a cascada también guarda entidadinscripcionService.save(existente); // gracias a cascada también guarda entidad
-        
-        
         return ResponseEntity.ok("Se realizó la modificación correctamente");
     }
-
 }

@@ -499,9 +499,6 @@
                                             <th style="width:56px">#</th>
                                             <th style="min-width:220px">Entidad</th>
                                             <th class="d-none d-md-table-cell" style="min-width:120px">Categoría</th>
-                                            <th class="d-none d-lg-table-cell" style="min-width:160px">Objeto</th>
-                                            <th class="d-none d-xl-table-cell" style="min-width:160px">Representante</th>
-                                            <th class="d-none d-xl-table-cell" style="min-width:110px">NIT</th>
                                             <th style="min-width:110px">Pago</th>
                                             <th style="min-width:120px" class="text-end">Total (Bs)</th>
                                             <th style="min-width:150px">Fecha</th>
@@ -522,18 +519,6 @@
                                                     <span class="badge text-bg-secondary"
                                                         th:text="${row['categoria']}"></span>
                                                 </td>
-
-                                                <td class="d-none d-lg-table-cell text-truncate"
-                                                    style="max-width: 220px;" th:title="${row['objeto']}"
-                                                    th:text="${row['objeto']}"></td>
-
-                                                <td class="d-none d-xl-table-cell text-truncate"
-                                                    style="max-width: 220px;" th:title="${row['representante_legal']}"
-                                                    th:text="${row['representante_legal']}"></td>
-
-                                                <td class="d-none d-xl-table-cell font-monospace"
-                                                    th:text="${row['nit']}"></td>
-
                                                 <td>
                                                     <span th:if="${row['pago_contado']}" class="badge text-bg-success">
                                                         <i class="bi bi-cash-coin me-1"></i>Contado
@@ -556,81 +541,11 @@
 
                                                 <td class="sticky-col-right text-center bg-body">
                                                     <div class="btn-group btn-group-sm">
-                                                        <button class="btn btn-outline-secondary" type="button"
-                                                            data-bs-toggle="collapse"
-                                                            th:attr="data-bs-target=${'#det-' + i.index}"
-                                                            aria-expanded="false"
-                                                            th:attrappend="aria-controls=${'det-' + i.index}">
-                                                            <i class="bi bi-arrows-expand"></i> Detalles
-                                                        </button>
-
-                                                        <!-- ACTUALIZAR siempre visible -->
-                                                        <!-- <a class="btn btn-primary d-inline-flex align-items-center gap-1"
-                                                            th:href="@{|/inscripciones/editar/${row['id_entidad']}|}">
-                                                            <i class="bi bi-pencil-square"></i><span
-                                                                class="d-none d-xxl-inline">Actualizar</span>
-                                                        </a> -->
                                                         
                                                         <button type="button" class="btn btn-primary d-inline-flex align-items-center gap-1" th:onclick="cargarFormularioEdit([[${row['id_entidad']}]])">
                                                             <i class="bi bi-pencil-square"></i><span class="d-none d-xxl-inline">Actualizar</span>
                                                         </button>
                                                         
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                            <tr class="collapse-row">
-                                                <td colspan="10" class="p-0">
-                                                    <div class="collapse border-top" th:id="${'det-' + i.index}">
-                                                        <div class="p-3">
-                                                            <div class="kv-grid small">
-                                                                <div class="kv-item kv-item--wide">
-                                                                    <div class="kv-label">Objeto</div>
-                                                                    <div class="kv-value kv-multiline" th:text="${row['objeto']}"></div>
-                                                                </div>
-
-                                                                <div class="kv-item">
-                                                                    <div class="kv-label">Representante legal</div>
-                                                                    <div class="kv-value" th:text="${row['representante_legal']}"></div>
-                                                                </div>
-
-                                                                <div class="kv-item">
-                                                                    <div class="kv-label">NIT</div>
-                                                                    <div class="kv-value font-monospace" th:text="${row['nit']}"></div>
-                                                                </div>
-
-                                                                <div class="kv-item">
-                                                                    <div class="kv-label">Pago</div>
-                                                                    <div class="kv-value">
-                                                                    <span th:if="${row['pago_contado']}" class="badge text-bg-success">Contado</span>
-                                                                    <span th:if="${!row['pago_contado']}" class="badge text-bg-primary">Comprobante</span>
-                                                                    </div>
-                                                                </div>
-
-                                                                <div class="kv-item">
-                                                                    <div class="kv-label">N° Comprobante</div>
-                                                                    <div class="kv-value" th:text="${row['num_comprobante']}"></div>
-                                                                </div>
-
-                                                                <div class="kv-item">
-                                                                    <div class="kv-label">Banco</div>
-                                                                    <div class="kv-value" th:text="${row['entidad_bancaria']}"></div>
-                                                                </div>
-
-                                                                <div class="kv-item">
-                                                                    <div class="kv-label">Comprobante</div>
-                                                                    <div class="kv-value">
-                                                                    <th:block th:with="hasImg=${row['img_comprobante'] != null and !#strings.equalsIgnoreCase(row['img_comprobante'], 'SIN DATO')}">
-                                                                        <a th:if="${hasImg}"
-                                                                            th:href="@{/files/{f}(f=${row['img_comprobante']})}"
-                                                                            target="_blank">Ver archivo</a>
-                                                                        <span th:unless="${hasImg}">—</span>
-                                                                    </th:block>
-
-                                                                        <span th:if="${row['img_comprobante'] == null or row['img_comprobante'] == 'SIN DATO'}">—</span>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -640,6 +555,9 @@
                             </div>
                         </div>
                     </div>
+                    <!-- Toasts -->
+                    <div id="toastArea" class="toast-container position-fixed top-0 end-0 p-3" style="z-index:1080"></div>
+
                     <div class="modal fade" id="modalFormularioResponsable" tabindex="-1" aria-hidden="true">
                         <div class="modal-dialog modal-xl">
                             <div class="modal-content" id="contenidoModalResponsable"></div>
@@ -917,6 +835,26 @@
             });
         }
 
+        function showToast(message, variant = 'success', delay = 3500) {
+            const container = document.getElementById('toastArea') || document.body;
+            const toastEl = document.createElement('div');
+            toastEl.className = `toast align-items-center text-white bg-${variant} border-0`;
+            toastEl.setAttribute('role', 'alert');
+            toastEl.setAttribute('aria-live', 'assertive');
+            toastEl.setAttribute('aria-atomic', 'true');
+            toastEl.innerHTML = `
+            <div class="d-flex">
+                <div class="toast-body">${message}</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            `;
+            container.appendChild(toastEl);
+
+            const toast = new bootstrap.Toast(toastEl, { delay, autohide: true });
+            toast.show();
+            toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+        }
+
         $(document).on("submit", "#formularioResponsable", function(e) {
             e.preventDefault();
 
@@ -931,6 +869,16 @@
                 console.log("No se subió ningún archivo");
             }
 
+            const submitBtn = form.querySelector('button[type="submit"], [type="submit"]');
+            const originalHTML = submitBtn ? submitBtn.innerHTML : null;
+            if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Guardando...
+            `;
+            }
+
             $.ajax({
                 url: "/administracion/responsables/modificar-inscripcion",
                 type: "POST",
@@ -938,17 +886,35 @@
                 processData: false,
                 contentType: false,
                 success: function(response) {
-                    alert(response);
+                    const msg = (typeof response === 'string')
+                        ? response
+                        : (response?.message || 'Cambios guardados correctamente.');
+
+                        // Cerrar el modal
+                        const modalEl = document.getElementById('modalFormularioResponsable');
+                        if (modalEl) {
+                        const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+                        modal.hide();
+                        }
+
+                        // (Opcional) limpiar el contenido del modal si lo cargas por AJAX
+                        $("#contenidoModalResponsable").empty();
+
+                        // Mostrar toast
+                        showToast(msg, 'success');
                 },
                 error: function(xhr) {
-                    alert("Error: " + xhr.responseText);
+                    const msg = xhr.responseJSON?.message || xhr.responseText || 'Ocurrió un error al guardar.';
+                    showToast(msg, 'danger', 6000);
+                },
+                complete: function () {
+                    if (submitBtn) {
+                    submitBtn.disabled = false;
+                    if (originalHTML != null) submitBtn.innerHTML = originalHTML;
+                    }
                 }
             });
         });
-
-
-
-        
     </script>
 
     <script th:if="${inscripcionId != null}" th:inline="javascript">
