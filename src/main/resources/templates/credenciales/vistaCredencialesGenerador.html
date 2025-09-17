@@ -144,7 +144,6 @@
         let inscripcionId = $(this).val();
 
         if (inscripcionId) {
-          console.log('Inscripción seleccionada ID:', inscripcionId);
 
           $.ajax({
             url: '/vistaGenerarCredenciales/credenciales/' + inscripcionId,  // <-- usa el ID seleccionado
@@ -221,31 +220,32 @@
         // Delegación de evento: escucha clicks en botones dentro de #modalContent
         $(document).off('click', '#exportPdf').on('click', '#exportPdf', async function () {
             const { jsPDF } = window.jspdf;
-            const pdf = new jsPDF('p', 'pt', 'letter'); // carta US
+            const pdf = new jsPDF('p', 'pt', 'letter');
 
-            // Mostrar texto "Cargando..."
             $('#loadingText').show();
             $('#exportPdf').prop('disabled', true);
 
             const containers = document.querySelectorAll('.editorContainer');
 
-            for (let i = 0; i < containers.length; i++) {
-                const canvas = await html2canvas(containers[i], {
-                    scale: 2,
-                    useCORS: true
-                });
-                const imgData = canvas.toDataURL('image/png');
+            // renderizar todos los contenedores en paralelo
+            const canvases = await Promise.all(
+                Array.from(containers).map(c =>
+                    html2canvas(c, { scale: 1.5, useCORS: true, willReadFrequently: true }) // scale más bajo mejora velocidad
+                )
+            );
 
+            canvases.forEach((canvas, i) => {
+                const imgData = canvas.toDataURL('image/jpeg', 0.85); // JPEG = más liviano
                 if (i > 0) pdf.addPage();
-                pdf.addImage(imgData, 'PNG', 0, 0, 612, 792);
-            }
+                pdf.addImage(imgData, 'JPEG', 0, 0, 612, 792);
+            });
 
             pdf.save('credenciales.pdf');
 
-            // Ocultar texto al terminar
             $('#loadingText').hide();
             $('#exportPdf').prop('disabled', false);
         });
+
 
         
         function ajustarFuente(element, maxFont = 40, minFont = 20) {
