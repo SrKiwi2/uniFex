@@ -6,6 +6,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Service;
 
 import com.usic.uniFex.model.dto.PromotoresListadoDTO;
+import com.usic.uniFex.model.dto.ResponsableListadoExplodeView;
 import com.usic.uniFex.model.dto.ResponsableListadoView;
 import com.usic.uniFex.model.entity.Responsable;
 
@@ -20,4 +21,7 @@ public interface IResponsableService extends IServiceGenerico<Responsable, Long>
     List<ResponsableListadoView> listarVista();
 
     List<Responsable> findByEntidadIdWithPersona(@Param("entidadId") Long entidadId);
+
+    List<ResponsableListadoExplodeView> listarVistaExplode();
+
 }

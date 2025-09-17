@@ -264,113 +264,139 @@ public class ResponsablesController {
     }
 
     @PostMapping("/modificar-inscripcion")
-    public ResponseEntity<String> modificar(
-            @ModelAttribute Inscripcion inscripcion,
-            @RequestParam(value = "comprobante", required = false) MultipartFile comprobante,
-            @RequestParam Map<String, MultipartFile> fotos) {
+public ResponseEntity<String> modificar(
+        @ModelAttribute Inscripcion inscripcion,
+        @RequestParam(value = "comprobante", required = false) MultipartFile comprobante,
+        @RequestParam Map<String, MultipartFile> fotos) {
 
-        System.out.println(inscripcion.getId());
-        Inscripcion existente = inscripcionService.findById(inscripcion.getId());
-        existente.setEntidadBancaria(inscripcion.getEntidadBancaria());
-        existente.setNumComprobante(inscripcion.getNumComprobante());
+    Inscripcion existente = inscripcionService.findById(inscripcion.getId());
 
-        Entidad entidadExistente = existente.getEntidad();
-        if (entidadExistente == null) {
-            entidadExistente = new Entidad();
-        }
+    // ---- Datos simples de la inscripción ----
+    existente.setEntidadBancaria(inscripcion.getEntidadBancaria());
+    existente.setNumComprobante(inscripcion.getNumComprobante());
 
-        entidadExistente.setNombre(inscripcion.getEntidad().getNombre());
-        entidadExistente.setNit(inscripcion.getEntidad().getNit());
+    // ---- Entidad ----
+    Entidad entidad = existente.getEntidad();
+    if (entidad == null) entidad = new Entidad();
 
-        entidadExistente.setDescripcion(inscripcion.getEntidad().getDescripcion());
-        entidadExistente.setObjeto(inscripcion.getEntidad().getObjeto()); 
-        existente.setEntidad(entidadExistente);
-
-        if (comprobante != null && !comprobante.isEmpty()) {
-
-            try {
-                String compRel = storage.save(comprobante, Bucket.COMPROBANTES, entidadExistente.getNombre());
-                existente.setImgComprobante(compRel);
-            } catch (IOException e) {
-                existente.setImgComprobante(null);
-            }
-        }
-
-        List<Responsable> nuevosResponsables = inscripcion.getEntidad().getResponsables();
-        if (nuevosResponsables != null) {
-            List<Responsable> filtrados = nuevosResponsables.stream()
-                .filter(r -> r.getPersona() != null && r.getPersona().getNombre() != null && !r.getPersona().getNombre().trim().isEmpty())
-                .collect(Collectors.toList());
-
-            if (entidadExistente.getResponsables() == null) {
-                entidadExistente.setResponsables(new ArrayList<>());
-            }
-
-            // Map de existentes
-            Map<Long, Responsable> responsablesExistentesMap = entidadExistente.getResponsables()
-                    .stream()
-                    .collect(Collectors.toMap(Responsable::getId, r -> r));
-
-            List<Responsable> responsablesActualizados = new ArrayList<>();
-
-            int index = 0;
-            for (Responsable r : filtrados) {
-                String key = "fotoResp_" + index;
-                System.out.println(key);
-                System.out.println(fotos.get(key).getOriginalFilename());
-                MultipartFile fotoFile = fotos.get(key);
-
-                if (r.getId() != null) {
-                    Responsable respExistente = responsablesExistentesMap.get(r.getId());
-                    if (respExistente != null) {
-                        Persona personaExistente = personaService.findById(r.getPersona().getId());
-                        if (personaExistente != null) {
-                            personaExistente.setNombre(r.getPersona().getNombre());
-                            personaExistente.setPaterno(r.getPersona().getPaterno());
-                            personaExistente.setMaterno(r.getPersona().getMaterno());
-                            personaExistente.setCi(r.getPersona().getCi());
-                            personaExistente.setCorreo(r.getPersona().getCorreo());
-                            personaExistente.setCelular(r.getPersona().getCelular());
-
-                            if (fotoFile != null && !fotoFile.isEmpty()) {
-
-                                try {
-                                    String compRel = storage.save(fotoFile, Bucket.RESPONSABLES, personaExistente.getNombre()+"_"+personaExistente.getPaterno()+"_"+personaExistente.getMaterno());
-                                    personaExistente.setFoto(compRel);
-                                } catch (IOException e) {
-                                    personaExistente.setFoto(null);
-                                }
-                            }
-
-                            respExistente.setPersona(personaExistente);
-                        }
-                        responsablesActualizados.add(respExistente);
-                    }
-                } else {
-                    Persona p = r.getPersona();
-                    if (p != null) {
-                        if (fotoFile != null && !fotoFile.isEmpty()) {
-
-                            try {
-                                String compRel = storage.save(fotoFile, Bucket.RESPONSABLES, p.getNombre()+"_"+p.getPaterno()+"_"+p.getMaterno());
-                                p.setFoto(compRel);
-                            } catch (IOException e) {
-                                p.setFoto(null);
-                            }
-
-                            p.setFoto(fotoFile.getOriginalFilename());
-                            
-                        }
-                        personaService.save(p);
-                    }
-                    r.setEntidad(entidadExistente);
-                    responsablesActualizados.add(r);
-                }
-                index++;
-            }
-            entidadExistente.setResponsables(responsablesActualizados);
-        }
-        inscripcionService.save(existente); // gracias a cascada también guarda entidadinscripcionService.save(existente); // gracias a cascada también guarda entidad
-        return ResponseEntity.ok("Se realizó la modificación correctamente");
+    Entidad entidadReq = inscripcion.getEntidad();
+    if (entidadReq != null) {
+        entidad.setNombre(entidadReq.getNombre());
+        entidad.setNit(entidadReq.getNit());
+        entidad.setDescripcion(entidadReq.getDescripcion());
+        entidad.setObjeto(entidadReq.getObjeto());
     }
+    existente.setEntidad(entidad);
+
+    // ---- Comprobante ----
+    if (comprobante != null && !comprobante.isEmpty()) {
+        try {
+            String compRel = storage.save(comprobante, Bucket.COMPROBANTES, entidad.getNombre());
+            existente.setImgComprobante(compRel);
+        } catch (IOException e) {
+            existente.setImgComprobante(null);
+        }
+    }
+
+    // ---- Responsables ----
+    List<Responsable> entrantes = (entidadReq != null && entidadReq.getResponsables() != null)
+            ? entidadReq.getResponsables()
+            : List.of();
+
+    if (entidad.getResponsables() == null) entidad.setResponsables(new ArrayList<>());
+
+    // Mapa de existentes (por ID de responsable)
+    Map<Long, Responsable> mapExistentes = entidad.getResponsables().stream()
+            .filter(r -> r.getId() != null)
+            .collect(Collectors.toMap(Responsable::getId, r -> r));
+
+    List<Responsable> resultado = new ArrayList<>();
+
+    for (int i = 0; i < entrantes.size(); i++) {
+        Responsable rReq = entrantes.get(i);
+        if (rReq.getPersona() == null || rReq.getPersona().getNombre() == null ||
+            rReq.getPersona().getNombre().trim().isEmpty()) {
+            continue; // *** exige al menos nombre
+        }
+
+        MultipartFile foto = fotos.get("fotoResp_" + i); // *** índice intacto
+
+        if (rReq.getId() != null && mapExistentes.containsKey(rReq.getId())) {
+            // ---- Actualizar existente ----
+            Responsable rDb = mapExistentes.get(rReq.getId());
+
+            // Usa la persona ya asociada en BD
+            Persona pDb = rDb.getPersona();
+            if (pDb == null) pDb = new Persona();
+            Persona pReq = rReq.getPersona();
+
+            pDb.setNombre(pReq.getNombre());
+            pDb.setPaterno(pReq.getPaterno());
+            pDb.setMaterno(pReq.getMaterno());
+            pDb.setCi(pReq.getCi());
+            pDb.setCorreo(pReq.getCorreo());
+            pDb.setCelular(pReq.getCelular());
+
+            if (foto != null && !foto.isEmpty()) {
+                try {
+                    String path = storage.save(foto, Bucket.RESPONSABLES,
+                            (pDb.getNombre() + "_" + pDb.getPaterno() + "_" + pDb.getMaterno()).trim());
+                    pDb.setFoto(path);
+                } catch (IOException e) {
+                    // deja la foto actual si falla
+                }
+            }
+
+            personaService.save(pDb);
+            rDb.setPersona(pDb);
+            rDb.setEntidad(entidad);
+            // copia otros campos de Responsable si existen (cargo, area, etc.)
+            // rDb.setCargo(rReq.getCargo()); ...
+
+            resultado.add(rDb);
+
+        } else {
+            // ---- Crear nuevo ----
+            Persona pReq = rReq.getPersona();
+            Persona p = new Persona();
+            if (pReq != null) {
+                p.setNombre(pReq.getNombre());
+                p.setPaterno(pReq.getPaterno());
+                p.setMaterno(pReq.getMaterno());
+                p.setCi(pReq.getCi());
+                p.setCorreo(pReq.getCorreo());
+                p.setCelular(pReq.getCelular());
+            }
+
+            if (foto != null && !foto.isEmpty()) {
+                try {
+                    String path = storage.save(foto, Bucket.RESPONSABLES,
+                            (p.getNombre() + "_" + p.getPaterno() + "_" + p.getMaterno()).trim());
+                    p.setFoto(path);
+                } catch (IOException e) {
+                    // sin foto
+                }
+            }
+
+            p = personaService.save(p);
+
+            Responsable nuevo = new Responsable();
+            nuevo.setPersona(p);
+            nuevo.setEntidad(entidad);
+            // copia otros campos de Responsable si los tienes en el form
+            // nuevo.setCargo(rReq.getCargo()); ...
+
+            resultado.add(nuevo);
+        }
+    }
+
+    // Reemplaza la lista por la normalizada
+    entidad.setResponsables(resultado);
+
+    // Persiste todo (cascadas)
+    inscripcionService.save(existente);
+
+    return ResponseEntity.ok("Se realizó la modificación correctamente");
+}
+
 }

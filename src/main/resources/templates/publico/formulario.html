@@ -111,69 +111,122 @@
                     </div>
                 </div>
                 <div class="row">
-                    <div class="col-12">
+
+                    <!-- <div class="col-12">
                         <label class="form-label">Foto del Responsable</label>
                         <input type="file" th:name="${'fotoResp_'+iterStat.index}" accept="image/*" class="form-control" />
                         
                         <div th:if="*{entidad.responsables[__${iterStat.index}__].persona.foto != null}">
                             <small class="text-muted">Archivo actual: <span th:text="*{entidad.responsables[__${iterStat.index}__].persona.foto}"></span></small>
                         </div>
-                    </div>
+                    </div> -->
+
+                    <div class="row align-items-center g-3">
+                        <!-- Vista/preview de la foto actual -->
+                        <div class="col-4 col-md-3 text-center">
+                            <a th:if="*{entidad.responsables[__${iterStat.index}__].persona.foto}"
+                            th:href="@{/files/{fn}(fn=*{entidad.responsables[__${iterStat.index}__].persona.foto})}" target="_blank">
+                            <img
+                                th:id="|fotoImg_${iterStat.index}|"
+                                th:src="@{/files/{fn}(fn=*{entidad.responsables[__${iterStat.index}__].persona.foto})}"
+                                alt="Foto"
+                                class="img-thumbnail rounded-circle shadow-sm"
+                                style="width:90px;height:90px;object-fit:cover;"
+                                onerror="this.src='/assets/img/avatar-placeholder.png'"/>
+                            </a>
+
+                            <img
+                            th:if="*{entidad.responsables[__${iterStat.index}__].persona.foto} == null"
+                            th:id="|fotoImg_${iterStat.index}|"
+                            src="/assets/img/image.png"
+                            alt="Sin foto"
+                            class="img-thumbnail rounded-circle shadow-sm"
+                            style="width:90px;height:90px;object-fit:cover;"/>
+                        </div>
+
+                        <!-- Input de archivo + controles -->
+                        <div class="col-8 col-md-9">
+                            <label class="form-label mb-1">Foto del Responsable</label>
+
+                            <!-- El name mantiene tu convención por índice -->
+                            <input type="file"
+                                th:name="${'fotoResp_' + iterStat.index}"
+                                accept="image/*"
+                                class="form-control"
+                                th:attr="onchange=|previewFoto(this, '${iterStat.index}')|"/>
+
+                            <!-- Guarda el nombre actual para mantenerlo si no se sube nada -->
+                            <input type="hidden"
+                                th:name="${'fotoActual_' + iterStat.index}"
+                                th:value="*{entidad.responsables[__${iterStat.index}__].persona.foto}"/>
+
+                            <!-- Opción para eliminar la foto existente -->
+                            <div class="form-check mt-2" 
+                                th:if="*{entidad.responsables[__${iterStat.index}__].persona.foto} != null">
+                            <input class="form-check-input"
+                                    type="checkbox"
+                                    th:name="${'eliminarFoto_' + iterStat.index}"
+                                    value="1"
+                                    th:attr="onchange=|toggleEliminar(this,'${iterStat.index}')|">
+                            <label class="form-check-label">Eliminar foto existente</label>
+                            </div>
+
+                            <small class="form-text text-muted">Formatos: JPG/PNG • Máx. 2&nbsp;MB</small>
+                        </div>
+                        </div>
+
                 </div>
             </th:block>
 
             <hr>
-            <!-- Si hay menos de 2 responsables, agregar un slot para el segundo -->
+
             <th:block th:if="${#lists.size(inscripcion.entidad.responsables) < 2}">
-                <div class="row">
-                    <input type="hidden" th:field="*{entidad.responsables[__${#lists.size(inscripcion.entidad.responsables)}__].id}" />
-                    <input type="hidden" th:field="*{entidad.responsables[__${#lists.size(inscripcion.entidad.responsables)}__].persona.id}" />
+                <th:block th:with="i=${#lists.size(inscripcion.entidad.responsables)}">
+                    <input type="hidden" th:field="*{entidad.responsables[__${i}__].id}" />
+                    <input type="hidden" th:field="*{entidad.responsables[__${i}__].persona.id}" />
 
-                    <div class="col-12 col-md-4">
-                        <label class="form-label">Nombre del Segundo Responsable</label>
-                        <input type="text" th:field="*{entidad.responsables[__${#lists.size(inscripcion.entidad.responsables)}__].persona.nombre}" class="form-control" />
+                    <div class="row">
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Nombre del Segundo Responsable</label>
+                            <input type="text" th:field="*{entidad.responsables[__${i}__].persona.nombre}" class="form-control" />
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Apellido Paterno del Primer Responsable</label>
+                            <input type="text" th:field="*{entidad.responsables[__${i}__].persona.paterno}" class="form-control" />
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Apellido Materno del Primer Responsable</label>
+                            <input type="text" th:field="*{entidad.responsables[__${i}__].persona.materno}" class="form-control" />
+                        </div>
                     </div>
-                    <div class="col-12 col-md-4">
-                        <label class="form-label">Apellido Paterno del Primer Responsable</label>
-                        <input type="text" th:field="*{entidad.responsables[__${#lists.size(inscripcion.entidad.responsables)}__].persona.paterno}" class="form-control" />
+
+                    <div class="row">
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">C.I. del Segundo Responsable</label>
+                            <input type="text" th:field="*{entidad.responsables[__${i}__].persona.ci}" class="form-control" />
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Correo del Primer Responsable</label>
+                            <input type="text" th:field="*{entidad.responsables[__${i}__].persona.correo}" class="form-control" />
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Celular del Primer Responsable</label>
+                            <input type="text" th:field="*{entidad.responsables[__${i}__].persona.celular}" class="form-control" />
+                        </div>
                     </div>
-                    <div class="col-12 col-md-4">
-                        <label class="form-label">Apellido Materno del Primer Responsable</label>
-                        <input type="text" th:field="*{entidad.responsables[__${#lists.size(inscripcion.entidad.responsables)}__].persona.materno}" class="form-control" />
-                    </div>
-                </div>
-                <div class="row">
-                    <div class="col-12 col-md-4">
-                        <label class="form-label">C.I. del Segundo Responsable</label>
-                        <input type="text" th:field="*{entidad.responsables[__${#lists.size(inscripcion.entidad.responsables)}__].persona.ci}" class="form-control" />
-                    </div>
-                    <div class="col-12 col-md-4">
-                        <label class="form-label">Correo del Primer Responsable</label>
-                        <input type="text" th:field="*{entidad.responsables[__${#lists.size(inscripcion.entidad.responsables)}__].persona.correo}" class="form-control" />
-                    </div>
-                    <div class="col-12 col-md-4">
-                        <label class="form-label">Celular del Primer Responsable</label>
-                        <input type="text" th:field="*{entidad.responsables[__${#lists.size(inscripcion.entidad.responsables)}__].persona.celular}" class="form-control" />
-                    </div>
-                </div>
-                <div class="row">
+
+
                     <div class="col-12">
-                        <label class="form-label">Foto del Responsable</label>
-                        <input type="file" th:name="${'fotoResp_2'}" accept="image/*" class="form-control" />
-                        <!-- <div th:if="*{entidad.responsables[__${iterStat.index}__].persona.foto != null}">
-                            <small class="text-muted">Archivo actual: <span th:text="*{entidad.responsables[__${iterStat.index}__].persona.foto}"></span></small>
-                        </div> -->
-                        <th:block th:each="resp, iterStat : *{entidad.responsables}">
-                            <div th:if="${resp.persona != null and resp.persona.foto != null}">
-                                <small class="text-muted">
-                                Archivo actual:
-                                <span th:text="${resp.persona.foto}">foto.jpg</span>
-                                </small>
-                            </div>
-                        </th:block>
+                    <label class="form-label">Foto del Responsable</label>
+                    <input type="file"
+                            th:name="${'fotoResp_' + i}"
+                            accept="image/*"
+                            class="form-control"
+                            th:attr="onchange=|previewFoto(this,'${i}')|"/>
 
+                    <input type="hidden" th:name="${'fotoActual_' + i}" value=""/>
                     </div>
-                </div>
+                </th:block>
             </th:block>
         </div>
         <div class="modal-footer">

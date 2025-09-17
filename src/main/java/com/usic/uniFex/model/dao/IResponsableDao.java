@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import com.usic.uniFex.model.dto.ResponsableListadoExplodeView;
 import com.usic.uniFex.model.dto.ResponsableListadoView;
 import com.usic.uniFex.model.entity.Responsable;
 
@@ -64,4 +65,37 @@ public interface IResponsableDao extends JpaRepository <Responsable, Long>{
             order by r.persona.paterno, r.persona.materno, r.persona.nombre
             """)
     List<Responsable> findByEntidadIdWithPersona(@Param("entidadId") Long entidadId);
+
+    @Query("""
+        select
+        r.id              as id,
+        e.id              as entidadId,
+        e.nombre          as entidadNombre,
+        te.nombre         as tipoEntidadNombre,
+        e.Objeto          as entidadObjeto, 
+
+        p.id              as personaId,
+        p.nombre          as nombre,
+        p.paterno         as paterno,
+        p.materno         as materno,
+        p.ci              as ci,    
+        p.celular         as celular,
+        p.foto            as foto,
+
+        c.id              as categoriaId,
+        c.nombre          as categoriaNombre,
+        pu.codigo         as puestoCodigo 
+        
+        from Responsable r
+        join r.persona p
+        join r.entidad e
+        left join e.tipoEntidad te
+        left join Inscripcion i on i.entidad = e
+        left join i.inscripcionPuestos ip
+        left join ip.puesto pu
+        left join pu.categoria c
+        order by e.nombre asc, c.nombre asc, p.paterno asc, p.nombre asc
+    """)
+    List<ResponsableListadoExplodeView> listarVistaExplode();
+
 }

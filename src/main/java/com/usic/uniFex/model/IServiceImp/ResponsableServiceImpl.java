@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import com.usic.uniFex.model.IService.IResponsableService;
 import com.usic.uniFex.model.dao.IResponsableDao;
 import com.usic.uniFex.model.dto.PromotoresListadoDTO;
+import com.usic.uniFex.model.dto.ResponsableListadoExplodeView;
 import com.usic.uniFex.model.dto.ResponsableListadoView;
 import com.usic.uniFex.model.entity.Responsable;
 
@@ -87,6 +88,8 @@ public class ResponsableServiceImpl implements IResponsableService{
         return responsableDao.findByEntidadIdWithPersona(entidadId);
     }
 
-
-    
+    @Override
+    public List<ResponsableListadoExplodeView> listarVistaExplode() {
+        return responsableDao.listarVistaExplode();
+    }
 }

@@ -61,12 +61,17 @@
                                             <h5>DATOS DE RESPONSABLES INSCRITOS</h5>
                                             <span>Puede que se esten inscribiendo más, recarga la pagina 🔁</span>
                                         </div>
+                                        
                                         <div class="card-datatable table-responsive pt-0">
                                             <table class="table table-striped table-bordered align-middle text-center" id="data-table">
                                                 <thead class="table-dark">
                                                     <tr>
                                                         <th>#</th>
                                                         <th>Entidad</th>
+                                                        <th>Tipo Entidad</th>
+                                                        <th>Categoría</th>
+                                                        <th>Puesto</th>
+                                                        <th>Objeto</th>
                                                         <th>Nombre Completo</th>
                                                         <th>C.I.</th>
                                                         <th>Celular</th>
@@ -76,6 +81,10 @@
                                                     <tr th:each="resp, i : ${responsables}">
                                                         <td style="text-align: left;" th:text="${i.index + 1}"></td>
                                                         <td style="text-align: left;" th:text="${resp.entidadNombre}"></td>
+                                                        <td th:text="${resp.tipoEntidadNombre}">—</td>
+                                                        <td th:text="${resp.categoriaNombre}">—</td>
+                                                        <td th:text="${resp.puestoCodigo}">—</td>
+                                                        <td th:text="${resp.entidadObjeto}">—</td>
                                                         <td style="text-align: left;" th:text="${resp.nombreCompleto}"></td>
                                                         <td th:text="${resp.ci}"></td>
                                                         <td th:text="${resp.celular}"></td>
@@ -410,6 +419,26 @@
     </div>
 
     <div th:replace="~{layout/script :: script}"></div>
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
+<script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+
+<!-- Buttons core + Bootstrap -->
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
+
+<!-- DEPENDENCIAS DE EXPORTACIÓN -->
+<!-- Excel necesita JSZip -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<!-- PDF necesita pdfmake (si quieres mantener el botón PDF) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+
+<!-- Botones HTML5 (Excel / CSV / PDF) y Print -->
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
     <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
     <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
     <script th:inline="javascript">
@@ -427,6 +456,61 @@
         /*]]>*/
     </script>
     <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // timestamp para nombres de archivo
+            const now = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            const stamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
+
+            const table = $('#data-table').DataTable({
+                responsive: true,
+                // Barra superior: buscador a la izquierda y botones a la derecha
+                dom: "<'row align-items-center'<'col-12 col-md-6'f><'col-12 col-md-6 text-md-end'B>>" +
+                    "<'row'<'col-12'tr>>" +
+                    "<'row'<'col-md-5'i><'col-md-7'p>>",
+                buttons: [
+                {
+                    extend: 'excelHtml5',
+                    text: 'Descargar Excel',
+                    className: 'btn btn-success btn-sm',
+                    title: 'Responsables inscritos',
+                    filename: `responsables_${stamp}`,
+                    exportOptions: {
+                    // columnas a exportar (#, Entidad, Tipo, Categoría, Nombre, CI, Celular)
+                    columns: [0,1,2,3,4,5,6]
+                    }
+                },
+                {
+                    extend: 'pdfHtml5',
+                    text: 'Descargar PDF',
+                    className: 'btn btn-danger btn-sm',
+                    title: 'Datos de responsables inscritos',
+                    filename: `responsables_${stamp}`,
+                    orientation: 'landscape',
+                    pageSize: 'A4',
+                    exportOptions: { columns: [0,1,2,3,4,5,6] },
+                    customize: function (doc) {
+                    // pequeño tuning visual del PDF
+                    doc.styles.tableHeader.alignment = 'left';
+                    doc.defaultStyle.fontSize = 9;
+                    if (doc.content[1] && doc.content[1].table) {
+                        doc.content[1].layout = 'lightHorizontalLines';
+                    }
+                    }
+                },
+                {
+                    extend: 'print',
+                    text: 'Imprimir',
+                    className: 'btn btn-secondary btn-sm',
+                    exportOptions: { columns: [0,1,2,3,4,5,6] }
+                }
+                ],
+                language: {
+                url: "https://cdn.datatables.net/plug-ins/1.13.8/i18n/es-ES.json"
+                }
+            });
+            });
+
         $(document).ready(function () {
             $('#formValidationCategoria, #formValidationPuestosDisponibles').select2();
 
