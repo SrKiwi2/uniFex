@@ -14,7 +14,6 @@
     .editorContainer {
       position: relative;
       margin: 20px auto;
-      border: 2px solid #ccc;
       background-size: cover;
       background-position: center;
       width: 816px;   /* ancho carta */
@@ -25,7 +24,6 @@
     .editable-text {
       position: absolute;
       padding: 5px 10px;
-      background: rgba(255, 255, 255, 0.6);
       cursor: move;
       user-select: none;
     }
@@ -39,6 +37,25 @@
       display: flex;
       align-items: center;
       justify-content: center;
+    }
+
+    .foto-circular {
+      position: absolute;
+      width: 300px;   /* ajusta tamaño */
+      height: 300px;
+      border-radius: 50%;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #fff; /* opcional: fondo blanco */
+      box-shadow: 0 0 10px rgba(0,0,0,0.3);
+    }
+
+    .foto-circular img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover; /* recorta para que no se deforme */
     }
 
     #controls {
@@ -68,7 +85,13 @@
 
   <!-- Imagen oculta solo para obtener el tamaño -->
   
-
+  <!-- Botón exportar -->
+  <div id="controls">
+      <button id="exportPdf">Exportar a PDF</button>
+      <span id="loadingText" style="display:none; margin-left:10px; font-weight:bold; color:red;">
+          Cargando...
+      </span> 
+  </div>
   
   <div id="modalContent">
       
@@ -172,16 +195,20 @@
             new QRCode(qrDiv, {
               text: qrInput.value,
               width: 200,
-              height: 200
+              height: 200,
+              correctLevel: QRCode.CorrectLevel.L, // usar nivel más bajo (más capacidad)
+              version: 10 // podés subir hasta 40 según necesidad
             });
 
             // Actualizar QR si cambia input oculto
             qrInput.addEventListener("change", (e) => {
               qrDiv.innerHTML = "";
               new QRCode(qrDiv, {
-                text: e.target.value,
+                text: qrInput.value,
                 width: 200,
-                height: 200
+                height: 200,
+                correctLevel: QRCode.CorrectLevel.L, // usar nivel más bajo (más capacidad)
+                version: 10 // podés subir hasta 40 según necesidad
               });
             });
           }
@@ -191,25 +218,35 @@
             makeDraggable(el);
           });
         });
-        $('#exportPdf').click(async function() {
+        // Delegación de evento: escucha clicks en botones dentro de #modalContent
+        $(document).off('click', '#exportPdf').on('click', '#exportPdf', async function () {
             const { jsPDF } = window.jspdf;
             const pdf = new jsPDF('p', 'pt', 'letter'); // carta US
+
+            // Mostrar texto "Cargando..."
+            $('#loadingText').show();
+            $('#exportPdf').prop('disabled', true);
 
             const containers = document.querySelectorAll('.editorContainer');
 
             for (let i = 0; i < containers.length; i++) {
                 const canvas = await html2canvas(containers[i], {
-                    scale: 2, // mejora resolución
-                    useCORS: true // si la imagen es externa
+                    scale: 2,
+                    useCORS: true
                 });
                 const imgData = canvas.toDataURL('image/png');
 
-                if (i > 0) pdf.addPage(); // agregar nueva página
-                pdf.addImage(imgData, 'PNG', 0, 0, 612, 792); // tamaño carta en puntos
+                if (i > 0) pdf.addPage();
+                pdf.addImage(imgData, 'PNG', 0, 0, 612, 792);
             }
 
             pdf.save('credenciales.pdf');
+
+            // Ocultar texto al terminar
+            $('#loadingText').hide();
+            $('#exportPdf').prop('disabled', false);
         });
+
         
         function ajustarFuente(element, maxFont = 40, minFont = 20) {
             let fontSize = maxFont; // tamaño inicial máximo
@@ -230,6 +267,7 @@
 
         // Aplicar a todos los elementos con la clase "nombre-entidad"
         document.querySelectorAll('.nombre-entidad').forEach(el => ajustarFuente(el));
+        document.querySelectorAll('.nombre-responsable').forEach(el => ajustarFuente(el));
 
     }
     
