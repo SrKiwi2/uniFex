@@ -1,6 +1,7 @@
 package com.usic.uniFex.controller.admin;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -10,6 +11,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -312,12 +315,27 @@ public class AdminController {
                     ip.setModificacion(new Date());
                     ip.setModificacionIdUsuario(usuario.getId());
                     ip.setEstado("ACTIVO");
-                    ip.setCosto(funcionesInscripcion.obtenerCostoPuesto(
-                            entidad.getTipoEntidad().getId(),
-                            puesto.getTamano(),
-                            puesto.getCategoria().getId()
-                    ));
 
+                    if (puesto.getCategoria().getId() != 25) {
+                        ip.setCosto(funcionesInscripcion.obtenerCostoPuesto(
+                                entidad.getTipoEntidad().getId(),
+                                puesto.getTamano(),
+                                puesto.getCategoria().getId()
+                        ));
+                    }else{
+                        int codigoNum = extraerNumero(puesto.getCodigo());
+                        String costo;
+                        if (codigoNum >= 1 && codigoNum <= 19) {
+                            costo = "200";
+                        } else if (codigoNum >= 20 && codigoNum <= 23) {
+                            costo = "300";
+                        } else if (codigoNum >= 24 && codigoNum <= 28) {
+                            costo = "100";
+                        } else {
+                            costo = "0"; // fuera de rango o no numérico
+                        }
+                        ip.setCosto(new BigDecimal(costo));
+                    }
                     inscripcionPuestoService.save(ip);
                 }
             }
@@ -351,6 +369,16 @@ public class AdminController {
             return "redirect:/vistaR";
         }
     }
+
+    private static int extraerNumero(String codigo) {
+    if (codigo == null) return -1;
+    Matcher m = Pattern.compile("\\d+").matcher(codigo.trim());
+    if (m.find()) {
+        try { return Integer.parseInt(m.group()); }
+        catch (NumberFormatException e) { return -1; }
+    }
+    return -1;
+}
 
     @ValidarUsuarioAutenticado
     @GetMapping("/ver/inscripcion/{id}/recibo.pdf")
