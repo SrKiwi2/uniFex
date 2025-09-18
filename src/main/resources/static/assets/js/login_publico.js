@@ -15,15 +15,20 @@ $(function () {
             contentType: false,
             processData: false,
             success: function (response) {
-                if (response === "Iniciando Session" || response === "Inicio Responsable") {
-                    // 1) Cerrar el modal de login
+                const r = (response || "").toString().trim().toLowerCase();
+
+                // Mapeo de respuestas → rutas
+                const rutas = {
+                    "inicio responsable": "/vistaR",      // ajusta si tu ruta real difiere
+                    "iniciando session": "/admin",
+                    "inicio vendedor": "/venta"
+                };
+
+                if (rutas[r]) {
+                    // 1) Cerrar modal de login
                     $("#modalLogin").modal("hide");
 
-                    // 2) Mostrar loader por encima y redirigir inmediatamente
-                    const destino = (response === "Inicio Responsable")
-                        ? "/vistaR"    // o /adm/responsable si esa es tu ruta real
-                        : "/admin"; // o /adm/inicio
-
+                    // 2) Mostrar loader y redirigir
                     Swal.fire({
                         title: "Iniciando sesión…",
                         allowOutsideClick: false,
@@ -31,12 +36,11 @@ $(function () {
                         showConfirmButton: false,
                         didOpen: () => {
                             Swal.showLoading();
-                            // Redirige YA; no esperes cierre del Swal
-                            window.location.href = destino;
+                            window.location.href = rutas[r];
                         }
                     });
                 } else {
-                    Swal.fire("Imposible continuar", response + ".", "error");
+                    Swal.fire("Imposible continuar", (response || "Respuesta inesperada") + ".", "error");
                 }
             },
             error: function (xhr) {
@@ -50,6 +54,7 @@ $(function () {
         });
     });
 });
+
 
 //FIN INICIO DE SESION
 

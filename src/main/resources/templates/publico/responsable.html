@@ -545,7 +545,12 @@
                                                         <button type="button" class="btn btn-primary d-inline-flex align-items-center gap-1" th:onclick="cargarFormularioEdit([[${row['id_entidad']}]])">
                                                             <i class="bi bi-pencil-square"></i><span class="d-none d-xxl-inline">Actualizar</span>
                                                         </button>
-                                                        
+                                                        <a th:if="${row['id_inscripcion'] != null}"
+                                                            class="btn btn-outline-secondary d-inline-flex align-items-center gap-1"
+                                                            th:href="@{|/ver/inscripcion/${row['id_inscripcion']}/recibo.pdf|}"
+                                                            target="_blank" rel="noopener">
+                                                            <i class="bi bi-file-pdf"></i><span class="d-none d-xxl-inline">Recibo</span>
+                                                        </a>
                                                     </div>
                                                 </td>
                                             </tr>

@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Boletería — FEXPO UAP v1.0</title>
+
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <style>
+        :root {
+            --uap-red: #d72638;
+            --uap-blue: #0b3d91;
+            --glass-bg: rgba(255, 255, 255, .08);
+            --glass-brd: rgba(255, 255, 255, .25);
+            --txt: #f1f5f9;
+            --muted: #9aa4b2;
+        }
+
+        html,
+        body {
+            height: 100%;
+        }
+
+        body {
+            background: radial-gradient(1200px 1200px at 10% 10%, rgba(215, 38, 56, .25), transparent 60%),
+                radial-gradient(1200px 1200px at 90% 90%, rgba(11, 61, 145, .25), transparent 60%),
+                linear-gradient(135deg, var(--uap-blue), var(--uap-red));
+            color: var(--txt);
+            overflow-x: hidden;
+        }
+
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-brd);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
+            border-radius: 20px;
+        }
+
+        .brand-tape {
+            display: flex;
+            gap: .75rem;
+            align-items: center;
+            padding: .6rem 1rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, .08);
+            border: 1px solid var(--glass-brd);
+            width: max-content;
+            margin-inline: auto;
+        }
+
+        .brand-tape img {
+            height: 28px;
+        }
+
+        .brand-tape small {
+            color: var(--muted);
+            letter-spacing: .4px;
+        }
+
+        .hero-title {
+            font-weight: 800;
+            line-height: 1.05;
+            text-shadow: 0 2px 18px rgba(0, 0, 0, .35);
+        }
+
+        .form-label {
+            color: #e8eef6;
+        }
+
+        .form-control,
+        .form-select {
+            background: rgba(255, 255, 255, .07) !important;
+            border: 1px solid rgba(255, 255, 255, .18) !important;
+            color: #f8fafc !important;
+        }
+
+        .form-control::placeholder {
+            color: #c9d2df;
+        }
+
+        .form-control:focus,
+        .form-select:focus {
+            border-color: #ffffff55;
+            box-shadow: 0 0 0 .25rem rgba(255, 255, 255, .08) !important;
+        }
+
+        .btn-uap {
+            background: linear-gradient(90deg, var(--uap-blue), var(--uap-red));
+            border: none;
+            color: white;
+            font-weight: 700;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, .3);
+        }
+
+        .btn-uap:disabled {
+            opacity: .7;
+        }
+
+        .summary-chip {
+            background: rgba(255, 255, 255, .1);
+            border: 1px solid var(--glass-brd);
+            border-radius: 12px;
+            padding: .5rem .75rem;
+            color: #e8eef6;
+        }
+
+        .price {
+            font-size: clamp(1.6rem, 3vw, 2.4rem);
+            font-weight: 800;
+        }
+
+        .loader {
+            position: fixed;
+            inset: 0;
+            display: none;
+            place-items: center;
+            background: rgba(5, 10, 25, .45);
+            backdrop-filter: blur(4px);
+            z-index: 9999;
+        }
+
+        .loader.show {
+            display: grid;
+        }
+
+        .spinner {
+            width: 64px;
+            height: 64px;
+            border: 6px solid rgba(255, 255, 255, .25);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg)
+            }
+        }
+
+        .minh {
+            min-height: 520px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="loader" id="loader">
+        <div class="spinner"></div>
+    </div>
+
+    <div class="container py-4 py-md-5">
+        <div class="brand-tape mb-3">
+            <img th:src="@{/img/uap_logo.svg}" alt="UAP" onerror="this.style.display='none'">
+            <small><strong>Universidad Amazónica de Pando</strong> · Boletería</small>
+        </div>
+
+        <div class="row justify-content-center">
+            <div class="col-12 col-xl-10">
+                <div class="glass-card p-4 p-md-5">
+                    <div class="row g-4 align-items-stretch">
+                        <!-- Izquierda: Encabezado + Form -->
+                        <div class="col-12 col-lg-7 d-flex flex-column gap-3 minh">
+                            <div>
+                                <h1 class="hero-title h2 h1-md mb-2 text-center text-lg-start">FEXPO UAP v1.0</h1>
+                                <p class="mb-0 text-center text-lg-start" style="color:var(--muted)">“Academia, ciencias
+                                    y tecnología para renovar Pando”</p>
+                            </div>
+
+                            <hr class="text-white-50">
+
+                            <form id="formVenta" class="needs-validation mt-2" th:action="@{/boletos/venta/registrar}"
+                                method="post" novalidate>
+
+                                <input type="hidden" id="precioUnitario" name="precioUnitario" value="">
+                                <input type="hidden" id="montoTotal" name="montoTotal" value="">
+
+                                <div class="mb-3">
+                                    <label for="categoriaId" class="form-label">Categoría / Evento <span
+                                            class="text-warning">*</span></label>
+                                    <select class="form-select" id="categoriaId" name="categoriaId" required>
+                                        <option value="" selected disabled>Selecciona una categoría…</option>
+                                        <option th:each="c : ${categoriasVentas}" th:value="${c.idCategoriaVenta}" th:text="${c.nombre}"
+                                            th:attr="data-precio=${c.precio}">
+                                        </option>
+                                    </select>
+                                    <div class="invalid-feedback">Selecciona una categoría.</div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label" for="cantidad">Cantidad <span
+                                            class="text-warning">*</span></label>
+                                    <div class="input-group">
+                                        <button class="btn btn-outline-light" type="button" id="btnMinus"
+                                            aria-label="Disminuir">−</button>
+                                        <input class="form-control text-center" id="cantidad" name="cantidad"
+                                            type="number" min="1" max="50" step="1" value="1" required
+                                            inputmode="numeric" pattern="[0-9]{1,2}">
+                                        <button class="btn btn-outline-light" type="button" id="btnPlus"
+                                            aria-label="Aumentar">+</button>
+                                    </div>
+                                    <div class="invalid-feedback">Cantidad mínima 1.</div>
+                                </div>
+
+                                <div class="row g-3">
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label" for="nombre">Nombre <span
+                                                class="text-warning">*</span></label>
+                                        <input class="form-control" id="nombre" name="nombre" type="text" required
+                                            maxlength="80" placeholder="Ej. María" autocomplete="given-name">
+                                        <div class="invalid-feedback">Ingresa el nombre.</div>
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label" for="paterno">Apellido Paterno <span
+                                                class="text-warning">*</span></label>
+                                        <input class="form-control" id="paterno" name="paterno" type="text" required
+                                            maxlength="80" placeholder="Ej. Pérez" autocomplete="family-name">
+                                        <div class="invalid-feedback">Ingresa el apellido paterno.</div>
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label" for="materno">Apellido Materno</label>
+                                        <input class="form-control" id="materno" name="materno" type="text"
+                                            maxlength="80" placeholder="Ej. Vargas" autocomplete="additional-name">
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label" for="ci">CI / Documento de Identidad <span
+                                                class="text-warning">*</span></label>
+                                        <input class="form-control" id="ci" name="ci" type="text" required
+                                            pattern="[A-Za-z0-9\.\-]{4,20}" inputmode="text"
+                                            placeholder="Ej. 6543210-PT">
+                                        <div class="invalid-feedback">CI inválido (usa letras/números, 4–20 chars).
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label" for="celular">Celular <span
+                                                class="text-warning">*</span></label>
+                                        <input class="form-control" id="celular" name="celular" type="tel" required
+                                            pattern="[0-9]{7,12}" inputmode="numeric" placeholder="Ej. 70000000"
+                                            autocomplete="tel">
+                                        <div class="invalid-feedback">Número inválido (7–12 dígitos).</div>
+                                    </div>
+                                </div>
+
+                                <div class="d-grid mt-4">
+                                    <button id="btnVender" class="btn btn-uap btn-lg py-3" type="submit">
+                                        Realizar venta
+                                    </button>
+                                </div>
+
+                                <p class="mt-3 mb-0 text-center" style="color:var(--muted); font-size:.9rem">
+                                    Los datos serán enviados de forma segura al sistema. Verifica antes de confirmar.
+                                </p>
+                            </form>
+                        </div>
+
+                        <div class="col-12 col-lg-5">
+                            <div class="h-100 d-flex flex-column justify-content-between gap-3">
+                                <div class="glass-card p-3 p-md-4">
+                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                        <span class="summary-chip">Resumen</span>
+                                        <span class="summary-chip">Boletería</span>
+                                    </div>
+                                    <h3 id="res-titulo" class="h5 mb-1">Sin categoría seleccionada</h3>
+                                    <small id="res-sub" class="text-white d-block mb-3">Elige una opción para ver el
+                                        detalle</small>
+
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <div>
+                                            <span class="d-block text-white">Total a cobrar</span>
+                                            <span id="res-precio" class="price">—</span>
+                                        </div>
+                                        <div class="text-end">
+                                            <span class="d-block text-white">Estado</span>
+                                            <span class="badge text-bg-light">Listo</span>
+                                        </div>
+                                    </div>
+
+                                    <hr class="text-white-25 my-3">
+
+                                    <ul class="list-unstyled mb-0">
+                                        <li class="d-flex justify-content-between"><span
+                                                class="text-white">Evento:</span><strong id="res-evento">—</strong>
+                                        </li>
+                                        <li class="d-flex justify-content-between"><span class="text-white">Precio
+                                                unitario:</span><strong id="res-unitario">—</strong></li>
+                                        <li class="d-flex justify-content-between"><span
+                                                class="text-white">Cantidad:</span><strong id="res-cant">1</strong>
+                                        </li>
+                                        <li class="d-flex justify-content-between"><span
+                                                class="text-white">CI:</span><strong id="res-ci">—</strong></li>
+                                        <li class="d-flex justify-content-between"><span
+                                                class="text-white">Cliente:</span><strong
+                                                id="res-cliente">—</strong></li>
+                                        <li class="d-flex justify-content-between"><span
+                                                class="text-white">Celular:</span><strong id="res-cel">—</strong>
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <div class="text-center">
+                                    <small class="text-white-50">© <span
+                                            th:text="${#dates.format(#dates.createNow(),'yyyy')}">2025</span> UAP ·
+                                        Sistema de Boletería</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="flash-ok"
+     th:if="${ok}"
+     th:data-ventaid="${ventaId}"
+     th:data-cliente="${cliente}"
+     th:data-categoria="${categoria}"
+     th:data-cantidad="${cantidad}"
+     th:data-total="${total}"
+     style="display:none"></div>
+
+<div id="flash-error"
+     th:if="${error}"
+     th:data-msg="${error}"
+     style="display:none"></div>
+
+    <!-- JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        //ESATO ES DE VENTA NROMAL
+        // document.addEventListener('DOMContentLoaded', () => {
+        //     const ok = document.getElementById('flash-ok');
+        //     const err = document.getElementById('flash-error');
+
+        //     if (ok) {
+        //         const d = ok.dataset;
+        //         Swal.fire({
+        //         icon: 'success',
+        //         title: '¡Venta registrada!',
+        //         html: `
+        //             <div style="text-align:left">
+        //             <b>Venta #${d.ventaid}</b><br>
+        //             Cliente: ${d.cliente}<br>
+        //             ${d.categoria} × ${d.cantidad}<br>
+        //             Total: <b>${d.total}</b>
+        //             </div>`,
+        //         timer: 3500,
+        //         showConfirmButton: false
+        //         });
+        //     }
+
+        //     if (err) {
+        //         Swal.fire({ icon: 'error', title: 'Error', text: err.dataset.msg });
+        //     }
+        // });
+
+        (() => {
+            const form = document.getElementById('formVenta');
+
+            function getUnitPrice() {
+                const sel = document.getElementById('categoriaId');
+                const opt = sel.options[sel.selectedIndex];
+                return parseFloat(opt?.getAttribute('data-precio') || 'NaN');
+            }
+            function getCategoriaTexto() {
+                const sel = document.getElementById('categoriaId');
+                return sel.options[sel.selectedIndex]?.textContent?.trim() || '';
+            }
+
+            form.addEventListener('submit', async (e) => {
+                // Validación HTML5
+                if (!form.checkValidity()) {
+                e.preventDefault(); e.stopPropagation();
+                form.classList.add('was-validated');
+                return;
+                }
+
+                e.preventDefault();
+
+                const categoriaId = form.categoriaId.value;
+                const cantidad    = parseInt(form.cantidad.value, 10) || 1;
+                const unit        = getUnitPrice();
+                const descripcion = getCategoriaTexto();
+
+                // Construye el request para /api/pagos/crear
+                const req = {
+                datosCliente: {
+                    nombres: document.getElementById('nombre').value.trim(),
+                    apellidos: (document.getElementById('paterno').value.trim() + ' ' + (document.getElementById('materno').value.trim() || '')).trim(),
+                    ciNit: document.getElementById('ci').value.trim(),
+                    fechaNacimiento: null, // no lo estás pidiendo; si tu pasarela lo exige, pon "2000-01-01"
+                    correo: null // si tienes correo en el futuro, colócalo aquí
+                },
+                items: [{
+                    descripcion: descripcion,
+                    precioUnitario: isNaN(unit) ? 0 : unit,
+                    cantidad: cantidad
+                }],
+                metadata: { // clave: lo que luego necesitas para guardar la venta
+                    categoriaId: categoriaId,
+                    cantidad: cantidad,
+                    ci: document.getElementById('ci').value.trim(),
+                    nombre: document.getElementById('nombre').value.trim(),
+                    paterno: document.getElementById('paterno').value.trim(),
+                    materno: document.getElementById('materno').value.trim(),
+                    celular: document.getElementById('celular').value.trim()
+                }
+                };
+
+                try {
+                // Si usas CSRF, toma el token del input hidden
+                const csrfInput = document.querySelector('input[name="_csrf"]');
+                const headers = { 'Content-Type': 'application/json' };
+                if (csrfInput) headers['X-CSRF-TOKEN'] = csrfInput.value;
+
+                const resp = await fetch('/api/pagos/crear', {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(req)
+                });
+
+                if (!resp.ok) throw new Error('No se pudo crear la transacción');
+                const data = await resp.json();
+                if (!data.ok) throw new Error('Pasarela rechazó la solicitud');
+
+                // Mensaje + abrir nueva pestaña
+                Swal.fire({
+                    icon: 'info',
+                    title: 'Redirigiendo a pasarela…',
+                    timer: 1200,
+                    showConfirmButton: false
+                });
+
+                // Abre la pasarela en una pestaña/ventana nueva
+                window.open(data.urlRedireccion, '_blank');
+
+                // (Opcional) Limpia o deja el form en espera
+                // form.reset();
+
+                } catch (err) {
+                Swal.fire({ icon: 'error', title: 'Error', text: err.message || 'No se pudo iniciar el pago' });
+                }
+            });
+        })();
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const q = new URLSearchParams(location.search);
+
+            if (q.get('pagado') === '1') {
+                Swal.fire({
+                icon: 'success',
+                title: '¡Pago realizado!',
+                text: 'La pasarela confirmó tu pago.',
+                timer: 2200,
+                showConfirmButton: false
+                });
+                // Limpia el ?pagado=1 para que no se repita al recargar
+                history.replaceState({}, '', location.pathname);
+            }
+
+            if (q.get('cancelado') === '1') {
+                Swal.fire({
+                icon: 'info',
+                title: 'Pago cancelado',
+                text: 'No se completó la operación.',
+                timer: 2200,
+                showConfirmButton: false
+                });
+                history.replaceState({}, '', location.pathname);
+            }
+            });
+
+        (() => {
+            const $ = (q, ctx = document) => ctx.querySelector(q);
+
+            const form = $('#formVenta');
+            const loader = $('#loader');
+            const categoria = $('#categoriaId');
+            const cantidad = $('#cantidad');
+            const btnMinus = $('#btnMinus');
+            const btnPlus = $('#btnPlus');
+            const nombre = $('#nombre'), paterno = $('#paterno'), materno = $('#materno');
+            const ci = $('#ci'), cel = $('#celular');
+            const precioUnitarioHidden = $('#precioUnitario');
+            const montoTotalHidden = $('#montoTotal');
+
+            // Resumen refs
+            const rTitulo = $('#res-titulo'), rSub = $('#res-sub'), rPrecio = $('#res-precio');
+            const rEvento = $('#res-evento'), rUnit = $('#res-unitario'), rCant = $('#res-cant');
+            const rCI = $('#res-ci'), rCliente = $('#res-cliente'), rCel = $('#res-cel');
+
+            const fmt = (n) => isNaN(n) ? '—' :
+                new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB', maximumFractionDigits: 2 }).format(n);
+
+            function getUnitPrice() {
+                const opt = categoria.options[categoria.selectedIndex];
+                return parseFloat(opt?.getAttribute('data-precio') || 'NaN');
+            }
+
+            function updateResumen() {
+                const opt = categoria.options[categoria.selectedIndex];
+                const titulo = opt?.textContent?.trim() || 'Sin categoría seleccionada';
+                const unit = getUnitPrice();
+                const qty = Math.max(1, Math.min(parseInt(cantidad.value || '1', 10), parseInt(cantidad.max, 10)));
+
+                // Normaliza cantidad si está fuera de rango
+                if (String(qty) !== cantidad.value) cantidad.value = qty;
+
+                const total = (!isNaN(unit)) ? unit * qty : NaN;
+
+                rTitulo.textContent = titulo;
+                rSub.textContent = 'Resumen de la venta';
+                rPrecio.textContent = isNaN(total) ? '—' : fmt(total);
+                rEvento.textContent = titulo || '—';
+                rUnit.textContent = isNaN(unit) ? '—' : fmt(unit);
+                rCant.textContent = qty;
+
+                rCI.textContent = ci.value || '—';
+                const ap2 = materno.value ? (' ' + materno.value.trim()) : '';
+                rCliente.textContent = [nombre.value, paterno.value + ap2].filter(Boolean).join(' ').trim() || '—';
+                rCel.textContent = cel.value || '—';
+
+                // Setea ocultos para el backend (el backend debe validar/recalcular)
+                precioUnitarioHidden.value = isNaN(unit) ? '' : unit.toFixed(2);
+                montoTotalHidden.value = isNaN(total) ? '' : total.toFixed(2);
+            }
+
+            // Listeners
+            ['change', 'input'].forEach(ev => {
+                categoria.addEventListener(ev, updateResumen);
+                cantidad.addEventListener(ev, updateResumen);
+                nombre.addEventListener(ev, updateResumen);
+                paterno.addEventListener(ev, updateResumen);
+                materno.addEventListener(ev, updateResumen);
+                ci.addEventListener(ev, updateResumen);
+                cel.addEventListener(ev, updateResumen);
+            });
+
+            btnMinus.addEventListener('click', () => {
+                const min = parseInt(cantidad.min, 10) || 1;
+                cantidad.value = Math.max(min, (parseInt(cantidad.value || '1', 10) - 1));
+                updateResumen();
+            });
+
+            btnPlus.addEventListener('click', () => {
+                const max = parseInt(cantidad.max, 10) || 50;
+                cantidad.value = Math.min(max, (parseInt(cantidad.value || '1', 10) + 1));
+                updateResumen();
+            });
+
+            // Validación Bootstrap
+            form.addEventListener('submit', (e) => {
+                if (!form.checkValidity()) {
+                    e.preventDefault(); e.stopPropagation();
+                } else {
+                    // recalcula justo antes de enviar por si hubo cambios
+                    updateResumen();
+                    loader.classList.add('show');
+                }
+                form.classList.add('was-validated');
+            }, false);
+
+            // Inicial
+            updateResumen();
+        })();
+    </script>
+</body>
+
+</html>

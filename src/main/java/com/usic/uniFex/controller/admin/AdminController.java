@@ -431,7 +431,14 @@ public class AdminController {
         flash.addAttribute("success", usuario_.getPersona().getNombre());
 
         // 4) Respuesta según rol
-        String respuesta = "ADMINISTRATIVO".equals(rol) ? "Inicio Responsable" : "Iniciando Session";
+        String respuesta;
+        if ("ADMINISTRATIVO".equals(rol)) {
+            respuesta = "Inicio Responsable";
+        } else if ("VENDEDOR".equals(rol)) {
+            respuesta = "inicio vendedor";
+        } else {
+            respuesta = "Iniciando Session";
+        }
         return ResponseEntity.ok(respuesta);
     }
 
