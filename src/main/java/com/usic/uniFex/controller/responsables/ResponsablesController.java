@@ -2,10 +2,12 @@ package com.usic.uniFex.controller.responsables;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -28,11 +30,15 @@ import com.usic.uniFex.model.entity.Entidad;
 import com.usic.uniFex.model.entity.Inscripcion;
 import com.usic.uniFex.model.entity.Persona;
 import com.usic.uniFex.model.entity.Responsable;
+import com.usic.uniFex.model.entity.Usuario;
 import com.usic.uniFex.model.service.FileStorageService;
 import com.usic.uniFex.model.service.FileStorageService.Bucket;
 
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Controller
 @RequiredArgsConstructor
 @RequestMapping("/administracion/responsables")
@@ -51,7 +57,8 @@ public class ResponsablesController {
 
     @ValidarUsuarioAutenticado
     @GetMapping("/vista")
-    public String vista_responsables() {
+    public String vista_responsables(Model model) {
+        model.addAttribute("entidades", entidadService.findAll());
         return "responsables/vista";
     }
 
@@ -59,6 +66,84 @@ public class ResponsablesController {
     public String tabla_responsbales(Model model) {
         model.addAttribute("responsables", responsableService.listarParaTabla());
         return "responsables/tabla_registro";
+    }
+
+    // POST: registrar persona + responsable
+    @PostMapping(value = "/registrar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<String> registrar(
+            @RequestParam("idEntidad") Long idEntidad,
+            @RequestParam("nombre") String nombre,
+            @RequestParam("paterno") String paterno,
+            @RequestParam(value = "materno", required = false) String materno,
+            @RequestParam("ci") String ci,
+            @RequestParam(value = "correo", required = false) String correo,
+            @RequestParam("celular") String celular,
+            @RequestParam(value = "foto", required = false) MultipartFile foto,
+            HttpServletRequest request,
+            Model model
+    ) {
+        // 1) Resuelve entidad
+        Entidad entidad = entidadService.findById(idEntidad);
+        if (entidad == null) {
+            model.addAttribute("error", "La entidad seleccionada no existe.");
+            model.addAttribute("entidades", entidadService.findAll());
+            return ResponseEntity.ok("No está habilitada esta entidad");
+        }
+
+        // 2) Usuario de sesión (si usas auditoría por usuario)
+        Usuario usuario = (Usuario) request.getSession().getAttribute("usuario");
+        Long idUsuario = (usuario != null ? usuario.getId() : null);
+        Date ahora = new Date();
+
+        // 3) Construye Persona
+        Persona persona = new Persona();
+        persona.setNombre(nombre != null ? nombre.trim() : null);
+        persona.setPaterno(paterno != null ? paterno.trim() : null);
+        persona.setMaterno(materno != null ? materno.trim() : null);
+        persona.setCi(ci != null ? ci.trim() : null);
+        persona.setCorreo(correo != null ? correo.trim() : null);
+        persona.setCelular(celular != null ? celular.trim() : null);
+
+        // Auditoría básica (ajusta si tu AuditoriaConfig ya lo maneja)
+        persona.setEstado("RESPONSABLE");
+        persona.setRegistro(ahora);
+        persona.setRegistroIdUsuario(idUsuario);
+        persona.setModificacion(ahora);
+        persona.setModificacionIdUsuario(idUsuario);
+
+        // 4) Guarda foto (si viene)
+        if (foto != null && !foto.isEmpty()) {
+            try {
+                String nombreBase = (persona.getNombreCompleto().isBlank() ? "responsable" : persona.getNombreCompleto())
+                        + "_" + (persona.getCi() == null ? "" : persona.getCi());
+                String fotoRel = storage.save(foto, Bucket.RESPONSABLES, nombreBase);
+                persona.setFoto(fotoRel); // guarda ruta relativa devuelta por storage
+            } catch (IOException e) {
+                log.warn("No se pudo guardar foto del responsable: {}", e.getMessage());
+                persona.setFoto(null);
+            }
+        }
+
+        // 5) Persiste Persona
+        personaService.save(persona);
+
+        // 6) Crea Responsable vinculado a la Entidad
+        Responsable responsable = new Responsable();
+        responsable.setPersona(persona);
+        responsable.setEntidad(entidad);
+
+        // Auditoría básica
+        responsable.setEstado("RESPONSABLE");
+        responsable.setRegistro(ahora);
+        responsable.setRegistroIdUsuario(idUsuario);
+        responsable.setModificacion(ahora);
+        responsable.setModificacionIdUsuario(idUsuario);
+
+        // 7) Persiste Responsable
+        responsableService.save(responsable);
+
+        // 8) Redirige (ajusta a tu UX: listado o detalle)
+        return ResponseEntity.ok("Se realizó el registro correctamente");
     }
 
     /* RESPONSABLES RUEDA */

@@ -2,23 +2,207 @@
 
 <div id="tablaRegistro"></div>
 
+<!-- Modal: Registrar Responsable -->
+<div class="modal fade" id="modalFormularioResponsable" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-person-plus me-1"></i> Registrar Responsable
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+
+            <form th:action="@{/administracion/responsables/registrar}" method="post" enctype="multipart/form-data"
+                class="needs-validation" novalidate id="formResponsable">
+
+                <div class="modal-body">
+
+                    <div class="row g-3">
+                        <!-- Entidad -->
+                        <div class="col-12 col-md-6">
+                            <label class="form-label" for="selEntidad">Entidad</label>
+                            <select id="selEntidad" name="idEntidad" class="form-select" required>
+                                <option value="" selected disabled>Seleccione una entidad…</option>
+                                <option th:each="e : ${entidades}" th:value="${e.id}" th:text="${e.nombre}"></option>
+                            </select>
+                            <div class="invalid-feedback">Seleccione una entidad.</div>
+                        </div>
+
+                        <div class="col-12">
+                            <hr class="my-2" />
+                        </div>
+
+                        <!-- Datos Persona -->
+                        <div class="col-sm-4">
+                            <label class="form-label" for="inpNombre">Nombres</label>
+                            <input type="text" id="inpNombre" name="nombre" class="form-control text-capitalize"
+                                required />
+                            <div class="invalid-feedback">Campo requerido.</div>
+                        </div>
+                        <div class="col-sm-4">
+                            <label class="form-label" for="inpPaterno">Apellido Paterno</label>
+                            <input type="text" id="inpPaterno" name="paterno" class="form-control text-capitalize"
+                                required />
+                            <div class="invalid-feedback">Campo requerido.</div>
+                        </div>
+                        <div class="col-sm-4">
+                            <label class="form-label" for="inpMaterno">Apellido Materno</label>
+                            <input type="text" id="inpMaterno" name="materno" class="form-control text-capitalize" />
+                        </div>
+
+                        <div class="col-sm-4">
+                            <label class="form-label" for="inpCi">Carnet de Identidad</label>
+                            <input type="text" id="inpCi" name="ci" class="form-control" inputmode="numeric"
+                                pattern="[0-9]{5,12}" placeholder="Solo números" required />
+                            <div class="form-text">5 a 12 dígitos.</div>
+                            <div class="invalid-feedback">Ingrese un CI válido (solo números).</div>
+                        </div>
+                        <div class="col-sm-4">
+                            <label class="form-label" for="inpCorreo">Correo (opcional)</label>
+                            <input type="email" id="inpCorreo" name="correo" class="form-control"
+                                placeholder="alguien@dominio.com" />
+                            <div class="invalid-feedback">Correo no válido.</div>
+                        </div>
+                        <div class="col-sm-4">
+                            <label class="form-label" for="inpCel">Celular</label>
+                            <input type="text" id="inpCel" name="celular" class="form-control" inputmode="numeric"
+                                pattern="[0-9]{7,12}" placeholder="Solo números" required />
+                            <div class="form-text">7 a 12 dígitos.</div>
+                            <div class="invalid-feedback">Ingrese un celular válido.</div>
+                        </div>
+
+                        <!-- Foto -->
+                        <div class="col-sm-6">
+                            <label class="form-label" for="inpFoto">Foto (opcional)</label>
+                            <input type="file" id="inpFoto" name="foto" class="form-control" accept="image/*" />
+                            <small class="text-muted">Formatos: .jpg, .png. Tamaño razonable.</small>
+
+                            <!-- Preview -->
+                            <div id="fotoPreviewWrap" class="mt-2 d-none">
+                                <img id="fotoPreview" alt="Preview" class="img-thumbnail" style="max-height: 180px;">
+                            </div>
+                        </div>
+
+                    </div><!-- /.row -->
+                </div><!-- /.modal-body -->
+
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary" id="btnGuardar">
+                        <span class="spinner-border spinner-border-sm d-none me-1" id="spGuardar" role="status"
+                            aria-hidden="true"></span>
+                        Guardar
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                </div>
+
+            </form>
+        </div>
+    </div>
+</div>
+
+
 <script>
+
+
     $(document).ready(function () {
+        // Carga tabla al inicio
         cargarTabla();
 
+        // Envío multipart (con archivo) usando FormData
+        manejarEnvioFormulario('#formResponsable');
+
+        // Preview de foto + validación de tamaño (opcional: 3 MB)
+        $('#inpFoto').on('change', function (e) {
+            const file = e.target.files?.[0];
+            if (!file) {
+                $('#fotoPreviewWrap').addClass('d-none');
+                return;
+            }
+            const maxBytes = 3 * 1024 * 1024;
+            if (file.size > maxBytes) {
+                Swal.fire("Archivo muy grande", "La foto no debe superar 3 MB.", "warning");
+                this.value = "";
+                $('#fotoPreviewWrap').addClass('d-none');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = function (ev) {
+                $('#fotoPreview').attr('src', ev.target.result);
+                $('#fotoPreviewWrap').removeClass('d-none');
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // (Opcional) Select con búsqueda: requiere Select2 y dropdownParent
+        if ($.fn.select2) {
+            $('#selEntidad').select2({
+                width: '100%',
+                dropdownParent: $('#modalFormularioResponsable'),
+                placeholder: 'Seleccione una entidad…',
+                allowClear: true
+            });
+        }
     });
+
 
     function cargarTabla() {
         $.ajax({
-            type: 'POST',
-            url: "/administracion/responsables/tabla-registros",  // Ruta del metodo del controlador en Spring Boot
-            success: function (response) {
-                $("#tablaRegistro").html(response);  // Actualiza el contenido del div con la respuesta del servidor
-            }
+        type: 'POST',
+        url: '/administracion/responsables/tabla-registros',
+        success: function (response) {
+            $("#tablaRegistro").html(response);
+        }
         });
     }
 
-    function eliminar(nombre, id) {
-        eliminarRegistroAlert(nombre, id, "/administracion/responsables/eliminar",cargarTabla);
+    function manejarEnvioFormulario(selector) {
+        $(selector).on("submit", function (e) {
+            e.preventDefault();
+            const form = this;
+
+            if (!form.checkValidity()) {
+                form.classList.add('was-validated');
+                return;
+            }
+
+            $('#spGuardar').removeClass('d-none');
+            $('#btnGuardar').prop('disabled', true);
+
+            // Construir FormData para incluir archivos
+            const formData = new FormData(form);
+
+            $.ajax({
+                type: form.getAttribute("method") || "POST",
+                url: form.getAttribute("action"),
+                data: formData,
+                processData: false,      // **clave** para multipart
+                contentType: false,      // **clave** para multipart
+                success: function (resp) {
+                    // Tu código original compara con "OK", así que unificamos:
+                    if ((typeof resp === 'string' && resp.trim() === "Se realizó el registro correctamente") || (resp && resp.ok === true)) {
+                        $('#modalFormularioResponsable').modal('hide');
+                        cargarTabla();
+                        Swal.fire("Éxito", "Registro guardado", "success");
+                        form.reset();
+                        $('#fotoPreviewWrap').addClass('d-none');
+                        form.classList.remove('was-validated');
+                        if ($.fn.select2) $('#selEntidad').val(null).trigger('change');
+                    } else {
+                        const msg = (typeof resp === 'string') ? resp : (resp?.mensaje || "Atención: revise los datos.");
+                        Swal.fire("Atención", msg, "warning");
+                    }
+                },
+                error: function (xhr) {
+                    const msg = xhr.responseText || "Error inesperado";
+                    Swal.fire("Error", msg, "error");
+                },
+                complete: function () {
+                    $('#spGuardar').addClass('d-none');
+                    $('#btnGuardar').prop('disabled', false);
+                }
+            });
+        });
     }
 </script>
