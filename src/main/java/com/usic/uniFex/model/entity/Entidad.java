@@ -19,8 +19,7 @@ import lombok.Setter;
 
 @Entity
 @Table(name = "entidad")
-@Setter
-@Getter
+@Setter @Getter
 public class Entidad extends AuditoriaConfig{
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

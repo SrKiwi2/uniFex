@@ -7,8 +7,7 @@ import lombok.*;
 
 @Entity
 @Table(name = "responsable")
-@Setter
-@Getter
+@Setter @Getter
 public class Responsable extends AuditoriaConfig{
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

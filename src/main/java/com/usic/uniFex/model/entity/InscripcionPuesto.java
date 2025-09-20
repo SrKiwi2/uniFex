@@ -17,8 +17,7 @@ import lombok.Setter;
 
 @Entity
 @Table(name = "inscripcion_puesto")
-@Setter
-@Getter
+@Setter @Getter
 public class InscripcionPuesto extends AuditoriaConfig{
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -32,5 +31,4 @@ public class InscripcionPuesto extends AuditoriaConfig{
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_inscripcion")
     private Inscripcion inscripcion;
-    
 }

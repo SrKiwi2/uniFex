@@ -58,9 +58,12 @@ public class SecurityConfig {
         http.authorizeHttpRequests(
                 auth -> auth.requestMatchers(
                         "/",
+                        "/control-responsable",
+                        "/buscar-responsable",
                         "/vistaR/**",
                         "/admin/**",
                         "/iniciar-sesion/**",
+                        "/acceso/**",
                         "/ver/**",
                         "/api/**",
                         "/venta/**",

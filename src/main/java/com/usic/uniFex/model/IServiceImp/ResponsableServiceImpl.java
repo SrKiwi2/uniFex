@@ -8,9 +8,12 @@ import org.springframework.stereotype.Service;
 import com.usic.uniFex.model.IService.IResponsableService;
 import com.usic.uniFex.model.dao.IResponsableDao;
 import com.usic.uniFex.model.dto.PromotoresListadoDTO;
+import com.usic.uniFex.model.dto.PuestoDTO;
+import com.usic.uniFex.model.dto.ResponsableDetalleDTO;
 import com.usic.uniFex.model.dto.ResponsableListadoExplodeView;
 import com.usic.uniFex.model.dto.ResponsableListadoView;
 import com.usic.uniFex.model.entity.Responsable;
+import com.usic.uniFex.model.service.ResponsableDetalleRow;
 
 @Service
 public class ResponsableServiceImpl implements IResponsableService{
@@ -91,5 +94,31 @@ public class ResponsableServiceImpl implements IResponsableService{
     @Override
     public List<ResponsableListadoExplodeView> listarVistaExplode() {
         return responsableDao.listarVistaExplode();
+    }
+
+    @Override
+    public ResponsableDetalleDTO findDetallePorCi(String ci) {
+        var rows = responsableDao.findDetallePorCi(ci == null ? "" : ci.trim());
+    if (rows == null || rows.isEmpty()) return null;
+
+    var r0 = rows.get(0);
+    List<PuestoDTO> puestos = rows.stream()
+            .map(r -> new PuestoDTO(
+                    r.getCodigoPuesto(),
+                    r.getTamano(),
+                    r.getIdCategoria(),
+                    r.getCategoria(),
+                    r.getIdEntidad(),
+                    r.getEntidad()
+            )).toList();
+
+    return new ResponsableDetalleDTO(
+            r0.getIdPersona(),
+            r0.getNombreCompleto(),
+            r0.getCi(),
+            r0.getCelular(),
+            r0.getFoto(),
+            puestos
+    );
     }
 }
