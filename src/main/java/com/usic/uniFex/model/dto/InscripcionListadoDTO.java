@@ -6,9 +6,11 @@ import java.util.List;
 
 public record InscripcionListadoDTO(
     Long id,
+    String promotor,
     String entidad,
     String tipoEntidad,
     String nit,
+    Long nroComprobante,
     Integer cantidadPuestos,
     List<String> categorias,   // para chips/badges
     BigDecimal total,
@@ -18,5 +20,7 @@ public record InscripcionListadoDTO(
         boolean pagoContado,          // <— nuevo
     List<String> codigosPuestos   // <— nuevo
 ) {
-    
+    public Long getNroComprobante() { return nroComprobante; }
+    public String getPromotor() { return promotor; }
 }
+

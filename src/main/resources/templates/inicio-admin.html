@@ -93,7 +93,7 @@
                                             </table>
                                         </div>
                                     </div>
-                                    <div id="wizard-validation" class="bs-stepper mt-2" th:if="${session.nombre_rol != 'CONTROL'}">
+                                    <div id="wizard-validation" class="bs-stepper mt-2" th:if="${session.nombre_rol != 'CONTROL' and session.nombre_rol != 'ASESORIA'}">
                                         <div class="bs-stepper-header">
                                             <div class="step" data-target="#account-details-validation">
                                                 <button type="button" class="step-trigger">
@@ -127,7 +127,7 @@
                                                 </button>
                                             </div>
                                         </div>
-                                        <div class="bs-stepper-content">
+                                        <div class="bs-stepper-content" >
                                             <form id="wizard-validation-form" action="/admin/guardar"
                                                 enctype="multipart/form-data" method="post">
 

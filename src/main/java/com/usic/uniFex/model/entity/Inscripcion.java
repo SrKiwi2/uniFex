@@ -44,4 +44,9 @@ public class Inscripcion extends AuditoriaConfig{
 
     @OneToMany(mappedBy = "inscripcion", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
     private List<InscripcionPuesto> inscripcionPuestos = new ArrayList<>();
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "_registro_idUsuario", insertable = false, updatable = false)
+    private Usuario registroUsuario;
+
 }

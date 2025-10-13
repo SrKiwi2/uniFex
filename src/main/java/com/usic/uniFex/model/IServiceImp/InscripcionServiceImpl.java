@@ -3,6 +3,7 @@ package com.usic.uniFex.model.IServiceImp;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -74,6 +75,7 @@ public class InscripcionServiceImpl implements IInscripcionService{
 
             var items = i.getInscripcionPuestos();
             int cantidad = items != null ? items.size() : 0;
+            Long numeroComprobante = i.getNumComprobante();
 
             BigDecimal total = (items == null ? BigDecimal.ZERO :
                     items.stream()
@@ -96,12 +98,24 @@ public class InscripcionServiceImpl implements IInscripcionService{
                             .filter(Objects::nonNull)
                             .sorted()
                             .collect(Collectors.toList()));
+            
+                    // ← promotor (nombre completo de la persona del usuario que registró)
+            String promotor = Optional.ofNullable(i.getRegistroUsuario())
+                .map(u -> {
+                    var p = u.getPersona();
+                    return (p != null && p.getNombreCompleto() != null && !p.getNombreCompleto().isBlank())
+                            ? p.getNombreCompleto()
+                            : u.getUsername(); // fallback
+                })
+                .orElse(null);
 
             return new InscripcionListadoDTO(
                     i.getId(),
+                    promotor,
                     entidad != null ? entidad.getNombre() : null,
                     tipo,
                     entidad != null ? entidad.getNit() : null,
+                    numeroComprobante,
                     cantidad,
                     categorias,
                     total,
@@ -109,7 +123,7 @@ public class InscripcionServiceImpl implements IInscripcionService{
                     i.getInscripcionEstado(),
                     i.getImgComprobante(),
                     i.isPagoContado(),     // <—
-                    codigosPuestos         // <—
+                    codigosPuestos
             );
         }).collect(Collectors.toList());
     }
