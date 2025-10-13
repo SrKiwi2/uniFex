@@ -168,7 +168,7 @@
 
                     <div th:replace="~{fragments/alerts :: alerts}"></div>  
 
-                    <div id="wizard-validation" class="bs-stepper mt-2" th:if="${session.nombre_rol == 'ADMINISTRATIVO'}">
+                    <!-- <div id="wizard-validation" class="bs-stepper mt-2" th:if="${session.nombre_rol == 'ADMINISTRATIVO'}">
                         <div class="bs-stepper-header">
                             <div class="step" data-target="#account-details-validation">
                                 <button type="button" class="step-trigger">
@@ -297,7 +297,6 @@
                                     </div>
                                 </div>
 
-                                <!-- Personal Info -->
                                 <div id="personal-info-validation" class="content">
                                     <div class="content-header mb-3 text-center">
                                         <h6 class="mb-0">REGISTRO DE LOS RESPONSABLES</h6>
@@ -361,7 +360,6 @@
                                             <input type="number" id="formValidationCelularResponsable2" name="celularResponsable2" class="form-control" />
                                         </div>
 
-                                        <!-- 📸 Campo para foto opcional -->
                                         <div class="col-sm-4">
                                             <label class="form-label" for="fotoResponsable2">Foto (opcional)</label>
                                             <input type="file" id="fotoResponsable2" name="fotoResponsable2" class="form-control" accept="image/*" />
@@ -379,7 +377,6 @@
                                     </div>
                                 </div>
 
-                                <!-- Social Links -->
                                 <div id="social-links-validation" class="content">
                                     <div class="content-header mb-3">
                                         <h6 class="mb-0">REGISTRO DE LOS PUESTOS</h6>
@@ -398,7 +395,7 @@
                                         <div class="col-sm-6">
                                             <label class="form-label" for="formValidationPuestosDisponibles">Puestos Disponibles</label>
                                             <select name="puestosSeleccionados" id="formValidationPuestosDisponibles" class="select2 form-select" multiple>
-                                                <!-- Se cargan dinámicamente con JS -->
+                                               
                                             </select>
                                         </div>
 
@@ -472,7 +469,7 @@
                                 </div>
                             </form>
                         </div>
-                    </div>
+                    </div> -->
                     <div>
                         <br>
                     </div>
@@ -560,12 +557,30 @@
                             </div>
                         </div>
                     </div>
+
+                    
+
+
                     <!-- Toasts -->
                     <div id="toastArea" class="toast-container position-fixed top-0 end-0 p-3" style="z-index:1080"></div>
 
                     <div class="modal fade" id="modalFormularioResponsable" tabindex="-1" aria-hidden="true">
                         <div class="modal-dialog modal-xl">
                             <div class="modal-content" id="contenidoModalResponsable"></div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <br>
+                    </div>
+
+                    <div class="card">
+
+                        <h5 class="mb-0">FALTANTES COMPROBANTES</h5>
+                        <div class="card-body p-0">
+                            <div class="table-responsive position-relative">
+                                <div id="tablaRegistro"></div>
+                            </div>
                         </div>
                     </div>
 
@@ -664,6 +679,21 @@
     <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css" />
 
     <script th:inline="javascript">
+
+        $(document).ready(function () {
+        cargarTabla();
+
+    });
+
+    function cargarTabla() {
+        $.ajax({
+            type: 'POST',
+            url: "/administracion/inscripcion/tabla-registros",  // Ruta del metodo del controlador en Spring Boot
+            success: function (response) {
+                $("#tablaRegistro").html(response);  // Actualiza el contenido del div con la respuesta del servidor
+            }
+        });
+    }
 
         document.addEventListener('DOMContentLoaded', () => {
             // 1) Define las referencias (antes de usarlas)
