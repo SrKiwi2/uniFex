@@ -499,6 +499,7 @@
                                             <th style="min-width:110px">Pago</th>
                                             <th style="min-width:120px" class="text-end">Total (Bs)</th>
                                             <th style="min-width:150px">Fecha</th>
+                                            <th style="min-width:150px">Comproante1</th>
                                             <th class="sticky-col-right text-center" style="width:150px">Acciones</th>
                                         </tr>
                                     </thead>
@@ -536,6 +537,16 @@
                                                         th:text="${#dates.format(row['fecha_registro'], 'dd/MM/yyyy HH:mm')}"></span>
                                                 </td>
 
+                                                <td class="text-center">
+                                                    <span th:if="${row.img_comprobante != null and !#strings.isEmpty(row.img_comprobante)}">
+                                                        <a th:href="|/files/${row.img_comprobante}|" target="_blank">
+                                                            <img th:src="|/files/${row.img_comprobante}|" alt="Comprobante" class="img-thumbnail"
+                                                                style="width:50px;height:50px;object-fit:cover;" />
+                                                        </a>
+                                                    </span>
+                                                    <span th:if="${row.img_comprobante == null or #strings.isEmpty(row.img_comprobante)}">—</span>
+                                                </td>
+
                                                 <td class="sticky-col-right text-center bg-body">
                                                     <div class="btn-group btn-group-sm">
                                                         
@@ -570,7 +581,7 @@
                         </div>
                     </div>
 
-                    <div>
+                    <!-- <div>
                         <br>
                     </div>
 
@@ -582,7 +593,7 @@
                                 <div id="tablaRegistro"></div>
                             </div>
                         </div>
-                    </div>
+                    </div> -->
 
                     <style>
                         /* Hace pegajosa la última columna “Acciones” */
