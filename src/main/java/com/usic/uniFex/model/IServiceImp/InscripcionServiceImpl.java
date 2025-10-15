@@ -66,8 +66,7 @@ public class InscripcionServiceImpl implements IInscripcionService{
 
     @Override
     public List<InscripcionListadoDTO> listarParaTabla() {
-        List<Inscripcion> ins = inscripcionDao.findAllConTodo(); // o findAllConTodo() si usas EntityGraph/Query
-
+        List<Inscripcion> ins = inscripcionDao.findAllConTodo();
         return ins.stream().map(i -> {
             var entidad = i.getEntidad();
             var tipo = (entidad != null && entidad.getTipoEntidad() != null)

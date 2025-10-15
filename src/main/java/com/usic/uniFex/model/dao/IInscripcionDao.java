@@ -69,6 +69,6 @@ public interface IInscripcionDao extends JpaRepository <Inscripcion, Long> {
         "registroUsuario",
         "registroUsuario.persona"
     })
-    @Query("select i from Inscripcion i")
+    @Query("select i from Inscripcion i where i.inscripcionEstado = 'ACTIVO'")
     List<Inscripcion> findAllConTodo();
 }
