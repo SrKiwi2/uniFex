@@ -21,6 +21,11 @@
 
 ## 📸 Capturas del Sistema
 
+![Descripción de la imagen](screenshots/fexpo1.jpeg)
+![Descripción de la imagen](screenshots/fexpo2.jpeg)
+![Descripción de la imagen](screenshots/fexpo3.jpeg)
+![Descripción de la imagen](screenshots/fexpo4.jpeg)
+![Descripción de la imagen](screenshots/fexpo5.jpeg)
 > 🖼️ *Screenshots próximamente...*
 
 ---
