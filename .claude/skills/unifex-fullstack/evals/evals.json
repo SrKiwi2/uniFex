@@ -1,0 +1,58 @@
+{
+  "skill_name": "unifex-fullstack / unifex-arquitectura",
+  "notas": "Los evals 1 y 2 prueban unifex-fullstack; el 3 prueba unifex-arquitectura. Los agentes corren en modo solo-lectura: escriben su propuesta en outputs/ en vez de modificar el repo.",
+  "evals": [
+    {
+      "id": 1,
+      "nombre": "bloquear-caseta",
+      "skill": "unifex-fullstack",
+      "prompt": "necesito poder bloquear casetas que estan en reparacion o que la universidad se reserva, para que ningun vendedor las pueda vender. que el admin las marque y se vea en el mapa al toque, sin refrescar la pagina. y que se pueda desbloquear despues",
+      "expected_output": "Rebanada vertical: UPDATE condicional nativo en IPuestoDao (L -> X y X -> L), metodo en PuestoReservaService, endpoint POST /api/app/puestos/{id}/bloquear|desbloquear que publica por WebSocket y devuelve 409 si la caseta no esta disponible, restringido al rol ADMINISTRATIVO, mas el boton en la vista Vue.",
+      "assertions": [
+        "Anade a IPuestoDao un @Query nativo con @Modifying cuya clausula WHERE condiciona por estado_puesto (UPDATE condicional), en vez de leer-comprobar-guardar",
+        "NO usa el patron findById(...) + setEstadoPuesto(...) + save(...) para cambiar el estado de la caseta",
+        "Llama a PuestoEventPublisher.publicar(id) tras un bloqueo/desbloqueo exitoso",
+        "Devuelve HTTP 409 cuando la transicion no se pudo aplicar",
+        "El endpoint cuelga de /api/app/ (cadena JWT) y no de otra ruta",
+        "Restringe la operacion al rol ADMINISTRATIVO (hasRole o @PreAuthorize) o senala explicitamente que hoy /api/app/** es 'cualquier autenticado'",
+        "Usa el estado existente 'X' (Puesto.BLOQUEADO) en lugar de inventar un estado o una columna nueva",
+        "Nombres de metodos y variables en espanol, coherentes con el codigo existente"
+      ],
+      "files": []
+    },
+    {
+      "id": 2,
+      "nombre": "contador-reserva",
+      "skill": "unifex-fullstack",
+      "prompt": "cuando reservo una caseta quiero ver cuanto tiempo me queda antes de que se libere sola, como una cuenta regresiva en el mapa. ahorita no se sabe y el vendedor se queda esperando",
+      "expected_output": "Reutilizar el campo reservaExpira que YA viaja en PuestoEstadoDTO, calcular el restante en el cliente con un timer local, y apoyarse en el broadcast del scheduler cuando expira. Sin endpoint nuevo y sin polling.",
+      "assertions": [
+        "Reutiliza el campo reservaExpira que ya existe en PuestoEstadoDTO en lugar de crear un endpoint o campo nuevo",
+        "NO introduce polling periodico (setInterval que hace GET /api/app/puestos)",
+        "El conteo regresivo se calcula en el cliente; la fuente de verdad del estado sigue siendo el broadcast de /topic/puestos",
+        "Menciona o maneja que PuestoReservaScheduler libera la reserva vencida y difunde el cambio",
+        "El codigo Vue es coherente con Mapa.vue (usa apiFetch de src/api.js y crearClientePuestos de src/ws.js)",
+        "Limpia el timer al desmontar el componente"
+      ],
+      "files": []
+    },
+    {
+      "id": 3,
+      "nombre": "limpiar-codigo-muerto",
+      "skill": "unifex-arquitectura",
+      "prompt": "revisa el proyecto y dime que clases y archivos ya no se usan, hay codigo muerto de sobra y nombres inconsistentes. quiero borrar lo que sobre y dejarlo ordenado",
+      "expected_output": "Identifica LoginController como muerto con evidencia. NO propone borrar model/IService/IServiceGenerico.java sin arreglar antes los 12 usuarios del mismo paquete; propone consolidar. Reconoce que @ValidarUsuarioAutenticado ya se aplica. Senala las inconsistencias de nombres.",
+      "assertions": [
+        "Identifica controller/login/LoginController.java como codigo muerto y aporta evidencia (esta vacio y la ruta / la sirve HomeController)",
+        "NO propone borrar model/IService/IServiceGenerico.java sin actualizar antes a sus usuarios, que lo usan por resolucion de mismo paquete y sin import (esa propuesta rompe la compilacion)",
+        "Si aborda los dos IServiceGenerico duplicados, propone consolidarlos actualizando los 4 imports explicitos (ICargoService, ICategoriaVentaService, IOficinaService, IVentaBoletoService)",
+        "NO propone borrar la anotacion @ValidarUsuarioAutenticado ni AutenticacionInterceptor (estan vivos y en uso por 10 controladores)",
+        "Aporta evidencia de busqueda concreta para cada borrado propuesto, no solo una afirmacion",
+        "Advierte que borrar en este repo es riesgoso porque Thymeleaf referencia rutas y las stored functions/Jasper referencian por string",
+        "Senala inconsistencias de nombres reales (paquete Config en mayuscula, clases generadorCredenciales / ventaBoleteriaController en minuscula, o GasetaController)",
+        "No propone purgar static/assets sin condicionarlo al retiro de Thymeleaf"
+      ],
+      "files": []
+    }
+  ]
+}

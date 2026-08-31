@@ -1,0 +1,145 @@
+/* ============================================================================
+   Sistema de diseño de UniFex — tokens + utilidades compartidas.
+   Sin framework: control total del aspecto y bundle pequeño (importa para el APK).
+   Tema claro por defecto; oscuro por preferencia del sistema o con data-theme.
+   ============================================================================ */
+
+:root {
+  /* Marca y acentos */
+  --acento: #4f46e5;          /* índigo */
+  --acento-fuerte: #4338ca;
+  --acento-suave: #eef2ff;
+  --acento-texto: #ffffff;
+
+  /* Estados de caseta (compartidos por el mapa y las leyendas) */
+  --libre: #16a34a;
+  --tramite: #d97706;
+  --ocupado: #dc2626;
+  --bloqueado: #94a3b8;
+
+  /* Superficies y texto (claro) */
+  --bg: #f1f5f9;
+  --panel: #ffffff;
+  --panel-2: #f8fafc;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --muted: #64748b;
+  --danger: #dc2626;
+  --danger-suave: #fef2f2;
+  --ok: #16a34a;
+
+  /* Formas */
+  --radio: 10px;
+  --radio-sm: 7px;
+  --sombra: 0 1px 2px rgba(2, 6, 23, 0.06);
+  --sombra-md: 0 10px 30px rgba(2, 6, 23, 0.10);
+  --sidebar-w: 232px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --acento: #818cf8;
+    --acento-fuerte: #6366f1;
+    --acento-suave: #1e1b4b;
+    --acento-texto: #0b1020;
+    --bg: #0b1120;
+    --panel: #111827;
+    --panel-2: #0f1729;
+    --border: #1f2a3c;
+    --text: #e5e7eb;
+    --muted: #94a3b8;
+    --danger-suave: #2a1414;
+    --sombra: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --sombra-md: 0 12px 30px rgba(0, 0, 0, 0.5);
+  }
+}
+
+:root[data-theme='dark'] {
+  --acento: #818cf8;
+  --acento-fuerte: #6366f1;
+  --acento-suave: #1e1b4b;
+  --acento-texto: #0b1020;
+  --bg: #0b1120;
+  --panel: #111827;
+  --panel-2: #0f1729;
+  --border: #1f2a3c;
+  --text: #e5e7eb;
+  --muted: #94a3b8;
+  --danger-suave: #2a1414;
+  --sombra: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --sombra-md: 0 12px 30px rgba(0, 0, 0, 0.5);
+}
+
+* { box-sizing: border-box; }
+html, body, #app { height: 100%; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--acento); }
+
+/* ---- Botones ---- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+  font: inherit; font-weight: 600; cursor: pointer;
+  padding: 0.55rem 0.9rem; border-radius: var(--radio-sm);
+  border: 1px solid var(--border); background: var(--panel); color: var(--text);
+  transition: filter 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+  white-space: nowrap;
+}
+.btn:hover { filter: brightness(0.97); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.btn-primario { background: var(--acento); border-color: var(--acento); color: var(--acento-texto); }
+.btn-primario:hover { background: var(--acento-fuerte); filter: none; }
+.btn-peligro { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); }
+.btn-peligro:hover { background: var(--danger-suave); }
+.btn-fantasma { background: transparent; border-color: transparent; }
+.btn-sm { padding: 0.35rem 0.6rem; font-size: 0.85rem; }
+.btn-icono { padding: 0.4rem; width: 2.1rem; height: 2.1rem; }
+
+/* ---- Campos ---- */
+.campo { display: flex; flex-direction: column; gap: 0.3rem; }
+.campo > span { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+.control {
+  width: 100%; padding: 0.55rem 0.7rem; font: inherit; color: var(--text);
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radio-sm);
+}
+.control:focus { outline: 2px solid var(--acento); outline-offset: -1px; border-color: var(--acento); }
+
+/* ---- Tarjetas ---- */
+.card {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radio); box-shadow: var(--sombra);
+}
+
+/* ---- Tablas ---- */
+.tabla { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.tabla th, .tabla td { text-align: left; padding: 0.7rem 0.85rem; border-bottom: 1px solid var(--border); }
+.tabla th { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 700; }
+.tabla tbody tr:hover { background: var(--panel-2); }
+.tabla td.acciones { text-align: right; white-space: nowrap; }
+
+/* ---- Insignias ---- */
+.badge {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700;
+}
+.badge-ok { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
+.badge-muted { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
+.badge-danger { background: var(--danger-suave); color: var(--danger); }
+
+/* Clases de estado de caseta (mapa + leyenda) */
+.libre { background: var(--libre); color: #fff; }
+.tramite { background: var(--tramite); color: #fff; }
+.ocupado { background: var(--ocupado); color: #fff; }
+.bloqueado { background: var(--bloqueado); color: #fff; }
+
+/* Utilidades mínimas */
+.fila { display: flex; align-items: center; gap: 0.6rem; }
+.entre { justify-content: space-between; }
+.crecer { flex: 1; }
+.muted { color: var(--muted); }
+.vacio { text-align: center; color: var(--muted); padding: 2.5rem 1rem; }

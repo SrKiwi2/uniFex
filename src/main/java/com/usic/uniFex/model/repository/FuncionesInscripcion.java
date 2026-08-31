@@ -80,12 +80,25 @@ public class FuncionesInscripcion {
         }
     }
 
-    public List<Map<String, Object>> fn_inscripciones_por_categoria() {
-        String sql = "SELECT * FROM public.fn_inscripciones_por_categoria()";
+    /**
+     * Inscripciones de un usuario en la edicion activa (sin edicion explicita).
+     * Ver {@link #fn_get_inscripciones(Long, Long)}.
+     */
+    public List<Map<String, Object>> fn_get_inscripciones(Long p_id_usuario) {
+        return fn_get_inscripciones(p_id_usuario, null);
+    }
+
+    /**
+     * Inscripciones de un usuario, filtradas por edicion (V6). {@code null} en
+     * {@code p_id_edicion} = la edicion ACTIVA dentro de la stored function; con esto
+     * "Mis ventas" muestra lo actual por defecto y el historico solo si se pide.
+     */
+    public List<Map<String, Object>> fn_get_inscripciones(Long p_id_usuario, Long p_id_edicion) {
+        String sql = "SELECT * FROM public.fn_get_inscripciones(?, ?)";
 
         try (Connection conn = jdbcTemplate.getDataSource().getConnection()) {
-
             return jdbcTemplate.queryForList(sql, new Object[] {
+                p_id_usuario, p_id_edicion
             });
 
         } catch (SQLException e) {
@@ -95,12 +108,18 @@ public class FuncionesInscripcion {
         }
     }
 
-    public List<Map<String, Object>> fn_get_inscripciones(Long p_id_usuario) {
-        String sql = "SELECT * FROM public.fn_get_inscripciones(?)";
+    /** Inscripciones agrupadas por categoria, en la edicion activa (V6). */
+    public List<Map<String, Object>> fn_inscripciones_por_categoria() {
+        return fn_inscripciones_por_categoria(null);
+    }
+
+    /** Inscripciones agrupadas por categoria, filtradas por edicion; null = la activa. */
+    public List<Map<String, Object>> fn_inscripciones_por_categoria(Long p_id_edicion) {
+        String sql = "SELECT * FROM public.fn_inscripciones_por_categoria(?)";
 
         try (Connection conn = jdbcTemplate.getDataSource().getConnection()) {
             return jdbcTemplate.queryForList(sql, new Object[] {
-                p_id_usuario
+                p_id_edicion
             });
 
         } catch (SQLException e) {

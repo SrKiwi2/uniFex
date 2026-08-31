@@ -29,7 +29,9 @@ public class FileStorageService {
 
     public enum Bucket {
         COMPROBANTES("comprobantes"),
-        RESPONSABLES("responsables");
+        RESPONSABLES("responsables"),
+        /** Fotos de como se ve una caseta en el lugar (las enseña el vendedor al cliente). */
+        PUESTOS("puestos");
 
         private final String dir;
         Bucket(String dir) { this.dir = dir; }

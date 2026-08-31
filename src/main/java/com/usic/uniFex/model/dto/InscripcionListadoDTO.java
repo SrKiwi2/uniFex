@@ -18,9 +18,12 @@ public record InscripcionListadoDTO(
     String estado,
     String imgComprobante,
         boolean pagoContado,          // <— nuevo
-    List<String> codigosPuestos   // <— nuevo
+    List<String> codigosPuestos,      // <— nuevo
+    String motivoCancelacion,         // <— cancelacion (V10)
+    LocalDateTime fechaCancelacion,
+    String canceladaPor,
+    String origenCancelacion
 ) {
     public Long getNroComprobante() { return nroComprobante; }
     public String getPromotor() { return promotor; }
 }
-

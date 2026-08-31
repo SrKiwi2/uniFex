@@ -11,8 +11,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -23,7 +21,10 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Controller;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -55,6 +56,8 @@ import com.usic.uniFex.model.entity.Usuario;
 import com.usic.uniFex.model.repository.FuncionesInscripcion;
 import com.usic.uniFex.model.service.FileStorageService;
 import com.usic.uniFex.model.service.FileStorageService.Bucket;
+import com.usic.uniFex.model.service.PuestoEventPublisher;
+import com.usic.uniFex.model.service.PuestoReservaService;
 import com.usic.uniFex.model.service.ReciboPdfService;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -82,6 +85,8 @@ public class AdminController {
     private static final Logger logger = LoggerFactory.getLogger(AdminController.class);
 
     private final FileStorageService storage;
+    private final PuestoReservaService reservaService;
+    private final PuestoEventPublisher publisher;
 
     @ValidarUsuarioAutenticado
     @GetMapping(value = "/admin")
@@ -137,6 +142,7 @@ public class AdminController {
     }
 
     @ValidarUsuarioAutenticado
+    @Transactional
     @PostMapping("/guardar")
     public String adminIndexGuardar(
             HttpServletRequest request, Model model,
@@ -297,15 +303,23 @@ public class AdminController {
             inscripcionService.save(inscripcion);
 
             // ===== PUESTOS =====
+            List<Long> ocupados = new ArrayList<>();
             if (puestosSeleccionados != null) {
                 for (Long puestoId : puestosSeleccionados) {
+                    // Ocupacion atomica: solo procede si la caseta sigue disponible
+                    // (LIBRE, o EN_TRAMITE reservada por este mismo usuario). Esto es
+                    // lo que impide la doble venta cuando dos registros eligen la
+                    // misma caseta casi al mismo tiempo. Al estar dentro de la
+                    // transaccion del metodo, si algo falla despues se revierte todo.
+                    boolean ocupadoOk = reservaService.ocupar(puestoId, usuario.getId());
+                    if (!ocupadoOk) {
+                        throw new IllegalStateException(
+                            "La caseta seleccionada (id " + puestoId + ") ya fue tomada por otro registro. "
+                            + "Revisa la disponibilidad e intenta nuevamente.");
+                    }
+                    ocupados.add(puestoId);
+
                     Puesto puesto = puestoService.findById(puestoId);
-                    puesto.setEstadoPuesto("O");
-                    puesto.setRegistro(new Date());
-                    puesto.setRegistroIdUsuario(usuario.getId());
-                    puesto.setModificacion(new Date());
-                    puesto.setModificacionIdUsuario(usuario.getId());
-                    puestoService.save(puesto);
 
                     InscripcionPuesto ip = new InscripcionPuesto();
                     ip.setPuesto(puesto);
@@ -316,28 +330,30 @@ public class AdminController {
                     ip.setModificacionIdUsuario(usuario.getId());
                     ip.setEstado("ACTIVO");
 
-                    if (puesto.getCategoria().getId() != 25) {
-                        ip.setCosto(funcionesInscripcion.obtenerCostoPuesto(
-                                entidad.getTipoEntidad().getId(),
-                                puesto.getTamano(),
-                                puesto.getCategoria().getId()
-                        ));
-                    }else{
-                        int codigoNum = extraerNumero(puesto.getCodigo());
-                        String costo;
-                        if (codigoNum >= 1 && codigoNum <= 19) {
-                            costo = "200";
-                        } else if (codigoNum >= 20 && codigoNum <= 23) {
-                            costo = "300";
-                        } else if (codigoNum >= 24 && codigoNum <= 28) {
-                            costo = "100";
-                        } else {
-                            costo = "0"; // fuera de rango o no numérico
-                        }
-                        ip.setCosto(new BigDecimal(costo));
-                    }
+                    // El precio sale siempre de la categoria (via la stored function, que
+                    // consulta categoria.precio_base). Aqui habia un caso especial cableado
+                    // para la categoria con id 25, con precios fijos por rango de codigo
+                    // (200/300/100). Se quito porque los ids de categoria no son estables:
+                    // tras reiniciar la gestion, el 25 pasa a ser una categoria cualquiera y
+                    // esa regla le aplicaria precios ajenos sin que nadie se entere.
+                    ip.setCosto(funcionesInscripcion.obtenerCostoPuesto(
+                            entidad.getTipoEntidad().getId(),
+                            puesto.getTamano(),
+                            puesto.getCategoria().getId()
+                    ));
                     inscripcionPuestoService.save(ip);
                 }
+            }
+
+            // Difunde el nuevo estado (OCUPADO) al mapa en vivo, pero solo si la
+            // transaccion se confirma (asi no se avisa de casetas que luego se revierten).
+            if (!ocupados.isEmpty() && TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        ocupados.forEach(publisher::publicar);
+                    }
+                });
             }
 
             // ★ Mensaje de éxito + anexar warnings
@@ -350,6 +366,13 @@ public class AdminController {
             // ★ Pasar datos por flash
             flash.addFlashAttribute("messages", messages);
             flash.addAttribute("inscripcionId", inscripcion.getId());
+            return "redirect:/vistaR";
+
+        } catch (IllegalStateException ex) {
+            logger.warn("Caseta no disponible al guardar inscripción: {}", ex.getMessage());
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            messages.add(new UiMessage("warning", "Caseta no disponible", ex.getMessage()));
+            flash.addFlashAttribute("messages", messages);
             return "redirect:/vistaR";
 
         } catch (DataIntegrityViolationException ex) {
@@ -370,15 +393,6 @@ public class AdminController {
         }
     }
 
-    private static int extraerNumero(String codigo) {
-    if (codigo == null) return -1;
-    Matcher m = Pattern.compile("\\d+").matcher(codigo.trim());
-    if (m.find()) {
-        try { return Integer.parseInt(m.group()); }
-        catch (NumberFormatException e) { return -1; }
-    }
-    return -1;
-}
 
     @ValidarUsuarioAutenticado
     @GetMapping("/ver/inscripcion/{id}/recibo.pdf")

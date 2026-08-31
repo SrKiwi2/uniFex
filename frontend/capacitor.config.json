@@ -1,0 +1,12 @@
+{
+  "appId": "bo.edu.uap.unifex",
+  "appName": "UniFex",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": true
+  },
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  }
+}

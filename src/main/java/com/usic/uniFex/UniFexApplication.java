@@ -10,6 +10,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.usic.uniFex.model.IService.IPersonaService;
@@ -21,6 +22,7 @@ import com.usic.uniFex.model.entity.Rol;
 import com.usic.uniFex.model.entity.Usuario;
 
 @SpringBootApplication
+@EnableScheduling
 public class UniFexApplication {
 
 	@Autowired PasswordEncoder passwordEncoder;

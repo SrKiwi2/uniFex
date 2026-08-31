@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.itextpdf.text.BaseColor;
 import com.itextpdf.text.Document;
@@ -52,6 +53,17 @@ public class ReciboPdfService {
     private final IUsuarioService usuarioService;
     private final IAdministrativoService administrativoService;
 
+    /**
+     * Genera el recibo en PDF sobre el stream dado.
+     *
+     * `@Transactional(readOnly = true)` no es decorativo: el metodo recorre relaciones LAZY
+     * (entidad, tipo de entidad, persona del usuario). Hasta ahora solo funcionaba porque
+     * Spring trae `open-in-view` activado por defecto y mantiene la sesion abierta durante
+     * toda la peticion web. Fuera de una peticion —una prueba, una tarea programada, un
+     * futuro envio del recibo por correo— reventaba con LazyInitializationException, y
+     * bastaria con que alguien desactivara `open-in-view` para romperlo tambien en la web.
+     */
+    @Transactional(readOnly = true)
     public void generarRecibo(Long idInscripcion, OutputStream os) throws Exception {
         Inscripcion ins = inscripcionService.findById(idInscripcion);
         if (ins == null) throw new IllegalArgumentException("Inscripción no encontrada");
@@ -198,13 +210,34 @@ public class ReciboPdfService {
         PdfPTable sello = new PdfPTable(new float[]{70, 30});
         sello.setWidthPercentage(100);
 
+        /*
+         * Quien emite el recibo. Todo esto es OPCIONAL: el recibo debe salir igual aunque
+         * falten los datos administrativos del vendedor.
+         *
+         * Antes se pedia el Administrativo con `.orElse(null)` —reconociendo que puede no
+         * haber— y acto seguido se le llamaba a getCodigoFuncionario(), asi que un vendedor
+         * sin ficha administrativa reventaba la generacion con una NullPointerException. No
+         * era un problema del reseteo: le pasaba a cualquier usuario sin esa ficha, que es la
+         * mayoria. Ahora se degrada al nombre de usuario, que siempre existe.
+         */
         Usuario usuario = usuarioService.findById(ins.getRegistroIdUsuario());
-        Persona persona = usuario.getPersona();
-        Administrativo administrativo = administrativoService.findByPersonaId(persona.getId()).orElse(null);
+        Persona persona = usuario != null ? usuario.getPersona() : null;
+        Administrativo administrativo = persona != null
+                ? administrativoService.findByPersonaId(persona.getId()).orElse(null)
+                : null;
+
+        String quienEmite;
+        if (administrativo != null && administrativo.getCodigoFuncionario() != null) {
+            quienEmite = administrativo.getCodigoFuncionario();
+        } else if (usuario != null && usuario.getUsername() != null) {
+            quienEmite = usuario.getUsername();
+        } else {
+            quienEmite = "—";
+        }
 
         String infoCodigo = "Código de autenticación: " + codigoAut + "\n" +
                             "Generado: " + fechaHoraEmision + "\n" +
-                            "Usuario: " + administrativo.getCodigoFuncionario();
+                            "Usuario: " + quienEmite;
         PdfPCell cInfo = cell(infoCodigo, fSmall);
         cInfo.setBorder(Rectangle.NO_BORDER);
         cInfo.setPaddingTop(4f);
