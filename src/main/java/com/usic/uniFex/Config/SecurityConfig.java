@@ -145,6 +145,7 @@ public class SecurityConfig {
                         "/files/**",
                         "/inscripciones/**",
                         "/ws/**",
+                        "/app/**",
                         "/cerrar_sesion",
                         "/administracion/**",
                         "/vistaGenerarCredenciales/**",

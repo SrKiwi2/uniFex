@@ -5,6 +5,7 @@ import vue from '@vitejs/plugin-vue';
 // ve todo en el mismo origen y no hay CORS. /ws se proxya con ws:true (WebSocket nativo).
 export default defineConfig({
   plugins: [vue()],
+  base: process.env.VITE_BASE || '/',
   server: {
     port: 5173,
     // `host: true` escucha en TODAS las direcciones (IPv4 e IPv6), y eso no es un detalle:
