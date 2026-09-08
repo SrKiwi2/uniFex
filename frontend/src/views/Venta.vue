@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue';
+import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { apiFetch } from '../api';
 import { useAuthStore } from '../stores/auth';
@@ -152,7 +152,29 @@ async function registrar() {
 // ---- borrador local: se guarda al vuelo y se recupera al volver ----
 watch(form, () => guardarBorrador(auth.id, form), { deep: true });
 
+/*
+ * Aviso de "hay mas abajo". En una pantalla chica el formulario no cabe entero y nada
+ * delata que sigue: el vendedor rellena lo que ve y busca el boton de continuar. El aviso
+ * aparece solo mientras quede contenido por debajo y se va al llegar al final.
+ */
+const hayMasAbajo = ref(false);
+function revisarDesplazamiento() {
+  const d = document.documentElement;
+  hayMasAbajo.value = d.scrollHeight - window.scrollY - d.clientHeight > 24;
+}
+function bajar() {
+  window.scrollBy({ top: window.innerHeight * 0.75, behavior: 'smooth' });
+}
+// Cambiar de paso reinicia el alto de la pagina: hay que volver a medir DESPUES de pintar.
+watch(paso, () => {
+  window.scrollTo({ top: 0 });
+  nextTick(revisarDesplazamiento);
+});
+
 onMounted(async () => {
+  window.addEventListener('scroll', revisarDesplazamiento, { passive: true });
+  window.addEventListener('resize', revisarDesplazamiento);
+
   const guardado = leerBorrador(auth.id);
   if (guardado) {
     Object.assign(form, guardado);
@@ -169,6 +191,12 @@ onMounted(async () => {
   } catch (e) {
     toast('No se pudieron cargar los tipos de entidad', 'error');
   }
+  nextTick(revisarDesplazamiento);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', revisarDesplazamiento);
+  window.removeEventListener('resize', revisarDesplazamiento);
 });
 </script>
 
@@ -182,7 +210,7 @@ onMounted(async () => {
         <span class="muted"> · </span>
         <strong class="total">{{ total.toLocaleString('es-BO') }} Bs</strong>
       </div>
-      <router-link to="/mapa" class="btn btn-fantasma btn-sm">Elegir en el mapa</router-link>
+      <router-link to="/mapa" class="btn btn-fantasma btn-sm">← Volver al mapa</router-link>
     </header>
 
     <p v-if="!carrito.length" class="vacio card">
@@ -211,12 +239,18 @@ onMounted(async () => {
           </select>
         </label>
         <div class="dos">
-          <label class="campo"><span>NIT</span><input class="control" v-model="form.nit" /></label>
-          <label class="campo"><span>C.I. del representante</span><input class="control" v-model="form.ciRepresentante" /></label>
+          <label class="campo">
+            <span>NIT</span>
+            <input class="control" v-model="form.nit" inputmode="numeric" placeholder="Solo números" />
+          </label>
+          <label class="campo">
+            <span>C.I. del representante</span>
+            <input class="control" v-model="form.ciRepresentante" inputmode="numeric" placeholder="Ej. 8765432" />
+          </label>
         </div>
         <label class="campo">
           <span>Representante legal</span>
-          <input class="control" v-model="form.representanteLegal" />
+          <input class="control" v-model="form.representanteLegal" autocapitalize="words" placeholder="Nombre y apellidos" />
         </label>
         <label class="campo">
           <span>Rubro o descripción</span>
@@ -229,39 +263,48 @@ onMounted(async () => {
       </section>
 
       <!-- Paso 2: responsables -->
+      <!-- Titular y acompañante piden exactamente los mismos datos, asi que van por el
+           mismo bucle: un campo nuevo se agrega una vez y sale en los dos. -->
       <section v-show="paso === 1" class="card bloque">
-        <h3 class="sub">Titular <span class="muted">— el dueño de la caseta</span></h3>
-        <div class="dos">
-          <label class="campo"><span>Nombre *</span><input class="control" v-model="form.responsables[0].nombre" /></label>
-          <label class="campo"><span>C.I. *</span><input class="control" v-model="form.responsables[0].ci" /></label>
-        </div>
-        <div class="dos">
-          <label class="campo"><span>Apellido paterno</span><input class="control" v-model="form.responsables[0].paterno" /></label>
-          <label class="campo"><span>Apellido materno</span><input class="control" v-model="form.responsables[0].materno" /></label>
-        </div>
-        <div class="dos">
-          <label class="campo"><span>Celular</span><input class="control" type="tel" v-model="form.responsables[0].celular" /></label>
-          <label class="campo"><span>Correo</span><input class="control" type="email" v-model="form.responsables[0].correo" /></label>
-        </div>
-
-        <div class="separador"></div>
-
-        <template v-if="hayAcompaniante">
-          <h3 class="sub">Acompañante <span class="muted">— se permite uno</span></h3>
+        <template v-for="(r, i) in form.responsables" :key="i">
+          <div v-if="i > 0" class="separador"></div>
+          <h3 class="sub">
+            {{ i === 0 ? 'Titular' : 'Acompañante' }}
+            <span class="muted">— {{ i === 0 ? 'el dueño de la caseta' : 'se permite uno' }}</span>
+          </h3>
           <div class="dos">
-            <label class="campo"><span>Nombre</span><input class="control" v-model="form.responsables[1].nombre" /></label>
-            <label class="campo"><span>C.I.</span><input class="control" v-model="form.responsables[1].ci" /></label>
+            <label class="campo">
+              <span>Nombre {{ i === 0 ? '*' : '' }}</span>
+              <input class="control" v-model="r.nombre" autocapitalize="words" placeholder="Ej. María" />
+            </label>
+            <label class="campo">
+              <span>C.I. {{ i === 0 ? '*' : '' }}</span>
+              <input class="control" v-model="r.ci" inputmode="numeric" placeholder="Ej. 8765432" />
+            </label>
           </div>
           <div class="dos">
-            <label class="campo"><span>Apellido paterno</span><input class="control" v-model="form.responsables[1].paterno" /></label>
-            <label class="campo"><span>Apellido materno</span><input class="control" v-model="form.responsables[1].materno" /></label>
+            <label class="campo">
+              <span>Apellido paterno</span>
+              <input class="control" v-model="r.paterno" autocapitalize="words" placeholder="Ej. Quispe" />
+            </label>
+            <label class="campo">
+              <span>Apellido materno</span>
+              <input class="control" v-model="r.materno" autocapitalize="words" placeholder="Ej. Mamani" />
+            </label>
           </div>
           <div class="dos">
-            <label class="campo"><span>Celular</span><input class="control" type="tel" v-model="form.responsables[1].celular" /></label>
-            <label class="campo"><span>Correo</span><input class="control" type="email" v-model="form.responsables[1].correo" /></label>
+            <label class="campo">
+              <span>Celular</span>
+              <input class="control" type="tel" inputmode="tel" v-model="r.celular" placeholder="Ej. 71234567" />
+            </label>
+            <label class="campo">
+              <span>Correo</span>
+              <input class="control" type="email" inputmode="email" autocapitalize="off" v-model="r.correo" placeholder="Ej. nombre@correo.com" />
+            </label>
           </div>
-          <button class="btn btn-peligro btn-sm" @click="quitarAcompaniante">Quitar acompañante</button>
         </template>
+
+        <button v-if="hayAcompaniante" class="btn btn-peligro btn-sm" @click="quitarAcompaniante">Quitar acompañante</button>
         <button v-else class="btn btn-sm" @click="agregarAcompaniante">＋ Agregar acompañante</button>
       </section>
 
@@ -286,10 +329,13 @@ onMounted(async () => {
           Pagó al contado
         </label>
         <div v-if="!form.pagoContado" class="dos">
-          <label class="campo"><span>Banco</span><input class="control" v-model="form.entidadBancaria" /></label>
+          <label class="campo">
+            <span>Banco</span>
+            <input class="control" v-model="form.entidadBancaria" autocapitalize="words" placeholder="Ej. Banco Unión" />
+          </label>
           <label class="campo">
             <span>N.º de comprobante</span>
-            <input class="control" type="number" v-model.number="form.numComprobante" />
+            <input class="control" type="number" inputmode="numeric" v-model.number="form.numComprobante" placeholder="Solo números" />
           </label>
         </div>
         <p v-if="!form.pagoContado" class="nota">
@@ -298,12 +344,20 @@ onMounted(async () => {
         </p>
       </section>
 
-      <div class="acciones">
-        <button class="btn" :disabled="paso === 0 || enviando" @click="atras">Atrás</button>
-        <button v-if="paso < 2" class="btn btn-primario" @click="siguiente">Siguiente</button>
-        <button v-else class="btn btn-primario" :disabled="enviando" @click="registrar">
-          {{ enviando ? 'Registrando…' : `Registrar venta (${total.toLocaleString('es-BO')} Bs)` }}
+      <!-- El aviso de "hay mas abajo" viaja en la MISMA franja pegajosa que los botones,
+           sobre fondo opaco: flotando suelto se posaba encima de un campo y parecia que
+           lo tapaba. -->
+      <div class="pie">
+        <button v-if="hayMasAbajo" class="mas-abajo" type="button" @click="bajar">
+          Desliza para ver más ↓
         </button>
+        <div class="acciones">
+          <button class="btn" :disabled="paso === 0 || enviando" @click="atras">Atrás</button>
+          <button v-if="paso < 2" class="btn btn-primario" @click="siguiente">Siguiente</button>
+          <button v-else class="btn btn-primario" :disabled="enviando" @click="registrar">
+            {{ enviando ? 'Registrando…' : `Registrar venta (${total.toLocaleString('es-BO')} Bs)` }}
+          </button>
+        </div>
       </div>
     </template>
   </div>
@@ -353,11 +407,35 @@ onMounted(async () => {
 
 .acciones { display: flex; gap: 0.6rem; justify-content: flex-end; padding-bottom: 1rem; }
 
+/* Franja inferior: aviso de "hay más" + botones, juntos y sobre fondo opaco. */
+.pie { display: flex; flex-direction: column; align-items: stretch; gap: 0.5rem; }
+.mas-abajo {
+  align-self: center; border: 1px solid var(--border); background: var(--panel);
+  color: var(--muted); border-radius: 999px; padding: 0.4rem 0.9rem; font: inherit;
+  font-size: 0.85rem; font-weight: 600; box-shadow: var(--sombra); cursor: pointer;
+}
+
 /* En móvil el formulario se vuelve de una columna y los botones ocupan el ancho:
    es la misma pantalla que irá en el APK y ahí se usa con una mano. */
 @media (max-width: 560px) {
   .dos { grid-template-columns: 1fr; }
-  .acciones { position: sticky; bottom: 0; background: var(--bg); padding: 0.6rem 0 1rem; }
+  .pie { position: sticky; bottom: var(--tabbar-h); background: var(--bg); padding: 0.6rem 0 1rem; z-index: 6; }
+  .acciones { padding-bottom: 0; }
   .acciones .btn { flex: 1; }
+
+  /* Campos y textos más grandes: es la pantalla que más se teclea, y en un teléfono
+     chico los tamaños de escritorio obligan a apuntar. */
+  .venta { gap: 1.1rem; }
+  .bloque { padding: 1.15rem 1rem 1.3rem; gap: 1.1rem; }
+  .sub { font-size: 1.05rem; }
+  .pasos li { font-size: 0.95rem; }
+  .pasos .num { width: 1.75rem; height: 1.75rem; font-size: 0.85rem; }
+  .resumen { padding: 0.9rem 1rem; font-size: 1rem; }
+  .resumen .total { font-size: 1.15rem; }
+  .casetas li { font-size: 1rem; padding: 0.7rem 0; gap: 0.7rem; }
+  .fila-check { font-size: 1rem; gap: 0.7rem; }
+  /* Casilla grande: con la de por defecto (13px) hay que apuntar con la uña. */
+  .fila-check input[type='checkbox'] { width: 22px; height: 22px; }
+  .nota { font-size: 0.92rem; }
 }
 </style>

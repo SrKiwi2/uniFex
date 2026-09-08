@@ -34,6 +34,11 @@ const enlaces = computed(() => {
   return base;
 });
 
+// Las 4 tareas del día a día del vendedor, para la barra inferior estilo app: los mismos
+// destinos de siempre, solo que a mano del pulgar en vez de en un cajón que hay que abrir.
+// El resto (herramientas de administración, Salir) queda en el cajón, detrás de "Más".
+const enlacesPrincipales = computed(() => enlaces.value.slice(0, 4));
+
 const iconoTema = computed(() => (tema.value === 'dark' ? '🌙' : tema.value === 'light' ? '☀️' : '🌗'));
 
 function salir() {
@@ -79,11 +84,24 @@ function salir() {
         <slot />
       </main>
     </div>
+
+    <!-- Barra inferior: solo en móvil (ver media query). Es la navegación principal ahí,
+         como en cualquier app nativa — el cajón lateral de arriba queda para el resto. -->
+    <nav class="tabbar">
+      <router-link v-for="e in enlacesPrincipales" :key="e.a" :to="e.a" class="tab" @click="abierto = false">
+        <span class="ico">{{ e.icono }}</span>
+        <span class="txt">{{ e.txt }}</span>
+      </router-link>
+      <button type="button" class="tab tab-mas" :class="{ activo: abierto }" @click="abierto = !abierto">
+        <span class="ico">☰</span>
+        <span class="txt">Más</span>
+      </button>
+    </nav>
   </div>
 </template>
 
 <style scoped>
-.shell { display: flex; min-height: 100vh; }
+.shell { display: flex; min-height: 100vh; min-height: 100dvh; }
 
 .sidebar {
   width: var(--sidebar-w); flex: none; background: var(--panel);
@@ -118,10 +136,17 @@ nav { display: flex; flex-direction: column; gap: 2px; padding: 0.4rem 0.6rem; f
 }
 .topbar h1 { margin: 0; font-size: 1.15rem; }
 .menu { display: none; }
-.contenido { padding: 1.4rem; max-width: 1200px; width: 100%; margin: 0 auto; }
-.contenido.inmersivo { padding: 0; max-width: none; }
+/* flex: 1 0 auto — crece para ocupar lo que sobra bajo la cabecera (de eso vive el mapa,
+   que se estira hasta la barra inferior en vez de dejar un hueco muerto), pero NO se encoge:
+   una vista larga (una tabla de usuarios) conserva su alto natural y la pagina hace scroll
+   como siempre. Con flex:1 a secas se comprimiria y quedaria cortada. */
+.contenido { flex: 1 0 auto; padding: 1.4rem; padding-bottom: calc(1.4rem + var(--tabbar-h)); max-width: 1200px; width: 100%; margin: 0 auto; }
+/* Columna flex para que el plano (con la prop `llenar`) reparta con la barra de leyenda
+   el alto disponible, sin tener que adivinar en CSS cuanto mide cada cosa. */
+.contenido.inmersivo { display: flex; flex-direction: column; padding: 0; padding-bottom: var(--tabbar-h); max-width: none; }
 
 .velo { display: none; }
+.tabbar { display: none; }
 
 @media (max-width: 820px) {
   .sidebar {
@@ -129,6 +154,33 @@ nav { display: flex; flex-direction: column; gap: 2px; padding: 0.4rem 0.6rem; f
   }
   .sidebar.abierto { transform: translateX(0); box-shadow: var(--sombra-md); }
   .velo { display: block; position: fixed; inset: 0; z-index: 50; background: rgba(2, 6, 23, 0.4); }
-  .menu { display: inline-flex; }
+
+  /* El cajón lateral sigue existiendo (herramientas de admin, Salir) pero ya no se abre
+     desde arriba: la barra inferior — "Más" — es la única entrada en móvil, como en
+     cualquier app nativa. Un solo disparador es más intuitivo que dos botones para lo mismo. */
+  .menu { display: none; }
+
+  /* Objetivos táctiles más grandes dentro del cajón: con el pulgar hay que acertarle
+     a algo mayor que con el cursor de un mouse. */
+  .enlace { padding: 0.9rem 0.9rem; font-size: 1.02rem; gap: 0.8rem; }
+  .ico { font-size: 1.15rem; }
+
+  /* nav{flex-direction:column;...} de arriba es para el cajón lateral, pero por ser el
+     mismo tag <nav> dentro del mismo componente también alcanza a esta barra: se
+     sobrescribe cada propiedad que importa en vez de confiar en la cascada. */
+  .tabbar {
+    display: flex; flex-direction: row; gap: 0; overflow: visible; flex: none;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 55;
+    height: var(--tabbar-h); padding: 0 0 env(safe-area-inset-bottom);
+    background: var(--panel); border-top: 1px solid var(--border); box-shadow: 0 -2px 10px rgba(2, 6, 23, 0.06);
+  }
+  .tab {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 0.15rem; color: var(--muted); text-decoration: none; font: inherit;
+    background: none; border: none; padding: 0.3rem 0.2rem;
+  }
+  .tab .ico { font-size: 1.35rem; line-height: 1; }
+  .tab .txt { font-size: 0.66rem; font-weight: 700; }
+  .tab.router-link-exact-active, .tab-mas.activo { color: var(--acento); }
 }
 </style>

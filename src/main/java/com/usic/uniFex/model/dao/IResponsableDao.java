@@ -66,6 +66,24 @@ public interface IResponsableDao extends JpaRepository<Responsable, Long> {
             """)
     List<Responsable> findByEntidadIdWithPersona(@Param("entidadId") Long entidadId);
 
+    /**
+     * Responsables vigentes de una entidad, el titular primero. Para la nota de venta.
+     *
+     * Antes la nota usaba {@code findByEntidadId}, que (a) no excluia a los dados de baja
+     * ({@code _estado = 'X'}), asi que imprimia gente que ya no responde por la caseta, y
+     * (b) traia la persona LAZY, una consulta por fila. El orden importa: en el documento
+     * el titular tiene que salir primero, no quien tenga el apellido mas cercano a la A.
+     */
+    @EntityGraph(attributePaths = { "persona" })
+    @Query("""
+            select r
+            from Responsable r
+            where r.entidad.id = :entidadId
+              and (r.estado is null or r.estado <> 'X')
+            order by r.esTitular desc, r.persona.paterno, r.persona.materno, r.persona.nombre
+            """)
+    List<Responsable> findVigentesDeEntidad(@Param("entidadId") Long entidadId);
+
     @Query("""
                 select
                 r.id              as id,

@@ -6,13 +6,17 @@ import CasetaDetalle from '../components/CasetaDetalle.vue';
 import { apiFetch } from '../api';
 import { useAuthStore } from '../stores/auth';
 import { usePuestosStore } from '../stores/puestos';
+import { usePlanoStore } from '../stores/plano';
 import { toast } from '../ui/toast';
 import { iniciarMedicion, marcarPintado, marcarRed, purgarMediciones } from '../ui/medir';
-import { CLASE_ESTADO, ETIQUETA_ESTADO, estiloPin } from '../mapa';
+import { CLASE_ESTADO, ETIQUETA_ESTADO, LEYENDA, estiloPin } from '../mapa';
 
 // Las casetas y la conexion en tiempo real son compartidas con el Tablero y el Editor:
 // una sola descarga y un solo WebSocket para toda la app (ver stores/puestos.js).
 const tienda = usePuestosStore();
+// El plano ya no viaja en el bundle: lo sirve el backend por edicion, para poder cambiarlo
+// sin recompilar el APK (ver stores/plano.js y V13).
+const planoTienda = usePlanoStore();
 // Ids con una peticion en vuelo: evita disparar dos veces sobre LA MISMA caseta
 // (el backend igualmente la protege) sin congelar el resto del mapa.
 const enPeticion = ref(new Set());
@@ -23,6 +27,21 @@ const conFoto = ref(new Set());
 let temporizadorMedicion = null;
 const auth = useAuthStore();
 const router = useRouter();
+
+// Zona con dibujo dentro del mapa.png de respaldo, medida sobre los pixeles de esa imagen:
+// la pagina tiene bastante margen en blanco alrededor y encuadrar sobre el plano entero
+// deja al vendedor mirando papel vacio.
+const ZONA_RESPALDO = { x0: 0.08, y0: 0.17, x1: 0.87, y1: 0.86 };
+// De un plano subido no sabemos donde tiene el dibujo, asi que se encuadra entero: medir
+// margenes de una imagen que no hemos visto seria adivinar.
+const ZONA_COMPLETA = { x0: 0, y0: 0, x1: 1, y1: 1 };
+const zonaEncuadre = computed(() =>
+  (planoTienda.plano.propio ? ZONA_COMPLETA : ZONA_RESPALDO));
+
+// En el celular se abre con esa zona entera a la vista (PanZoom calcula el zoom segun el
+// tamaño real de la pantalla). En escritorio se conserva el encuadre de siempre, mas cerca.
+const esMovil = window.innerWidth <= 820;
+const focoInicial = { x: 0.44, y: 0.34, scale: 2.4 };
 
 // Ojo: Pinia DESENVUELVE los computed al leerlos del store, asi que `tienda.ubicadas` es
 // ya un array, no un ref. Hay que envolverlo en un computed propio: leerlo suelto una vez
@@ -176,6 +195,7 @@ async function cargarCualesTienenFoto() {
 
 onMounted(() => {
   tienda.asegurar(sesionCaducada);
+  planoTienda.asegurar();
   cargarCualesTienenFoto();
   // Delata las mediciones cuyo broadcast nunca llego: sin esto, un mensaje perdido
   // se confunde con uno lento (la linea simplemente no aparece).
@@ -189,11 +209,11 @@ onUnmounted(() => clearInterval(temporizadorMedicion));
 <template>
   <div class="barra">
       <div class="legend">
-        <span v-for="(txt, cod) in ETIQUETA_ESTADO" :key="cod" class="chip" :class="CLASE_ESTADO[cod]">
-          {{ txt }}
-        </span>
+        <span v-for="l in LEYENDA" :key="l.clase" class="chip" :class="l.clase">{{ l.txt }}</span>
       </div>
-      <div class="info">
+      <!-- El conteo de ubicadas/sin ubicar habla del Editor del plano: al vendedor no le
+           dice nada y le mete ruido en la unica pantalla que usa todo el dia. -->
+      <div v-if="auth.puedeEditarPlano" class="info">
         {{ ubicados.length }} ubicadas
         <span v-if="sinUbicar > 0" class="muted">· {{ sinUbicar }} sin ubicar (Editor)</span>
       </div>
@@ -231,15 +251,20 @@ onUnmounted(() => clearInterval(temporizadorMedicion));
       @quitar="(p) => click(p)"
     />
 
-    <PanZoom :focus="{ x: 0.44, y: 0.34, scale: 2.4 }">
+    <!-- key: cambiar de plano cambia la proporcion y el encuadre, y `reset()` solo corre al
+         montar. Remontar es lo que hace que el plano nuevo se vea bien encuadrado sin recargar. -->
+    <PanZoom :key="planoTienda.src" :focus="focoInicial" :contenido="esMovil ? zonaEncuadre : null"
+             :aspect="planoTienda.aspecto" llenar>
       <div class="plano">
         <!-- width/height intrinsecos: el navegador reserva la proporcion antes de
-             descargar, asi los pines no bailan mientras carga el plano. -->
+             descargar, asi los pines no bailan mientras carga el plano. Salen del propio
+             plano (V13), no de un numero fijo, porque cada edicion puede traer el suyo. -->
         <img
-          src="/mapa.png"
-          alt="Plano FEXPO UAP"
-          width="1836"
-          height="2376"
+          :src="planoTienda.src"
+          :key="planoTienda.src"
+          alt="Plano de la feria"
+          :width="planoTienda.plano.ancho"
+          :height="planoTienda.plano.alto"
           decoding="async"
           draggable="false"
         />
@@ -288,7 +313,14 @@ onUnmounted(() => clearInterval(temporizadorMedicion));
       espera al reservar. Aislada, la imagen se rasteriza una vez y los pines se repintan
       solos. */
 .plano img {
-  width: 100%; display: block;
+  /* height:auto es obligatorio aca. El <img> lleva width/height como ATRIBUTOS HTML (para
+     reservar el hueco antes de cargar); el navegador los aplica como si fueran CSS de baja
+     prioridad. Como width:100% sí los pisa pero nada pisaba height, el alto se quedaba fijo
+     en el height="2376" del atributo — literal, en px — sin importar en cuanto se hubiera
+     encogido el ancho. En una pantalla angosta eso estira el plano varias veces su alto real
+     (en una ancha, cerca de los 1836px naturales, el numero fijo coincidia casi por
+     casualidad y el bug no se notaba: de ahi que "en la web se viera bien"). */
+  width: 100%; height: auto; display: block;
   pointer-events: none;
   user-select: none; -webkit-user-select: none;
   will-change: transform;
@@ -298,19 +330,25 @@ onUnmounted(() => clearInterval(temporizadorMedicion));
 /* El pin se mide en % del ancho del plano, asi que crece con el zoom como una caseta real.
    aspect-ratio deriva el alto del ancho ya resuelto en px: sale cuadrado sobre una imagen
    que no lo es. */
+/* El separador entre casetas vecinas va en box-shadow, NO en border. Con
+   `box-sizing: border-box` el borde se come el relleno: a zoom normal un pin mide pocos
+   pixeles, asi que 1px de borde blanco (y 2px mas de borde en la propia) dejaban solo una
+   mota de color en el centro — se veia un cuadro con marco en vez de una caseta de color.
+   El box-shadow se dibuja FUERA de la caja: separa igual y no roba superficie. */
 .pin {
   position: absolute; aspect-ratio: 1;
   transform: translate(-50%, -50%);
-  border: 1px solid rgba(255, 255, 255, 0.85);
-  padding: 0; cursor: pointer; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  border: none;
+  padding: 0; cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.75), 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 .pin:hover { z-index: 5; filter: brightness(1.12); }
 .pin.ocupado, .pin.bloqueado { cursor: default; }
 
-/* Una caseta en trámite ajena no se puede tocar; la propia sí. Se distinguen con un
-   borde marcado en vez de otro color, para no romper la leyenda de estados. */
+/* Una caseta en trámite ajena no se puede tocar; la propia sí. Ya no hace falta marcarla
+   con un borde: desde que la propia es azul y la ajena naranja, el color solo basta. */
 .pin.tramite { cursor: default; }
-.pin.tramite.mia { cursor: pointer; border: 2px solid var(--text); box-shadow: 0 0 0 1px #fff; }
+.pin.tramite.mia { cursor: pointer; }
 
 /* Las casetas con foto se distinguen con un punto blanco en la esquina. No lleva icono ni
    texto a propósito: al zoom normal un pin mide pocos píxeles y cualquier glifo sería una
@@ -323,9 +361,11 @@ onUnmounted(() => clearInterval(temporizadorMedicion));
 
 /* ---- carrito ---- */
 .carrito {
-  position: fixed; left: 50%; transform: translateX(-50%); bottom: 1rem; z-index: 40;
+  /* bottom suma el alto de la barra de navegación inferior (0 fuera de móvil), para que
+     esta no la tape. */
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--tabbar-h) + 1rem); z-index: 40;
   display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
-  padding: 0.6rem 0.9rem; border-radius: 999px;
+  padding: 0.7rem 1rem; border-radius: var(--radio);
   background: var(--panel); border: 1px solid var(--border); box-shadow: var(--sombra-md);
   max-width: calc(100vw - 2rem);
 }

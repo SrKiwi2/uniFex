@@ -31,7 +31,9 @@ public class FileStorageService {
         COMPROBANTES("comprobantes"),
         RESPONSABLES("responsables"),
         /** Fotos de como se ve una caseta en el lugar (las enseña el vendedor al cliente). */
-        PUESTOS("puestos");
+        PUESTOS("puestos"),
+        /** Plano de la feria, uno por edicion (ver V13 y PlanoService). */
+        PLANOS("planos");
 
         private final String dir;
         Bucket(String dir) { this.dir = dir; }

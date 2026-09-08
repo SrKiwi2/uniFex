@@ -27,4 +27,12 @@ import { toasts, cerrar } from '../ui/toast';
 .toast.info { border-left-color: var(--acento); }
 .toast-enter-active, .toast-leave-active { transition: all 0.22s ease; }
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(8px); }
+
+/* En movil los avisos van arriba a la izquierda: abajo a la derecha quedan justo donde
+   esta el pulgar y el teclado, y en el formulario tapaban el campo que se acababa de
+   tocar. Entran desde arriba, acorde a su nueva posicion. */
+@media (max-width: 820px) {
+  .host { top: calc(0.6rem + env(safe-area-inset-top)); left: 0.6rem; right: auto; bottom: auto; max-width: min(88vw, 340px); }
+  .toast-enter-from, .toast-leave-to { transform: translateY(-8px); }
+}
 </style>

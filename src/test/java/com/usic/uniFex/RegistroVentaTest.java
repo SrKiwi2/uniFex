@@ -43,6 +43,7 @@ class RegistroVentaTest {
     @Autowired private RegistroVentaService registro;
     @Autowired private PuestoReservaService reserva;
     @Autowired private com.usic.uniFex.model.service.ReciboPdfService recibo;
+    @Autowired private com.usic.uniFex.model.service.NotaVentaCodigoService codigos;
     @Autowired private IPuestoDao puestoDao;
     @Autowired private JdbcTemplate jdbc;
 
@@ -261,6 +262,63 @@ class RegistroVentaTest {
         // pasar una salida vacia.
         assertThat(new String(pdf, 0, 4, java.nio.charset.StandardCharsets.ISO_8859_1))
                 .isEqualTo("%PDF");
+    }
+
+    /**
+     * El codigo de la nota tiene que ser EL MISMO en cada reimpresion.
+     *
+     * Es la regresion que importa: antes se calculaba con la fecha del momento de imprimir,
+     * asi que dos copias de la misma venta llevaban codigos distintos. Un identificador que
+     * cambia solo no identifica nada — y era justo lo que debia impedir la falsificacion.
+     */
+    @Test
+    void elCodigoDeLaNotaNoCambiaAlReimprimir() throws Exception {
+        RegistroVentaService.Resultado venta =
+                registro.registrar(venta(libres.stream().map(Puesto::getId).toList()), 1L);
+        assertThat(venta.ok()).as(venta.mensaje()).isTrue();
+
+        recibo.generarRecibo(venta.inscripcionId(), new java.io.ByteArrayOutputStream());
+        String primero = jdbc.queryForObject(
+                "SELECT nota_codigo FROM inscripcion WHERE id=?", String.class, venta.inscripcionId());
+        java.sql.Timestamp emitida = jdbc.queryForObject(
+                "SELECT nota_emitida_en FROM inscripcion WHERE id=?", java.sql.Timestamp.class,
+                venta.inscripcionId());
+
+        assertThat(primero).as("la primera impresion debe emitir el codigo").isNotBlank();
+        assertThat(emitida).isNotNull();
+
+        // Segunda impresion: ni el codigo ni la fecha de emision pueden moverse.
+        recibo.generarRecibo(venta.inscripcionId(), new java.io.ByteArrayOutputStream());
+        assertThat(jdbc.queryForObject(
+                "SELECT nota_codigo FROM inscripcion WHERE id=?", String.class, venta.inscripcionId()))
+                .isEqualTo(primero);
+        assertThat(jdbc.queryForObject(
+                "SELECT nota_emitida_en FROM inscripcion WHERE id=?", java.sql.Timestamp.class,
+                venta.inscripcionId()))
+                .isEqualTo(emitida);
+    }
+
+    /** El codigo sirve para comprobar el papel: existe, es de esta venta y esta vigente. */
+    @Test
+    void elCodigoDeLaNotaSePuedeVerificar() throws Exception {
+        RegistroVentaService.Resultado venta =
+                registro.registrar(venta(libres.stream().map(Puesto::getId).toList()), 1L);
+        assertThat(venta.ok()).as(venta.mensaje()).isTrue();
+        recibo.generarRecibo(venta.inscripcionId(), new java.io.ByteArrayOutputStream());
+
+        String codigo = jdbc.queryForObject(
+                "SELECT nota_codigo FROM inscripcion WHERE id=?", String.class, venta.inscripcionId());
+
+        var ok = codigos.verificar(codigo);
+        assertThat(ok.existe()).isTrue();
+        assertThat(ok.vigente()).isTrue();
+        assertThat(ok.inscripcionId()).isEqualTo(venta.inscripcionId());
+        assertThat(ok.entidad()).isEqualTo(NOMBRE_PRUEBA);
+
+        // Un codigo inventado no puede colar: es lo unico que separa una nota real de una
+        // fotocopia con otro numero escrito encima.
+        assertThat(codigos.verificar("FEX-" + venta.inscripcionId() + "-000000000000").existe()).isFalse();
+        assertThat(codigos.verificar("cualquier cosa").existe()).isFalse();
     }
 
     @Test

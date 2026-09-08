@@ -4,6 +4,7 @@ import { apiFetch } from '../api';
 import { toast } from '../ui/toast';
 import { usePuestosStore } from '../stores/puestos.js';
 import UiModal from '../components/UiModal.vue';
+import FotosResponsables from '../components/FotosResponsables.vue';
 
 const tienda = usePuestosStore();
 const items = ref([]);       // filas de fn_get_inscripciones: una por (inscripción, categoría)
@@ -305,7 +306,9 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
       </div>
     </div>
 
-    <div class="card">
+    <!-- tabla-scroll: la tabla tiene 7 columnas y en un teléfono medía más que la pantalla,
+         así que arrastraba el ancho de TODA la página. Ahora se desplaza dentro de su caja. -->
+    <div class="card tabla-scroll">
       <div v-if="cargando" class="vacio">Cargando…</div>
       <div v-else-if="inscripciones.length === 0" class="vacio">
         Aún no tienes ventas confirmadas.
@@ -369,6 +372,11 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
                   Solicitud aprobada por {{ solicitudes[ins.id].resueltoPor || 'administración' }}.
                   Ya puedes cancelar la venta.
                 </div>
+
+                <!-- Las fotos van aquí, dentro del detalle, y no en el formulario de venta:
+                     el momento de reunirlas casi nunca es el de vender. El componente se monta
+                     al desplegar, así que solo pide datos de la venta que se está mirando. -->
+                <FotosResponsables :inscripcion-id="ins.id" />
               </td>
             </tr>
           </template>

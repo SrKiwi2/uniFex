@@ -5,6 +5,7 @@ import PanZoom from '../components/PanZoom.vue';
 import { apiFetch } from '../api';
 import { useAuthStore } from '../stores/auth';
 import { usePuestosStore } from '../stores/puestos';
+import { usePlanoStore } from '../stores/plano';
 import { estiloPin } from '../mapa';
 
 /*
@@ -32,6 +33,7 @@ const CLIC_MAXIMO = 0.008; // arrastre por debajo de esto = un toque, no una lin
 const auth = useAuthStore();
 const router = useRouter();
 const tienda = usePuestosStore();
+const planoTienda = usePlanoStore();
 const puestos = computed(() => tienda.puestos);
 const catSel = ref(null);
 const modo = ref('mapa'); // mapa | colocar | seleccionar
@@ -316,6 +318,52 @@ function escalar(factor) {
   mensaje.value = `${ids.length} caseta(s) ${factor > 1 ? 'agrandadas' : 'achicadas'}`;
 }
 
+/**
+ * Tamaño de la selección con un deslizador, en vez de a saltos de 15% con los botones.
+ *
+ * El arrastre pinta en vivo pero deja UN solo paso de deshacer: se guarda la geometría al
+ * agarrar el control y se registra al soltarlo. Si cada movimiento del dedo entrara al
+ * historial, un arrastre dejaría cincuenta pasos y "deshacer" sería inservible.
+ */
+const escalaSeleccion = computed(() => seleccionadas.value[0]?.mapaEscala ?? 1);
+let antesEscala = null;
+
+function iniciarEscala() {
+  antesEscala = [...seleccion.value].map((id) => geom(buscar(id))).filter(Boolean);
+}
+function fijarEscala(valor) {
+  const v = Math.min(ESCALA_MAX, Math.max(ESCALA_MIN, Number(valor)));
+  for (const p of seleccionadas.value) {
+    p.mapaEscala = v;
+    marcarSucio(p.id);
+  }
+}
+function terminarEscala() {
+  if (antesEscala?.length) registrar(antesEscala);
+  antesEscala = null;
+}
+function restablecerEscala() {
+  const ids = [...seleccion.value];
+  if (!ids.length) return;
+  conHistoria(ids, () => {
+    for (const p of seleccionadas.value) {
+      p.mapaEscala = 1;
+      marcarSucio(p.id);
+    }
+  });
+  mensaje.value = `${ids.length} caseta(s) al tamaño de su categoría`;
+}
+
+/**
+ * Vista previa local del tamaño de TODA la categoría mientras se arrastra. El PATCH al
+ * servidor va al soltar (`editarActiva`): mandarlo en cada paso del deslizador serían
+ * decenas de peticiones, y `editarActiva` bloquea la barra con `ocupado` en cada una.
+ */
+function previsualizarTamano(valor) {
+  if (!activa.value) return;
+  for (const p of puestos.value) if (p.categoriaId === activa.value.id) p.tamanoMapa = valor;
+}
+
 function desplazar(dx, dy) {
   const ids = [...seleccion.value];
   if (!ids.length) return;
@@ -368,6 +416,23 @@ async function eliminarCasetas() {
     ocupado.value = false;
   }
 }
+
+/**
+ * Etiqueta del botón según lo que se hará con la selección actual. Antes decía siempre
+ * "Bloquear", así que tras bloquear una caseta el botón seguía ofreciendo bloquearla —
+ * parecía que no había pasado nada, aunque el pin ya estuviera plomo.
+ */
+const accionBloqueo = computed(() => {
+  const sel = seleccionadas.value.filter((p) => p.estado === 'L' || p.estado === 'X');
+  const bloqueadas = sel.filter((p) => p.estado === 'X').length;
+  if (sel.length && bloqueadas === sel.length) {
+    return { txt: '🔓 Desbloquear', titulo: 'Devuelve la caseta a la venta' };
+  }
+  if (bloqueadas) {
+    return { txt: '🔒 Bloquear/Desbloquear', titulo: 'La selección mezcla libres y bloqueadas: cada una cambia al estado contrario' };
+  }
+  return { txt: '🔒 Bloquear', titulo: 'Saca la caseta de la venta (reparación)' };
+});
 
 /** Bloquea las libres (X por reparación) y desbloquea las bloqueadas. Reversible. */
 async function alternarBloqueo() {
@@ -577,6 +642,46 @@ async function editarActiva(campo, valor) {
  */
 // ---- fotos y referencia de las casetas seleccionadas ----
 const entradaFoto = ref(null);
+const entradaPlano = ref(null);
+
+/**
+ * Reemplaza la imagen del plano de la edicion activa.
+ *
+ * Se avisa ANTES de subir porque el efecto no se puede deshacer con un botón: las casetas
+ * guardan su sitio como fracciones 0..1 de la imagen, asi que un plano con OTRO encuadre
+ * deja todo lo colocado fuera de lugar. Mismo encuadre en mas resolucion no las mueve.
+ */
+async function subirPlano(evento) {
+  const archivo = evento.target.files?.[0];
+  evento.target.value = '';
+  if (!archivo) return;
+
+  const colocadas = puestos.value.filter((p) => p.mapaX != null).length;
+  const aviso = colocadas
+    ? `Hay ${colocadas} caseta(s) colocadas. Si el plano nuevo tiene otro encuadre quedarán descolocadas y habrá que recolocarlas. ¿Continuar?`
+    : '¿Reemplazar el plano de la feria?';
+  if (!confirm(aviso)) return;
+
+  ocupado.value = true;
+  try {
+    const datos = new FormData();
+    datos.append('archivo', archivo);
+    const r = await apiFetch('/api/app/plano', { method: 'POST', body: datos });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d.ok) {
+      // Se aplica en el acto: el store lo comparte con el Mapa, asi que las dos vistas
+      // pasan al plano nuevo sin recargar.
+      planoTienda.aplicar(d.plano);
+      mensaje.value = d.mensaje || 'Plano actualizado';
+    } else {
+      mensaje.value = d.mensaje || 'No se pudo actualizar el plano';
+    }
+  } catch (e) {
+    mensaje.value = e.message;
+  } finally {
+    ocupado.value = false;
+  }
+}
 
 /**
  * Sube UNA foto y la asocia a TODAS las casetas seleccionadas.
@@ -705,6 +810,7 @@ onMounted(async () => {
   // caseta y aun no ha guardado, aceptar el mensaje entero le desharia el arrastre; el
   // guardia hace que se acepte el estado de venta pero se conserve la posicion local.
   quitarGuardia = tienda.protegerLocales((id) => dirty.value.has(id));
+  planoTienda.asegurar();
   await tienda.asegurar(sesionCaducada);
   if (catSel.value == null && categorias.value.length) catSel.value = categorias.value[0].id;
 });
@@ -737,10 +843,19 @@ onUnmounted(() => {
         <span class="cuenta">{{ seleccion.size }} sel.</span>
         <button :disabled="ocupado || !seleccion.size" @click="copiarSeleccion" title="Copiar geometría (Ctrl+C)">📄 Copiar</button>
         <button :disabled="ocupado || !portapapeles.length" @click="pegar" title="Duplicar como casetas nuevas (Ctrl+V)">📋 Pegar</button>
-        <button :disabled="ocupado || !seleccion.size" @click="escalar(1.15)" title="Agrandar">🔍+</button>
-        <button :disabled="ocupado || !seleccion.size" @click="escalar(1 / 1.15)" title="Achicar">🔍−</button>
+        <button :disabled="ocupado || !seleccion.size" @click="escalar(1 / 1.15)" title="Achicar un paso">🔍−</button>
+        <label class="campo escala" title="Tamaño de las casetas seleccionadas">
+          <input type="range" :min="ESCALA_MIN" :max="ESCALA_MAX" step="0.05"
+                 :value="escalaSeleccion" :disabled="ocupado || !seleccion.size"
+                 @pointerdown="iniciarEscala"
+                 @input="fijarEscala($event.target.value)"
+                 @change="terminarEscala" />
+          <span class="val">{{ Math.round(escalaSeleccion * 100) }}%</span>
+        </label>
+        <button :disabled="ocupado || !seleccion.size" @click="escalar(1.15)" title="Agrandar un paso">🔍+</button>
+        <button :disabled="ocupado || !seleccion.size" @click="restablecerEscala" title="Volver al tamaño de su categoría">↺</button>
         <button :disabled="ocupado || !seleccion.size" @click="quitarDelMapa" title="Quitar del plano, sin borrar">⏏ Quitar</button>
-        <button :disabled="ocupado || !seleccion.size" @click="alternarBloqueo" title="Bloquea las libres (reparación) y desbloquea las bloqueadas">🔒 Bloquear</button>
+        <button :disabled="ocupado || !seleccion.size" @click="alternarBloqueo" :title="accionBloqueo.titulo">{{ accionBloqueo.txt }}</button>
         <button :disabled="ocupado || !seleccion.size" class="peligro" @click="eliminarCasetas" title="Baja definitiva">🗑 Eliminar</button>
       </div>
 
@@ -758,6 +873,17 @@ onUnmounted(() => {
                title="Se guarda en todas las casetas seleccionadas" />
       </div>
 
+      <!-- Reemplazar el plano de la feria. No hace falta recompilar el APK: la imagen la
+           sirve el servidor y las apps la recogen al abrir el mapa. -->
+      <div class="grupo">
+        <input ref="entradaPlano" type="file" accept="image/png,image/jpeg" class="oculto" @change="subirPlano" />
+        <button :disabled="ocupado" @click="entradaPlano?.click()"
+                title="Sube una imagen nueva del plano para esta edición (PNG o JPG)">🗺 Cambiar plano</button>
+        <span class="cuenta" :title="planoTienda.plano.propio ? 'Plano subido para esta edición' : 'Plano de respaldo que viene en la app'">
+          {{ planoTienda.plano.ancho }}×{{ planoTienda.plano.alto }}{{ planoTienda.plano.propio ? ` · v${planoTienda.plano.version}` : ' · respaldo' }}
+        </span>
+      </div>
+
       <div class="grupo">
         <button :disabled="!puedeDeshacer" @click="deshacer" title="Deshacer (Ctrl+Z)">↶</button>
         <button :disabled="!puedeRehacer" @click="rehacer" title="Rehacer (Ctrl+Shift+Z)">↷</button>
@@ -770,11 +896,13 @@ onUnmounted(() => {
         <button v-for="f in FORMAS" :key="f.id" class="forma"
                 :class="{ on: (activa.forma || 'cuadrado') === f.id }"
                 @click="editarActiva('forma', f.id)">{{ f.icono }}</button>
-        <label class="campo" title="Tamaño base de toda la categoría">
+        <label class="campo escala" title="Tamaño base de toda la categoría">
           Tamaño
           <input type="range" min="0.004" max="0.05" step="0.001"
                  :value="activa.tamanoMapa ?? 0.012"
+                 @input="previsualizarTamano(Number($event.target.value))"
                  @change="editarActiva('tamanoMapa', Number($event.target.value))" />
+          <span class="val">{{ ((activa.tamanoMapa ?? 0.012) * 100).toFixed(1) }}%</span>
         </label>
       </div>
 
@@ -845,24 +973,27 @@ onUnmounted(() => {
         </ul>
       </aside>
 
-      <PanZoom :selectMode="modo !== 'mapa'" :focus="{ x: 0.44, y: 0.34, scale: 2.4 }">
+      <PanZoom :key="planoTienda.src" :selectMode="modo !== 'mapa'"
+               :focus="{ x: 0.44, y: 0.34, scale: 2.4 }" :aspect="planoTienda.aspecto">
         <div class="plano" ref="lienzo" :class="`modo-${modo}`"
              @pointerdown="onDown" @pointermove="onMove" @pointerup="onUp" @pointercancel="onUp">
-          <!-- width/height intrinsecos: reservan la proporcion antes de descargar,
-               para que las casetas no se desplacen mientras carga el plano. -->
+          <!-- width/height intrinsecos: reservan la proporcion antes de descargar, para que
+               las casetas no se desplacen mientras carga. Vienen del plano de la edicion
+               (V13), que se puede reemplazar sin recompilar el APK. -->
           <img
             ref="plano"
-            src="/mapa.png"
-            alt="Plano FEXPO UAP"
-            width="1836"
-            height="2376"
+            :src="planoTienda.src"
+            :key="planoTienda.src"
+            alt="Plano de la feria"
+            :width="planoTienda.plano.ancho"
+            :height="planoTienda.plano.alto"
             decoding="async"
             draggable="false"
           />
 
           <div v-for="p in colocadas" :key="p.id"
                :ref="(el) => (el ? pinEls.set(p.id, el) : pinEls.delete(p.id))"
-               class="pin" :class="[`forma-${p.forma || 'cuadrado'}`, { sel: seleccion.has(p.id) }]"
+               class="pin" :class="[`forma-${p.forma || 'cuadrado'}`, `est-${p.estado}`, { sel: seleccion.has(p.id) }]"
                :style="{ ...estiloPin(p), background: p.color || '#94a3b8' }"
                :title="`${p.categoria} ${p.codigo}`"
                @pointerdown="onPinDown($event, p)"></div>
@@ -886,6 +1017,16 @@ onUnmounted(() => {
   padding: 0.4rem 0.6rem; font-size: 0.88rem;
 }
 .toolbar button:disabled { opacity: 0.4; cursor: default; }
+
+/* Deslizadores de tamaño: barra ancha y agarradera grande. Con el control por defecto
+   (~14px) hay que apuntar, y es de lo que más se toquetea al armar el plano. */
+.escala { display: flex; align-items: center; gap: 0.45rem; }
+.escala input[type='range'] { width: 130px; height: 24px; accent-color: var(--acento); cursor: pointer; }
+.escala input[type='range']:disabled { cursor: default; opacity: 0.4; }
+.escala .val {
+  min-width: 3.2rem; text-align: right; font-variant-numeric: tabular-nums;
+  font-size: 0.8rem; font-weight: 700; color: var(--muted);
+}
 .toolbar button.on { background: #2563eb; color: #fff; border-color: #2563eb; }
 .toolbar button.peligro:not(:disabled) { color: var(--ocupado); border-color: #fecaca; }
 .cuenta { font-size: 0.85rem; color: var(--muted); min-width: 3.5rem; }
@@ -954,7 +1095,12 @@ aside li button.sel { background: #eff6ff; border-color: #bfdbfe; }
    `will-change/translateZ` le da al plano su propia capa de composicion, para que mover o
    recolorear una caseta no obligue a re-rasterizar la imagen entera (ver Mapa.vue). */
 .plano img {
-  width: 100%; display: block;
+  /* height:auto obligatorio: el <img> trae height="2376" como atributo HTML y, si el CSS
+     solo pisa el ancho, el alto se queda en ese numero literal y el plano sale estirado en
+     pantallas angostas. Aca ademas falsea las coordenadas: mapaX/mapaY se calculan sobre el
+     rectangulo renderizado, asi que colocar casetas sobre un plano deformado las guarda
+     descolocadas. Mismo arreglo que en Mapa.vue. */
+  width: 100%; height: auto; display: block;
   pointer-events: none; user-select: none; -webkit-user-select: none;
   will-change: transform;
   transform: translateZ(0);
@@ -968,6 +1114,14 @@ aside li button.sel { background: #eff6ff; border-color: #bfdbfe; }
 }
 .modo-seleccionar .pin { cursor: move; }
 .pin.sel { outline: 2px solid #0f172a; outline-offset: 1px; z-index: 4; }
+
+/* El pin del editor se pinta con el color de su CATEGORÍA, así que hasta ahora una caseta
+   bloqueada, vendida o reservada se veía idéntica a una libre: el editor no delataba en qué
+   estado estaba lo que uno iba a tocar (y son justo las que el servidor rechaza bloquear o
+   eliminar). Se marca el estado sin perder el color de categoría. */
+.pin.est-X { filter: grayscale(1) brightness(0.85); border: 2px dashed rgba(255, 255, 255, 0.9); }
+.pin.est-O { box-shadow: 0 0 0 2px var(--ocupado); }
+.pin.est-T { box-shadow: 0 0 0 2px var(--tramite); }
 .forma-cuadrado { border-radius: 2px; }
 .forma-circulo { border-radius: 50%; }
 .forma-triangulo { clip-path: polygon(50% 0%, 100% 100%, 0% 100%); border: none; }

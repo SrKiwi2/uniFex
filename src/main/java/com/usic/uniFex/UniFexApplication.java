@@ -6,6 +6,7 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -26,6 +27,17 @@ import com.usic.uniFex.model.entity.Usuario;
 public class UniFexApplication {
 
 	@Autowired PasswordEncoder passwordEncoder;
+
+	// Contrasenas iniciales de admin1/admin2. Solo se usan la primera vez que cada usuario
+	// se crea (ver mas abajo); en produccion vienen de ADMIN1_PASSWORD/ADMIN2_PASSWORD y no
+	// tienen default, para no recrear con una contrasena publica si el arranque encuentra
+	// la tabla de usuarios vacia.
+	@Value("${unifex.admin.admin1-password}")
+	private String admin1Password;
+
+	@Value("${unifex.admin.admin2-password}")
+	private String admin2Password;
+
 	private static final Logger logger = LoggerFactory.getLogger(UniFexApplication.class);
 	
 	public static void main(String[] args) {
@@ -55,7 +67,7 @@ public class UniFexApplication {
 			String[] cis = { "123456789", "987654321" };
 			String[] nombres = { "PRIMER USUARIO", "SEGUNDO USUARIO" };
 			String[] usuarios = { "admin1", "admin2" };
-			String[] password = { "usuario25$", "usuario&25" };
+			String[] password = { admin1Password, admin2Password };
 
 			for (int i = 0; i < cis.length; i++) {
 				Persona persona = personaService.buscarPersonaPorCI(cis[i]);

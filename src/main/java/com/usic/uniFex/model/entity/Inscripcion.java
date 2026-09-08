@@ -80,4 +80,17 @@ public class Inscripcion extends AuditoriaConfig{
     @JoinColumn(name = "cancelada_por_id_usuario", insertable = false, updatable = false)
     private Usuario canceladaPorUsuario;
 
+    /**
+     * Identificador verificable de la nota de venta (V14).
+     *
+     * Se emite la PRIMERA vez que se imprime la nota y no vuelve a cambiar: es lo que
+     * permite que dos copias del mismo documento digan lo mismo y que alguien pueda
+     * comprobar, escaneando el QR, que esa venta existe de verdad.
+     */
+    @Column(name = "nota_codigo", length = 40)
+    private String notaCodigo;
+
+    @Column(name = "nota_emitida_en")
+    private LocalDateTime notaEmitidaEn;
+
 }

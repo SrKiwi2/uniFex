@@ -1,5 +1,6 @@
 package com.usic.uniFex.controller.pasarela;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
@@ -19,6 +20,11 @@ import com.usic.uniFex.model.entity.VentaBoleto;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.transaction.Transactional;
 
+/**
+ * PENDIENTE: boleteria por pasarela de pago, sin conectar a la SPA ni probada contra la
+ * pasarela real todavia (ver PLAN.md, Bloque 8, y DEPLOY.md). Se deja lista para
+ * retomarla, no en el flujo activo de venta.
+ */
 @RestController
 @RequestMapping("/api/pagos")
 public class PagoController {
@@ -41,11 +47,18 @@ public class PagoController {
     @PostMapping("/crear")
     public ResponseEntity<?> crearPago(@RequestBody PagoRequest request) {
         Map<String, Object> result = pasarela.crearTransaccion(request);
-        return ResponseEntity.ok(Map.of(
-                "ok", true,
-                "codigoTransaccion", result.get("codigoTransaccion"),
-                "urlRedireccion",  result.get("urlRedireccion")
-        ));
+        Object codigoTransaccion = result.get("codigoTransaccion");
+        Object urlRedireccion = result.get("urlRedireccion");
+        // Map.of() no acepta valores null: si la pasarela responde 200 sin alguna de estas
+        // dos claves, lanzaba NullPointerException en vez de un error claro. Se valida antes.
+        if (codigoTransaccion == null || urlRedireccion == null) {
+            throw new IllegalStateException("La pasarela respondio sin codigoTransaccion/urlRedireccion");
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("ok", true);
+        body.put("codigoTransaccion", codigoTransaccion);
+        body.put("urlRedireccion", urlRedireccion);
+        return ResponseEntity.ok(body);
     }
 
     /**

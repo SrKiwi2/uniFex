@@ -85,7 +85,12 @@ public class SecurityConfig {
                 // con /** que dejaba GET /api/app/puestos fuera de esta cadena.
                 .securityMatcher(new OrRequestMatcher(
                         AntPathRequestMatcher.antMatcher("/api/auth/**"),
-                        AntPathRequestMatcher.antMatcher("/api/app/**")))
+                        AntPathRequestMatcher.antMatcher("/api/app/**"),
+                        // Verificacion de una nota de venta: quien comprueba un papel en la
+                        // puerta no tiene cuenta. Va en ESTA cadena y no en la web para que
+                        // responda JSON; en la cadena 2 un fallo se convierte en un 302 al
+                        // login, que desde un lector de QR no significa nada.
+                        AntPathRequestMatcher.antMatcher("/api/publico/**")))
                 .csrf(csrf -> csrf.disable())
                 // CORS solo en esta cadena: la web navegada no lo necesita (mismo origen),
                 // pero el APK si. Capacitor sirve la app desde https://localhost en Android,
@@ -95,6 +100,7 @@ public class SecurityConfig {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(AntPathRequestMatcher.antMatcher("/api/auth/**")).permitAll()
+                        .requestMatchers(AntPathRequestMatcher.antMatcher("/api/publico/**")).permitAll()
                         .anyRequest().authenticated())
                 // API: responder con codigos HTTP (401/403) y cuerpo JSON, no redirigir a un
                 // login. Se usa setStatus + write (no sendError) para no disparar el forward

@@ -69,7 +69,17 @@
   </style>
 </head>
 <body>
-  
+
+  <div style="background:#fff3cd;border:1px solid #ffc107;color:#664d03;padding:12px 16px;margin-bottom:16px;font-family:Arial,sans-serif;font-weight:normal;max-width:816px;">
+    <strong>⚠ En revisión, no depender de esto en un evento real todavía.</strong>
+    Este generador arma la credencial en el navegador y depende de tres servicios externos
+    por CDN (jsPDF, qrcodejs y Google Fonts): <strong>sin internet no genera ninguna
+    credencial</strong>, y el wifi de la feria es irregular. Tampoco guarda entre sesiones
+    las posiciones de texto/QR que se ajustan arrastrando con el mouse. Está pendiente de
+    rehacerse con las librerías incluidas en el bundle y las posiciones guardadas en la
+    base (ver PLAN.md, Bloque 3).
+  </div>
+
   <label class="form-label" for="formValidationCategoria">SELECCIONAR LA CATEGORIA: </label>
   <select name="formValidationCategoria" id="formValidationCategoria">
     <option value="" selected>-- Seleccione una categoría --</option>

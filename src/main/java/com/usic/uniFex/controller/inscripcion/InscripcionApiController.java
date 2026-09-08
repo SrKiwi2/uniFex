@@ -12,6 +12,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,6 +31,7 @@ import com.usic.uniFex.model.entity.Inscripcion;
 import com.usic.uniFex.model.service.AuditoriaService;
 import com.usic.uniFex.model.service.CancelarInscripcionService;
 import com.usic.uniFex.model.service.ReciboPdfService;
+import com.usic.uniFex.model.service.ResponsableFotoService;
 import com.usic.uniFex.model.service.RegistroVentaService;
 import com.usic.uniFex.security.JwtUser;
 import com.usic.uniFex.security.Roles;
@@ -55,6 +57,7 @@ public class InscripcionApiController {
     private final RegistroVentaService registroVenta;
     private final ReciboPdfService reciboPdfService;
     private final CancelarInscripcionService cancelarInscripcion;
+    private final ResponsableFotoService responsableFoto;
 
     /**
      * Listado de inscripciones. Solo administracion.
@@ -228,6 +231,78 @@ public class InscripcionApiController {
             log.error("No se pudo generar el recibo de la inscripcion {}", id, e);
             return ResponseEntity.status(500).build();
         }
+    }
+
+    /**
+     * Responsables de la venta con el estado de su foto, y si ya estan todas.
+     *
+     * Es la pantalla de "¿a quien me falta la foto?": en la feria casi nunca se tienen las dos
+     * en el momento de vender, y hasta ahora la unica forma de agregarlas despues era rehacer
+     * el registro entero desde el sitio viejo.
+     */
+    @GetMapping("/{id}/responsables")
+    public ResponseEntity<Map<String, Object>> responsables(@PathVariable Long id) {
+        ResponseEntity<Map<String, Object>> veto = comprobarAcceso(id);
+        if (veto != null) return veto;
+
+        Map<String, Object> cuerpo = new LinkedHashMap<>();
+        cuerpo.put("responsables", responsableFoto.listar(id));
+        cuerpo.put("fotosCompletas", responsableFoto.fotosCompletas(id));
+        return ResponseEntity.ok(cuerpo);
+    }
+
+    /** Sube o reemplaza la foto de un responsable de esta venta. */
+    @PostMapping(value = "/{id}/responsables/{responsableId}/foto",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, Object>> subirFotoResponsable(
+            @PathVariable Long id,
+            @PathVariable Long responsableId,
+            @RequestPart("archivo") MultipartFile archivo) {
+        ResponseEntity<Map<String, Object>> veto = comprobarAcceso(id);
+        if (veto != null) return veto;
+
+        ResponsableFotoService.Resultado r =
+                responsableFoto.guardar(id, responsableId, archivo, usuarioActual());
+        return respuestaFoto(r);
+    }
+
+    @DeleteMapping("/{id}/responsables/{responsableId}/foto")
+    public ResponseEntity<Map<String, Object>> quitarFotoResponsable(
+            @PathVariable Long id, @PathVariable Long responsableId) {
+        ResponseEntity<Map<String, Object>> veto = comprobarAcceso(id);
+        if (veto != null) return veto;
+
+        return respuestaFoto(responsableFoto.quitar(id, responsableId, usuarioActual()));
+    }
+
+    private ResponseEntity<Map<String, Object>> respuestaFoto(ResponsableFotoService.Resultado r) {
+        // LinkedHashMap y no Map.of: `responsable` es null cuando falla, y Map.of lanza NPE
+        // con un valor null.
+        Map<String, Object> cuerpo = new LinkedHashMap<>();
+        cuerpo.put("ok", r.ok());
+        cuerpo.put("mensaje", r.mensaje());
+        cuerpo.put("responsable", r.responsable());
+        return r.ok() ? ResponseEntity.ok(cuerpo) : ResponseEntity.badRequest().body(cuerpo);
+    }
+
+    /**
+     * La venta tiene que existir y ser de quien pregunta (o de administracion). Devuelve la
+     * respuesta de rechazo, o null si puede pasar. Es la misma regla del recibo: los datos de
+     * los responsables —nombre, C.I., foto— son del cliente de OTRO vendedor.
+     */
+    private ResponseEntity<Map<String, Object>> comprobarAcceso(Long inscripcionId) {
+        Long usuarioId = usuarioActual();
+        if (usuarioId == null) {
+            return ResponseEntity.status(401).body(Map.of("ok", false, "mensaje", "No autenticado"));
+        }
+        Inscripcion i = inscripcionService.findById(inscripcionId);
+        if (i == null) {
+            return ResponseEntity.status(404).body(Map.of("ok", false, "mensaje", "La venta no existe"));
+        }
+        if (!usuarioId.equals(i.getRegistroIdUsuario()) && !esAdministracion()) {
+            return ResponseEntity.status(403).body(Map.of("ok", false, "mensaje", "Esta venta no es tuya"));
+        }
+        return null;
     }
 
     /** Id del usuario del token, o null si no hay sesion valida. */

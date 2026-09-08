@@ -13,7 +13,8 @@
 
   /* Estados de caseta (compartidos por el mapa y las leyendas) */
   --libre: #16a34a;
-  --tramite: #d97706;
+  --tramite: #d97706;   /* reservada por OTRO vendedor */
+  --mia: #2563eb;       /* reservada por MI: azul, para no confundirla con la ajena */
   --ocupado: #dc2626;
   --bloqueado: #94a3b8;
 
@@ -34,6 +35,16 @@
   --sombra: 0 1px 2px rgba(2, 6, 23, 0.06);
   --sombra-md: 0 10px 30px rgba(2, 6, 23, 0.10);
   --sidebar-w: 232px;
+
+  /* Alto de la barra de navegación inferior (solo existe en móvil). 0 por defecto para
+     que cualquier calc() que la use no cambie nada en escritorio. */
+  --tabbar-h: 0px;
+}
+
+/* Barra de navegación inferior tipo app: aparece solo por debajo de este ancho,
+   el mismo punto de corte que usa AppShell para el resto de lo móvil. */
+@media (max-width: 820px) {
+  :root { --tabbar-h: calc(58px + env(safe-area-inset-bottom)); }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -42,6 +53,7 @@
     --acento-fuerte: #6366f1;
     --acento-suave: #1e1b4b;
     --acento-texto: #0b1020;
+    --mia: #60a5fa;
     --bg: #0b1120;
     --panel: #111827;
     --panel-2: #0f1729;
@@ -59,6 +71,7 @@
   --acento-fuerte: #6366f1;
   --acento-suave: #1e1b4b;
   --acento-texto: #0b1020;
+  --mia: #60a5fa;
   --bg: #0b1120;
   --panel: #111827;
   --panel-2: #0f1729;
@@ -85,6 +98,8 @@ a { color: var(--acento); }
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
   font: inherit; font-weight: 600; cursor: pointer;
+  /* Varios .btn son <router-link>: sin esto salen subrayados como un enlace suelto. */
+  text-decoration: none;
   padding: 0.55rem 0.9rem; border-radius: var(--radio-sm);
   border: 1px solid var(--border); background: var(--panel); color: var(--text);
   transition: filter 0.12s ease, border-color 0.12s ease, background 0.12s ease;
@@ -108,6 +123,19 @@ a { color: var(--acento); }
   background: var(--panel); border: 1px solid var(--border); border-radius: var(--radio-sm);
 }
 .control:focus { outline: 2px solid var(--acento); outline-offset: -1px; border-color: var(--acento); }
+/* El texto de sugerencia tiene que LEERSE como sugerencia. Al mismo color que el valor
+   real, el vendedor cree que el campo ya viene lleno y lo salta. */
+.control::placeholder { color: var(--muted); opacity: 0.7; font-style: italic; }
+
+/* En movil los campos crecen: 16px es ademas el minimo con el que el navegador NO hace
+   zoom solo al enfocar un input, y 44px de alto es el objetivo tactil recomendado. */
+@media (max-width: 820px) {
+  .campo > span { font-size: 0.92rem; color: var(--text); }
+  .control { font-size: 16px; padding: 0.75rem 0.8rem; min-height: 46px; }
+  select.control { min-height: 46px; }
+  .btn { padding: 0.7rem 1rem; font-size: 1rem; }
+  .btn-sm { padding: 0.5rem 0.8rem; font-size: 0.92rem; }
+}
 
 /* ---- Tarjetas ---- */
 .card {
@@ -116,6 +144,11 @@ a { color: var(--acento); }
 }
 
 /* ---- Tablas ---- */
+/* Envuelve una .tabla ancha para que el desplazamiento lateral ocurra DENTRO de su caja.
+   Sin esto, en un teléfono la tabla empuja el ancho de la página entera: el vendedor tiene
+   que arrastrar toda la pantalla de lado para llegar a los botones de la última columna, y
+   la barra inferior y los avisos quedan desalineados mientras tanto. */
+.tabla-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .tabla { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .tabla th, .tabla td { text-align: left; padding: 0.7rem 0.85rem; border-bottom: 1px solid var(--border); }
 .tabla th { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 700; }
@@ -136,6 +169,10 @@ a { color: var(--acento); }
 .tramite { background: var(--tramite); color: #fff; }
 .ocupado { background: var(--ocupado); color: #fff; }
 .bloqueado { background: var(--bloqueado); color: #fff; }
+/* Va DESPUES de .tramite a proposito: una caseta en tramite mia lleva las dos clases y
+   debe ganar el azul. Antes la propia y la ajena eran del mismo naranja y no habia forma
+   de saber, mirando el plano, cual podia tocar uno. */
+.mia { background: var(--mia); color: #fff; }
 
 /* Utilidades mínimas */
 .fila { display: flex; align-items: center; gap: 0.6rem; }

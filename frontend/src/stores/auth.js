@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { url as urlApi } from '../config.js';
 
 /**
  * Roles que pueden rediseñar el plano. Deben coincidir con security/Roles.EDITA_PLANO
@@ -26,7 +27,10 @@ export const useAuthStore = defineStore('auth', {
   },
   actions: {
     async login(usuario, contrasena) {
-      const res = await fetch('/api/auth/login', {
+      // Ruta ABSOLUTA en el APK (urlApi la resuelve): una relativa aqui apuntaria al
+      // contenedor de Capacitor (https://localhost), no al servidor. Es la causa de que
+      // el login funcione en la web y no en el APK.
+      const res = await fetch(urlApi('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ usuario, contrasena }),

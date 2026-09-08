@@ -16,6 +16,19 @@ export const ETIQUETA_ESTADO = {
   X: 'Bloqueado',
 };
 
+/**
+ * Leyenda del mapa. No sale de ETIQUETA_ESTADO porque distingue algo que el estado del
+ * servidor no distingue: una caseta 'T' es "mia" o "de otro" segun quien mire, y esa es
+ * justo la diferencia que el vendedor necesita ver de un vistazo en el plano.
+ */
+export const LEYENDA = [
+  { clase: 'libre', txt: 'Libre' },
+  { clase: 'mia', txt: 'En mi venta' },
+  { clase: 'tramite', txt: 'Otro vendedor' },
+  { clase: 'ocupado', txt: 'Vendida' },
+  { clase: 'bloqueado', txt: 'Bloqueada' },
+];
+
 /** Tamaño dibujado de una caseta, como fraccion del ancho del plano. */
 export function tamanoDe(p) {
   return (p.tamanoMapa ?? 0.012) * (p.mapaEscala ?? 1);

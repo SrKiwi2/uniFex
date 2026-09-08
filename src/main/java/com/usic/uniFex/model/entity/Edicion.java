@@ -32,4 +32,28 @@ public class Edicion {
 
     @Column(nullable = false)
     private Boolean activa;
+
+    /**
+     * Plano de esta edicion (ver V13). Ruta relativa bajo {@code app.upload-root}, servida
+     * en {@code /files/**}. Si es null, la SPA cae al plano empaquetado de respaldo.
+     */
+    @Column(name = "plano_archivo", length = 300)
+    private String planoArchivo;
+
+    /**
+     * Medidas de la imagen. El visor las necesita para encuadrar: sin la proporcion real,
+     * el plano se dibuja deformado o el zoom inicial cae en el sitio equivocado.
+     */
+    @Column(name = "plano_ancho")
+    private Integer planoAncho;
+
+    @Column(name = "plano_alto")
+    private Integer planoAlto;
+
+    /** Sube en cada reemplazo. Viaja en la URL (?v=) para invalidar la cache del APK. */
+    @Column(name = "plano_version", nullable = false)
+    private Integer planoVersion = 0;
+
+    @Column(name = "plano_subido_en")
+    private java.time.LocalDateTime planoSubidoEn;
 }

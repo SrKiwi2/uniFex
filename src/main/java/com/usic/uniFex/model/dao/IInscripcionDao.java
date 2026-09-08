@@ -13,6 +13,14 @@ import com.usic.uniFex.model.dto.ResumenGeneralView;
 import com.usic.uniFex.model.entity.Inscripcion;
 
 public interface IInscripcionDao extends JpaRepository <Inscripcion, Long> {
+
+    /**
+     * Busca una venta por el codigo de su nota (V14). Es la consulta que hace verificable el
+     * documento: si un codigo presentado en papel no aparece aqui, la nota no salio de este
+     * sistema. Trae la entidad porque la verificacion muestra a nombre de quien esta la venta.
+     */
+    @EntityGraph(attributePaths = { "entidad" })
+    java.util.Optional<Inscripcion> findByNotaCodigo(String notaCodigo);
     // Evita N+1: trae puesto->categoria y entidad->tipoEntidad
     @EntityGraph(attributePaths = {
         "entidad", "entidad.tipoEntidad",

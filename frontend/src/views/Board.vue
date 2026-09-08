@@ -37,6 +37,9 @@ const clase = { L: 'libre', T: 'tramite', O: 'ocupado', X: 'bloqueado' };
 /** ¿La reserva en tramite de esta caseta es de quien esta mirando? */
 const esMia = (p) => p.estado === 'T' && p.reservadoPor != null && p.reservadoPor === auth.id;
 
+/** De las 'T', cuantas son propias: la leyenda separa las mias (azul) de las ajenas. */
+const mias = computed(() => puestos.value.filter(esMia).length);
+
 async function clickPuesto(p) {
   // Igual que en el Mapa: solo se bloquea la caseta tocada, no el tablero entero.
   if (enPeticion.value.has(p.id)) return;
@@ -93,9 +96,10 @@ onMounted(() => tienda.asegurar(sesionCaducada));
   <div class="board">
     <div class="legend">
       <span class="chip libre">Libre · {{ resumen.L }}</span>
-      <span class="chip tramite">En trámite · {{ resumen.T }}</span>
-      <span class="chip ocupado">Ocupado · {{ resumen.O }}</span>
-      <span class="chip bloqueado">Bloqueado · {{ resumen.X }}</span>
+      <span class="chip mia">En mi venta · {{ mias }}</span>
+      <span class="chip tramite">Otro vendedor · {{ resumen.T - mias }}</span>
+      <span class="chip ocupado">Vendida · {{ resumen.O }}</span>
+      <span class="chip bloqueado">Bloqueada · {{ resumen.X }}</span>
     </div>
 
     <p v-if="cargando" class="muted">Cargando casetas…</p>
@@ -140,6 +144,7 @@ header {
 }
 .celda:hover { filter: brightness(1.08); transform: translateY(-1px); }
 .celda.ocupado, .celda.bloqueado, .celda.tramite { cursor: default; }
-/* La reserva propia se distingue de la ajena con un borde, no con otro color. */
+/* La reserva propia ya sale azul (.mia, en style.css); el borde marca ademas que es la
+   unica en tramite que uno puede tocar. */
 .celda.tramite.mia { cursor: pointer; outline: 2px solid var(--text); outline-offset: -2px; }
 </style>

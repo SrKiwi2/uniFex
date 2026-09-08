@@ -7,9 +7,19 @@ const props = defineProps({
   max: { type: Number, default: 10 },
   // Enfoque inicial: centra el punto normalizado (fx,fy) al zoom fscale
   focus: { type: Object, default: () => ({ x: 0.45, y: 0.32, scale: 2.2 }) },
+  // Alternativa a `focus`: zona normalizada {x0,y0,x1,y1} que debe verse ENTERA al abrir.
+  // La escala se calcula con el tamaño real del visor, asi que la misma zona entra completa
+  // lo mismo en un celular angosto que en un monitor: es lo que evita tener que elegir a
+  // dedo un `scale` distinto por dispositivo. Si se pasa, manda sobre `focus`.
+  contenido: { type: Object, default: null },
   // Si true, PanZoom NO captura el arrastre (lo deja al contenido, p.ej. selección del editor);
   // siguen activos la rueda y los botones.
   selectMode: { type: Boolean, default: false },
+  // Si true, el visor ocupa TODO el alto que le quede a su contenedor flex en vez de una
+  // altura fija en vh. Lo usa el mapa para llenar la pantalla del celular hasta la barra
+  // inferior; sin esto sobra un hueco muerto abajo, porque un vh fijo no sabe cuanto miden
+  // la cabecera, la leyenda ni la barra.
+  llenar: { type: Boolean, default: false },
 });
 
 const viewport = ref(null);
@@ -39,7 +49,23 @@ function focusOn(nx, ny, scale) {
   pintar();
 }
 
-function reset() { focusOn(props.focus.x, props.focus.y, props.focus.scale); }
+function reset() {
+  const z = props.contenido;
+  if (z) {
+    // "Contain": la escala la fija el eje mas apretado, para que la zona entre entera y
+    // quede centrada. El margen deja un respiro en el borde.
+    const r = vpRect();
+    const mundoW = r.width, mundoH = r.width * props.aspect;
+    const margen = 1.04;
+    const escala = Math.min(
+      r.width / ((z.x1 - z.x0) * mundoW * margen),
+      r.height / ((z.y1 - z.y0) * mundoH * margen),
+    );
+    focusOn((z.x0 + z.x1) / 2, (z.y0 + z.y1) / 2, escala);
+    return;
+  }
+  focusOn(props.focus.x, props.focus.y, props.focus.scale);
+}
 
 /** Zoom manteniendo fijo el punto (cx,cy) en coordenadas de pantalla. */
 function zoomAt(cx, cy, factor) {
@@ -140,6 +166,7 @@ defineExpose({ focusOn, reset, zoomAt });
 <template>
   <div
     class="viewport"
+    :class="{ llenar }"
     ref="viewport"
     @wheel="onWheel"
     @pointerdown="onDown"
@@ -150,10 +177,15 @@ defineExpose({ focusOn, reset, zoomAt });
     <div class="world" ref="world">
       <slot />
     </div>
+    <!-- pointerdown.stop: sin esto el toque llega primero a onDown, que captura el puntero
+         en .viewport para poder arrastrar el plano. Una vez capturado ahi, Chrome redirige
+         el "click" de compatibilidad al contenedor en vez de al boton, y el boton no hace
+         nada — asi es como un vendedor "le da al boton y no pasa nada" y termina pellizcando
+         para alejarse en su lugar. Los pines del mapa ya llevan este mismo .stop. -->
     <div class="controls">
-      <button @click="zoomAt(vpRect().left + vpRect().width / 2, vpRect().top + vpRect().height / 2, 1.3)">+</button>
-      <button @click="zoomAt(vpRect().left + vpRect().width / 2, vpRect().top + vpRect().height / 2, 1 / 1.3)">−</button>
-      <button title="Ajustar" @click="reset">⤢</button>
+      <button @pointerdown.stop @click="zoomAt(vpRect().left + vpRect().width / 2, vpRect().top + vpRect().height / 2, 1.3)">+</button>
+      <button @pointerdown.stop @click="zoomAt(vpRect().left + vpRect().width / 2, vpRect().top + vpRect().height / 2, 1 / 1.3)">−</button>
+      <button @pointerdown.stop title="Ajustar" @click="reset">⤢</button>
     </div>
   </div>
 </template>
@@ -170,6 +202,10 @@ defineExpose({ focusOn, reset, zoomAt });
   -webkit-tap-highlight-color: transparent;
 }
 .viewport:active { cursor: grabbing; }
+/* Ocupa el hueco que quede en el contenedor flex. min-height:0 es lo que le permite
+   encogerse por debajo de su contenido: sin eso un hijo alto lo empuja y vuelve a
+   desbordar la pantalla. */
+.viewport.llenar { height: auto; flex: 1; min-height: 0; border-radius: 0; border-left: none; border-right: none; }
 .world { position: absolute; top: 0; left: 0; width: 100%; transform-origin: 0 0; will-change: transform; }
 .controls {
   position: absolute; right: 10px; bottom: 10px; display: flex; flex-direction: column; gap: 4px;
@@ -177,5 +213,12 @@ defineExpose({ focusOn, reset, zoomAt });
 .controls button {
   width: 38px; height: 38px; border-radius: 8px; border: 1px solid var(--border);
   background: #fff; font-size: 1.1rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+@media (max-width: 820px) {
+  /* Para los visores con alto fijo (el editor). El mapa usa `llenar` y no pasa por aca. */
+  .viewport { height: calc(78vh - var(--tabbar-h)); }
+  /* 38px se queda corto para el dedo (mínimo recomendado ~44px táctil). */
+  .controls button { width: 46px; height: 46px; font-size: 1.3rem; }
 }
 </style>

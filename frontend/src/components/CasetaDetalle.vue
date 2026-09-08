@@ -67,8 +67,10 @@ const precio = computed(() => Number(props.puesto?.precio || 0));
           <header>
             <div>
               <h2>{{ puesto.categoria }} {{ puesto.codigo }}</h2>
-              <span class="chip" :class="CLASE_ESTADO[puesto.estado]">
-                {{ ETIQUETA_ESTADO[puesto.estado] }}{{ esMia ? ' · tuya' : '' }}
+              <!-- `mia` pinta el chip de azul (ver style.css): el mismo codigo de color
+                   que el pin en el plano, para que no haya que traducir nada. -->
+              <span class="chip" :class="[CLASE_ESTADO[puesto.estado], { mia: esMia }]">
+                {{ esMia ? 'En mi venta' : ETIQUETA_ESTADO[puesto.estado] }}
               </span>
             </div>
             <button class="btn btn-fantasma btn-icono" aria-label="Cerrar" @click="emit('cerrar')">✕</button>

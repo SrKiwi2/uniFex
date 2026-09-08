@@ -48,4 +48,19 @@ const accesos = computed(() => {
 .acceso h3 { margin: 0.7rem 0 0.35rem; font-size: 1.2rem; }
 .acceso p { margin: 0; line-height: 1.5; }
 @media (prefers-reduced-motion: reduce) { .acceso { transition: none; } .acceso:hover { transform: none; } }
+
+/* En móvil cada acceso es una tarjeta grande de una sola columna: es lo que se toca con
+   el pulgar para empezar a vender, así que gana tamaño sobre densidad. */
+@media (max-width: 640px) {
+  .hola h2 { font-size: 1.7rem; }
+  .hola .muted { font-size: 1rem; }
+  .grid { grid-template-columns: 1fr; gap: 0.9rem; }
+  .acceso {
+    display: flex; align-items: center; gap: 1rem; padding: 1.25rem 1.3rem;
+    border-top: none; border-left: 5px solid var(--c); min-height: 84px;
+  }
+  .icono { font-size: 2.3rem; flex: none; }
+  .acceso h3 { margin: 0 0 0.2rem; font-size: 1.15rem; }
+  .acceso p { font-size: 0.88rem; }
+}
 </style>
