@@ -112,6 +112,13 @@ Está **más incompleto de lo que parece**, y tiene un defecto que rompe en la f
 la plantilla y las posiciones en la base**, y hacer la imagen de fondo configurable por
 edición. Es rehacerlo, no moverlo.
 
+> **2026-08-31:** se agregó un aviso visible de "en revisión" en la propia vista (explica
+> la dependencia de CDN y que no debe usarse a ciegas en un evento con wifi irregular), sin
+> tocar la lógica. Sigue funcionando igual que antes cuando hay internet. Además, los
+> reportes JasperReports (`.jrxml`, no están en el repo — ver DEPLOY.md §6) podrían
+> reemplazarse por iText, que ya es la librería usada en `ReciboPdfService`; queda como
+> decisión pendiente, no se tocó en esta pasada.
+
 ---
 
 ## Decisiones de diseño que hay que tomar antes de codificar el Bloque 1
@@ -547,10 +554,361 @@ nada tenían que ver con este bloque:
 
 ### Bloque 8 — Retiro de Thymeleaf y seguridad
 
-- [ ] **Boletería y control de acceso: PENDIENTE de analizar** (decisión aplazada por el usuario)
+- [ ] **Boletería y control de acceso** — más hecho de lo que este documento decía. Auditado
+      el 2026-08-31:
+      - **Control de acceso de responsables: funcional, sin probar formalmente.**
+        `ControlAccesoApi` (`/acceso/estado|entrada|salida`) + `AccesoResponsableServiceImpl`
+        + `controlResponsable.html` ya hacen check-in/check-out por CI con historial. Es
+        Thymeleaf legado, sin sesión JWT (usa la sesión de `ControlResponsableController`,
+        que asume `usuario` en sesión igual que el resto del sitio legado — mismo riesgo de
+        NPE si no hay sesión que arrastra todo Chain 2).
+      - **Boletería (venta al público en general): dos caminos, ninguno probado de punta a
+        punta.** `ventaBoleteria.html` + `ventaBoleteriaController` tienen **dos** formas de
+        registrar una venta de entrada: (a) `/boletos/venta/registrar` — registro manual
+        server-side, pensado para cobro en efectivo/QR aparte, no pasa por la pasarela; (b)
+        el JS de la vista llama a `/api/pagos/crear` (`PagoController`) para pago en línea
+        por la pasarela UAP. La (b) dependía de `pasarela.successUrl` apuntando a
+        `localhost` — corregido 2026-08-31 (ver DEPLOY.md §4), pero sigue sin probarse contra
+        la pasarela real ni tener `PASARELA_KEY`.
+      - **Propuesta para cuando se retome** (no implementado, solo dejado listo):
+        1. Decidir si la boletería va a la SPA (como todo lo nuevo) o se queda Thymeleaf
+           por ser cara al público en general, no a vendedores — es la única vista pensada
+           para un usuario sin cuenta.
+        2. Si se queda Thymeleaf: quitar el camino manual (a) o dejarlo claramente marcado
+           como "venta en efectivo" separado del camino con pasarela (b), porque hoy no
+           está explicado en la interfaz cuál usar cuándo.
+        3. Probar el camino (b) contra la pasarela real en un ambiente de prueba de UAP
+           antes de anunciarlo — nunca se ha ejecutado una transacción real.
+        4. `AccesoResponsable` solo cubre responsables de entidad. Si se necesita controlar
+           acceso de compradores de boleto (`VentaBoleto`), hace falta una tabla/flujo
+           equivalente para ellos — hoy no existe ninguno.
+        5. Mover ambos módulos detrás de JWT (`/api/app`) si se quiere que el personal de
+           control de acceso use el APK en la entrada, igual que los vendedores.
 - [ ] Retirar 35 plantillas y ~52 MB del tema comprado
 - [ ] Consolidar los dos `IServiceGenerico` duplicados
-- [ ] Rotar secretos; quitar el seed de `admin1`/`admin2` del arranque
+- [x] **Rotar secretos** — 2026-08-31: `admin1`/`admin2` ya no llevan contraseña hardcodeada
+      en `UniFexApplication.java` (venían escritas en un repo público); ahora salen de
+      `ADMIN1_PASSWORD`/`ADMIN2_PASSWORD`, sin default, y el seed nunca pisa una contraseña
+      ya existente. Sigue pendiente rotar los secretos viejos que quedaron en el historial
+      de git (`DB_PASSWORD`/`PASARELA_KEY`/`API_KEY`/`JWT_SECRET` de antes de que se
+      leyeran de variables de entorno)
+
+---
+
+## Bloque 9 — Ronda de pedidos del usuario (2026-09-04)
+
+Doce pedidos tras probar el APK en un teléfono real. Dos ya están hechos; el resto se
+planifica aquí. Varios **no parten de cero**: `auditoria` (V10), el flujo de aprobación con
+notificaciones por WebSocket (V11) y la revisión de credenciales ya existen y hay que
+extenderlos, no reinventarlos.
+
+### 9.0 — Hecho en esta ronda
+
+- [x] **Los pines cambian de color enteros** (pedido 1). El separador entre casetas estaba en
+      `border`, y con `box-sizing: border-box` el borde **come relleno**: a zoom normal un pin
+      mide pocos píxeles, así que 1px blanco + los 2px del borde de "mía" dejaban solo una mota
+      de color al centro (se veía un marco negro con el color dentro). Ahora el separador es un
+      `box-shadow`, que se dibuja fuera de la caja. El borde extra de "mía" se retiró: desde que
+      la propia es azul y la ajena naranja, el color solo basta
+- [x] **Tamaño de casetas más fácil de cambiar** (pedido 2). Deslizador con lectura en % para la
+      selección (arrastre en vivo, **un solo paso de deshacer** por arrastre), botón `↺` para
+      volver al tamaño de la categoría, y el deslizador de la categoría ahora previsualiza en
+      vivo y manda el PATCH al soltar, no en cada paso
+
+### 9.1 — Plano reemplazable sin regenerar el APK (pedido 3) · **HECHO** (2026-09-04)
+
+Era el pedido con más efecto: `mapa.png` se empaquetaba en el bundle, así que cambiar el
+plano obligaba a recompilar e instalar el APK en cada teléfono. Ya estaba fichado en el
+Bloque 6 como el bloqueo real para usar el sistema en otra actividad.
+
+- [x] `V13__plano_edicion.sql`: plano por edición (`plano_archivo`, `plano_ancho`,
+      `plano_alto`, `plano_version`, `plano_subido_en`), idempotente. **El alto y el ancho se
+      guardan** porque `PanZoom` llevaba la proporción escrita a mano (`2376/1836`) y con otro
+      plano ese número deja de ser cierto
+- [x] `PlanoService` **lee las medidas de la propia imagen** con `ImageIO` en vez de pedirlas al
+      cliente: son la proporción con la que se encuadra, y un número mal tecleado deforma el
+      plano para todos. Si no se pueden leer, se rechaza la subida
+- [x] `PlanoApiController`: `GET /api/app/plano` (cualquier vendedor: es el fondo de su mapa) y
+      `POST` multipart con `@PreAuthorize(Roles.EDITA_PLANO)`
+- [x] **URL versionada** (`?v=N`, sube en cada reemplazo): sin eso el WebView del APK seguiría
+      mostrando el plano viejo de su caché, y no hay forma de pedirle al vendedor que la limpie
+- [x] `stores/plano.js` compartido por Mapa y Editor (las dos viven en `<KeepAlive>`; pedirlo
+      por separado sería bajarlo dos veces). Pasa por `config.js` porque `/files/...` en el APK
+      apuntaría al contenedor de Capacitor
+- [x] **Respaldo**: sin plano subido se usa el empaquetado, así que el mapa funciona igual que
+      antes de V13 y sobrevive a quedarse sin red
+- [x] Botón «🗺 Cambiar plano» en el Editor, con el tamaño y la versión actuales a la vista
+- [x] El archivo anterior **no se borra**: si el plano nuevo sale mal, el viejo sigue en disco
+- [x] `:key` en `PanZoom`: cambiar de plano cambia la proporción, y `reset()` solo corre al
+      montar — sin remontar, el plano nuevo salía con el encuadre del viejo
+- [x] El encuadre de móvil solo aplica la zona medida a mano al plano de respaldo; de un plano
+      subido no sabemos dónde tiene el dibujo, así que se encuadra entero
+- [x] Probado de punta a punta con un plano de **otra proporción** (1400×900 apaisado): se lee
+      la medida, sube la versión, la SPA lo dibuja sin deformar y reencuadra sola. Estado
+      restaurado al terminar. 32/32 pruebas verdes
+- [ ] Pendiente: guardar el último plano **en el dispositivo** para abrir sin señal
+- [ ] ⚠️ **Las coordenadas son 0..1 sobre la imagen**: si el plano nuevo tiene otro encuadre,
+      **todas las casetas colocadas quedan descolocadas**. Solo cambiar la resolución, con el
+      mismo encuadre, las respeta. La interfaz avisa y dice cuántas hay colocadas antes de subir
+
+**Qué obliga a regenerar el APK y qué no** (análisis pedido):
+
+| Cambio | ¿Regenerar APK? |
+|---|---|
+| Imagen del plano (con 9.1 hecho) | **No** |
+| Manual, contacto del admin, textos servidos por el API | **No** |
+| Datos, precios, categorías, casetas | **No** |
+| **Cualquier cambio de la SPA** (vistas, CSS, lógica) | **Sí** — hoy el bundle va dentro del APK |
+| Plugin nativo nuevo (cámara, notificaciones push) | **Sí** |
+| Icono, splash, permisos, `appId` | **Sí** |
+
+- [ ] **Decisión pendiente:** para no regenerar en cada cambio de interfaz hay tres caminos:
+      (a) el APK carga la SPA **desde el servidor** (cáscara WebView) — cualquier cambio llega
+      solo, pero exige señal; (b) **OTA propio**: el APK trae un bundle de respaldo y al abrir
+      descarga el último si hay red (lo mejor de los dos, es trabajo); (c) seguir empaquetando
+      y regenerar. Hoy vamos por (c)
+
+### 9.2 — Notificaciones y bitácora (pedidos 5 y 6)
+
+Base existente: `NotificacionService` publica en `/topic/notificaciones/{userId}` tras el
+commit, y ya lo usa el circuito de cancelación. Falta convertirlo en módulo con bandeja.
+
+- [ ] `V14__notificaciones.sql`: tabla con destinatario, tipo, asunto, cuerpo, referencia
+      (inscripción/caseta), leída, y **respuesta** para las observaciones
+- [ ] Bandeja en web y APK: no leídas, marcar leída, responder, hilo de la observación
+- [ ] Admin → vendedor: mandar observación sobre una venta; vendedor responde e indica si lo
+      resolvió (estado `ABIERTA` / `RESPONDIDA` / `RESUELTA`)
+- [ ] Admin recibe aviso de cada venta registrada por un vendedor
+- [ ] ⚠️ El WebSocket solo avisa **con la app abierta**. Para avisar con la app cerrada hace
+      falta **FCM** (proyecto Firebase + plugin nativo + **regenerar el APK**) — decisión aparte
+- [ ] **Bitácora** (pedido 5): foto + descripción + fecha/hora exacta, para dejar constancia en
+      el momento. Debe **funcionar sin señal** y subir cuando vuelva (cola local). La cámara es
+      plugin nativo: **regenera APK**
+- [ ] La pestaña **«Más»** deja de repetir lo que ya está en la barra inferior: pasa a ser
+      Bitácora, Notificaciones, Perfil, Guía, Contacto y Salir
+
+### 9.3 — Menú de perfil en el APK (pedido 4)
+
+- [ ] Botón de perfil arriba a la derecha con: **Perfil** (modal con los datos del usuario),
+      **Guía** (manual: servirlo desde `/files` para poder actualizarlo **sin regenerar el
+      APK**; falta redactarlo), **Contacto del administrador** (modal + enlace
+      `https://wa.me/<número>`, el número configurable, no quemado en el código) y
+      **Cerrar sesión**
+
+### 9.4 — Administración desde el APK, con respaldo de cada movimiento (pedidos 6 y 7)
+
+- [ ] Adaptar las vistas administrativas a móvil, como se hizo con las del vendedor
+- [ ] Gestionar, modificar, cancelar, eliminar y **restablecer**, cada una con
+      **justificación obligatoria** — hoy solo la cancelación la pide (V11)
+- [ ] Extender `auditoria` a **toda** escritura administrativa (hoy cubre el ciclo de
+      cancelación y el comprobante), guardando también IP y dispositivo
+
+### 9.5 — Logs del sistema (pedido 8)
+
+- [ ] Tabla `log_sistema` para WARN/ERROR y eventos importantes, alimentada por un appender
+- [ ] Vista de admin con filtros (nivel, fecha, usuario, módulo) y **cola en vivo** por WebSocket
+- [ ] ⚠️ Nunca registrar contraseñas, tokens ni datos personales de más; poner tope de volumen
+      y purga por antigüedad, o la tabla se come el disco en la feria
+
+### 9.6 — Auditoría, integridad y trazabilidad (pedido 9 — propuesta)
+
+Lo que falta para que el respaldo aguante una revisión de verdad:
+
+- [ ] **`auditoria` de solo-añadir**: quitarle UPDATE/DELETE al usuario de base de la app. Una
+      bitácora que el propio sistema puede editar no prueba nada
+- [ ] **Encadenado por hash**: cada fila guarda el hash de la anterior → si alguien altera o
+      borra una fila del medio, la cadena se rompe y se nota
+- [ ] **Id de correlación por petición**, propagado a logs y auditoría: permite reconstruir
+      «qué pasó exactamente en esta venta» de punta a punta
+- [ ] **Numeración sin huecos** para comprobantes/facturas (un hueco es una pregunta incómoda)
+- [ ] **Respaldos**: `pg_dump` programado **y un simulacro de restauración** — un respaldo que
+      nunca se restauró no es un respaldo
+- [ ] Seguridad: rotar los secretos que quedaron en el historial de git (ya fichado), **HTTPS
+      en producción y quitar `cleartext`**, límite de intentos de login, política de contraseñas
+- [ ] Retención: qué se conserva y qué se purga al cerrar la edición
+
+### 9.7 — Reportes (pedido 10)
+
+- [ ] Reportes del **vendedor** (hoy `ReportesApiController` los deja fuera por el
+      `@PreAuthorize` de clase)
+- [ ] Recaudación por día/categoría/vendedor, pendientes de pago, casetas libres vs. vendidas,
+      cancelaciones y sus motivos, credenciales emitidas
+- [ ] Exportar a XLSX/PDF, con **fecha de corte y quién lo generó impresos en el documento**
+- [ ] Indicadores de fiabilidad: cuántos registros entran en cada número y qué se excluyó
+      (canceladas, huérfanas). Ya mordió antes: los KPIs no cuadraban por filas
+      `inscripcion_puesto` con `id_puesto` NULL y por no excluir las anuladas
+
+### 9.8 — Nota de venta (pedido 11) · **HECHO** (2026-09-04)
+
+Decidido: **nota interna**, no factura fiscal. Se reconstruyó `ReciboPdfService`.
+
+**Los defectos que tenía** (esto es lo que se veía como «datos que salen mal o no cargan»):
+
+- [x] **La columna «Categoría» salía vacía desde siempre.** El detalle se pedía a la función
+      `obtener_puestos_por_inscripcion`, que devuelve **solo** `codigo`, `tamano` y `costo`:
+      no existe columna de categoría. Ahora el detalle sale del grafo JPA
+      (`inscripcion_puesto → puesto → categoria`), que además conserva el costo **congelado**
+      en la venta y no el precio actual de la categoría
+- [x] **«null - null».** El representante legal concatenaba antes de comprobar el nulo, así que
+      una entidad sin representante imprimía esa palabra literal
+- [x] **Responsables de otras ventas.** Listaba *todos* los de la entidad, incluidos los dados
+      de baja. Ahora: vigentes, titular primero, y sin N+1 (`findVigentesDeEntidad`)
+- [x] **El membrete no cargaba en producción.** Se leía de `src/main/resources/...` relativo al
+      directorio de ejecución, que no existe al correr desde el jar; fallaba en silencio.
+      Se quitó la imagen de fondo: el documento es sobrio a propósito
+- [x] **Una venta cancelada se imprimía como si nada.** Ahora sale marcada **ANULADA** con su
+      motivo, y dice que ya no ampara la compra
+- [x] **Faltaba el pago** (contado, o banco y comprobante), que es justo lo que respalda el
+      documento. Y el vendedor salía como código interno; ahora sale su nombre
+
+**El identificador verificable** (lo que pedía evitar copia y falsificación):
+
+- [x] El código anterior **no servía**: era `SHA-256(id | NIT | fecha de ahora)`. Como la fecha
+      era el instante de imprimir, **cada reimpresión daba un código distinto**; los tres
+      ingredientes van impresos en el propio papel, así que cualquiera podía recalcularlo; y no
+      se guardaba, así que no había contra qué comprobarlo
+- [x] `V14__nota_venta_codigo.sql`: `nota_codigo` + `nota_emitida_en` en `inscripcion`, con
+      índice único parcial
+- [x] `NotaVentaCodigoService`: firma **HMAC-SHA256 con el secreto del servidor** (sin él no se
+      puede fabricar uno válido aunque se conozcan todos los datos impresos). Se emite **una
+      vez** y no vuelve a cambiar. `REQUIRES_NEW` porque el generador del PDF es de solo lectura
+- [x] `GET /api/publico/notas/{codigo}`: comprobación **pública** — quien controla en la puerta
+      no tiene cuenta. Devuelve lo mínimo (existe, vigente, entidad, fecha): dar importes o
+      responsables sería regalar datos a quien pruebe códigos al azar. Añadido a la cadena 1 de
+      seguridad para que responda JSON y no un 302 al login
+- [x] `unifex.nota.verificacion-url`: si se configura, el QR abre la verificación directa; vacío,
+      lleva solo el código para teclearlo
+- [x] Pruebas: el código **no cambia al reimprimir**, se verifica, y uno inventado no cuela.
+      34/34 verdes. Documento revisado a la vista, generado desde una venta real
+
+### 9.9 — Fotos de responsables y credenciales (pedido 12)
+
+El módulo actual **no sirve para la feria**: arma la credencial en el navegador con **tres CDN
+externos** (jsPDF, qrcodejs, Google Fonts) — sin internet no genera nada, y en un APK offline
+menos. Ver «Revisión rigurosa del módulo de credenciales» más arriba.
+
+**Fase A — fotos por API: HECHA** (2026-09-04)
+
+- [x] ~~`V15__foto_responsable.sql`~~ **no hizo falta ninguna migración.** Llegué a escribirla y
+      la reverti: `persona.foto` **ya existe y está viva** — el registro Thymeleaf (`/guardar`)
+      ya sube las fotos de los dos responsables al bucket `responsables/` y guarda la ruta.
+      Lo que faltaba no era dónde guardarla, sino **poder reunirla después**
+- [x] La foto vive en `persona` y no en `responsable`: es la cara de alguien, así que si esa
+      persona vuelve el año siguiente o responde por otra entidad, sirve la misma
+- [x] `ResponsableFotoService` + `ResponsableFotoDTO` (lleva `tieneFoto` aparte de `fotoUrl`
+      porque la pregunta real del vendedor es «¿a quién me falta?»)
+- [x] Endpoints colgados de la inscripción para que el permiso sea inequívoco:
+      `GET /{id}/responsables`, `POST /{id}/responsables/{rid}/foto`, `DELETE` la misma.
+      Misma regla que el recibo: la venta es tuya, o eres administración
+- [x] ⚠️ El servicio comprueba **además** que el responsable pertenezca a esa venta. Sin eso,
+      como el permiso se valida sobre la inscripción, bastaría con tener una venta propia y
+      adivinar el id del responsable ajeno para cambiarle la foto — y esa foto acaba en una
+      credencial de acceso. Hay prueba dedicada
+- [x] `fotosCompletas` decide si se puede emitir. Una venta **sin responsables** devuelve false
+      a propósito: un `allMatch` sobre lista vacía es `true` y habilitaría emitir credenciales
+      de nada
+- [x] La foto anterior no se borra del disco: si la nueva sale movida, la vieja sigue ahí
+- [x] 6 pruebas nuevas (40/40 en total) + verificado por HTTP real: subida multipart, la URL
+      se sirve (200 image/png) y el conteo de completas responde bien
+
+**Fase B — pantalla en la SPA: HECHA** (2026-09-04)
+
+- [x] `components/FotosResponsables.vue`, montado en el **detalle desplegable de «Mis ventas»**.
+      Ahí y no en el formulario de venta a propósito: el momento de reunir las fotos casi nunca
+      es el de vender, y el caso normal es volver más tarde
+- [x] Muestra quién tiene foto y quién no (hueco con borde punteado), titular primero, y un
+      contador «Faltan N» / «Completas» — que es la pregunta real del vendedor
+- [x] `accept="image/*"` **sin `capture`**: muchas veces la foto ya está en la galería porque el
+      cliente la mandó por WhatsApp, y forzar la cámara obligaría a fotografiar una pantalla
+- [x] La miniatura pasa por `config.js`: `/files/...` crudo en el APK apuntaría al contenedor
+      de Capacitor
+- [x] Al subir se reemplaza solo esa tarjeta con lo que devuelve el servidor, sin recargar la
+      lista: las demás no cambiaron
+- [x] Verificado en navegador a 390px: subida real por la interfaz, miniatura cargada (300×300),
+      el contador pasó de «Faltan 2» a «Falta 1» y los botones a «Cambiar»/«✕»
+
+**Defecto encontrado al probar (arreglado):** la tabla de «Mis ventas» tiene 7 columnas y medía
+839px dentro de una caja de 345px, así que **arrastraba el ancho de la página entera** (863px en
+una pantalla de 390px): el vendedor tenía que desplazar toda la pantalla de lado para llegar a
+los botones. Se añadió la utilidad `.tabla-scroll` en `style.css` y se aplicó aquí; ahora el
+desplazamiento ocurre dentro de la caja. Comprobado: la página ya no desborda.
+
+- [ ] Pendiente: las tablas de Usuarios, Personas, Inscripciones y Reportes tienen el mismo
+      desbordamiento. Son pantallas de administración (escritorio), así que no urge, pero la
+      utilidad ya está y es aplicarla
+
+**Fase C — generar la credencial en el servidor:** pendiente
+
+- [ ] Con iText (ya está en el proyecto), plantilla y posiciones **en la base**, fondo por
+      edición. **Sin CDN**: el módulo actual arma el PDF en el navegador con html2canvas,
+      jsPDF y qrcodejs traídos de internet, así que sin señal no genera nada
+- [ ] Reutilizar el código verificable de la nota de venta (9.8) para el QR de la credencial
+- [ ] Emisión por lotes y reemisión con motivo
+
+### 9.10 — Rotar casetas en el Editor (pedido nuevo)
+
+Llegó por la otra sesión de trabajo. **No existe la columna**, así que es una rebanada vertical
+completa. Antes de abrirla conviene saber dónde muerde:
+
+- [ ] `V15__puesto_rotacion.sql`: `mapa_rotacion` en `puesto` (grados, `DEFAULT 0 NOT NULL`).
+      Recordar que Hibernate mete la columna en el INSERT con NULL, así que el valor por
+      defecto va **también** en la entidad, no solo en el `ALTER TABLE`
+- [ ] Campo en `Puesto` + `PuestoEstadoDTO` (`mapaRotacion`). Es el contrato que consumen a la
+      vez `GET /api/app/puestos`, cada mensaje de `/topic/puestos` y el mapa
+- [ ] Guardar por lotes junto con las posiciones (`POST /api/app/puestos/posiciones`), no en un
+      endpoint aparte: se rota mientras se coloca, en la misma sesión de montaje
+- [ ] ⚠️ **El pin ya usa `transform`**: `translate(-50%, -50%)` para centrarse en su coordenada.
+      La rotación tiene que **componerse** con eso (`translate(...) rotate(Ndeg)`), no
+      reemplazarlo, o la caseta se descoloca al rotar
+- [ ] ⚠️ `forma-triangulo` se dibuja con `clip-path`, que se recorta **antes** de rotar: hay que
+      comprobar el triángulo específicamente
+- [ ] La selección por caja del Editor mide con rectángulos sin rotar; decidir si basta (lo más
+      probable) o si hace falta afinarla
+
+### 9.11 — Aviso de apertura y cierre de la venta (pedido nuevo)
+
+También llegó por la otra sesión. **No es solo un aviso**: es una regla de negocio (¿desde
+cuándo y hasta cuándo puede vender un vendedor?) más la notificación de que cambió.
+
+- [ ] Decidir primero la regla: ventana por edición (fechas), interruptor manual del
+      administrador, o las dos. Sin eso, el aviso no tiene qué anunciar
+- [ ] Si la venta está cerrada, el servidor tiene que **rechazar** reservas y registros — no
+      basta con esconder botones en la SPA
+- [ ] El aviso reutiliza 9.2. Con la app cerrada hace falta FCM (ver `frontend/APK.md`)
+
+### Orden de trabajo
+
+1. ~~**9.1 plano reemplazable**~~ ✅ hecho — desbloqueaba el uso real y evitaba recompilar el APK
+2. ~~**9.8 nota de venta**~~ ✅ hecho — tenía un defecto vivo en cada venta, y su código
+   verificable es el mismo mecanismo que van a necesitar las credenciales
+3. **9.9 fotos + credenciales** ← *siguiente*. Fecha límite dura: sin credenciales no se entra
+   a la feria. Reutiliza el código verificable de la nota
+4. **9.2 notificaciones + bitácora** — sobre cimientos que ya existen. Arrastra **9.11**
+   (aviso de apertura/cierre de venta), que sin la regla de negocio no tiene qué anunciar
+5. **9.4 + 9.6 respaldo administrativo y auditoría** — antes de que haya volumen de datos
+6. **9.7 reportes**, **9.3 perfil**, **9.5 logs**
+7. **9.10 rotar casetas** — es montaje del plano, no venta: puede esperar a después de la feria
+   salvo que el plano lo necesite antes de colocar las casetas de esta edición
+
+### Decisiones tomadas (2026-09-04)
+
+- [x] **Nota de venta interna**, no factura fiscal (9.8). Se mejora la que ya existe
+      (`ReciboPdfService`, iText): datos completos y correctos —hoy hay campos que salen mal o
+      no cargan—, diseño sobrio con poco color y aire de documento formal, y un
+      **identificador verificable** que pruebe que la venta existe y estorbe la copia o
+      falsificación
+- [x] **WhatsApp del administrador: +591 74754979** (9.3)
+- [x] **Manual**: PDF que entrega el usuario; el sistema solo lo sirve y lo muestra (9.3).
+      Se sirve desde `/files` para poder reemplazarlo sin regenerar el APK
+
+### Decisiones que siguen pendientes
+
+- [ ] **¿Avisos con la app cerrada?** Si sí, hay que montar FCM y regenerar el APK (9.2) —
+      pasos detallados en `frontend/APK.md`
+- [ ] **¿SPA empaquetada, servida o con OTA?** Define si cada cambio de interfaz obliga a
+      reinstalar el APK en todos los teléfonos (9.1)
+- [ ] **¿Qué más debe ofrecer «Más»?** Bitácora está clara; el resto se llena con lo que pidan
+      los vendedores tras usarlo unos días
 
 ---
 
@@ -583,9 +941,12 @@ nada tenían que ver con este bloque:
       `Config/ManejadorErroresApi` (`@RestControllerAdvice`), que devuelve JSON 500 (o 400 si
       la petición viene mal del cliente) en vez de dejar que la excepción acabe en `/error` y
       de ahí en un 302 al login. Alcance: solo `@RestController`; Thymeleaf no cambia
-- [ ] `PagoController.crearPago` tiene el **mismo patrón peligroso**: `Map.of("codigoTransaccion",
-      result.get(...), "urlRedireccion", result.get(...))`. Si la pasarela no devuelve alguna de
-      esas claves, NPE. No se tocó por estar en el flujo de pago, que hoy no se está probando
+- [x] **`PagoController.crearPago` tenía el mismo patrón peligroso** (2026-08-31):
+      `Map.of("codigoTransaccion", result.get(...), "urlRedireccion", result.get(...))` —
+      si la pasarela respondía sin alguna de esas claves, `Map.of` lanzaba NPE en vez de un
+      error legible. Ahora valida antes y lanza una excepción con mensaje claro (la recoge
+      `ManejadorErroresApi` como 500 JSON). El endpoint sigue sin conectarse a la SPA ni
+      probarse contra la pasarela real — ver PLAN.md Bloque 8 y DEPLOY.md §4
 - [ ] Wizard `/admin`: el form envía a `/admin/guardar`, el controller mapea `/guardar` (legacy)
 - [ ] `GET /administracion/gaseta` devuelve plantilla inexistente
 - [ ] `PersonaController.modificar-persona` no guarda nada (cuerpo comentado)

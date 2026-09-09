@@ -40,7 +40,7 @@ Three tests: `UniFexApplicationTests` (empty context load), `PuestoReservaConcur
 
 ## Configuration
 
-`src/main/resources/application.properties` is the production profile. Secrets are **not committed**: `DB_PASSWORD`, `PASARELA_KEY`, `API_KEY` and `JWT_SECRET` are read from environment variables with **no defaults**, so production won't boot without them. (The old committed secrets are still in git history and should be rotated.)
+`src/main/resources/application.properties` is the production profile. Secrets are **not committed**: `DB_PASSWORD`, `API_KEY`, `JWT_SECRET`, `ADMIN1_PASSWORD` and `ADMIN2_PASSWORD` are read from environment variables with **no defaults**, so production won't boot without them. (The old committed secrets are still in git history and should be rotated.) `PASARELA_KEY`/`PASARELA_URL`/`PASARELA_SUCCESS_URL`/`PASARELA_CANCEL_URL`/`PASARELA_NOTIFY_URL` are **optional** (empty default) — the pasarela/boletería module (`PagoController`) is deliberately parked, unwired from the SPA; see `DEPLOY.md` to activate it. Upload paths (`app.upload-root`, multipart location) default to Linux paths under `/var/lib/unifex/`, overridable via `UNIFEX_UPLOAD_ROOT`/`UNIFEX_TMP_DIR` — see `DEPLOY.md` for the full production runbook (env vars, migrations, Ubuntu paths, APK build).
 
 It points at the **production** database (`virtual.uap.edu.bo:5432/v2_fexpo_uap`) — never run the default profile while developing. Both profiles now set `hbm2ddl.auto=none`, so Hibernate never alters the schema on its own.
 

@@ -4,6 +4,12 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+# app.upload-root de application-dev.properties era una ruta Windows ("C:/uniFex/dev/...")
+# que en este equipo Linux se interpretaba como relativa: cualquier subida de archivo creaba
+# un directorio literal "C:" en la raiz del repo. Ya se movio a una ruta Linux real, pero se
+# deja esto como red de seguridad si alguien vuelve a apuntar la propiedad a una ruta con ":".
+C:/
+
 ### STS ###
 .apt_generated
 .classpath

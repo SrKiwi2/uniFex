@@ -75,6 +75,115 @@ desconocido»).
   abre la cámara; si hace falta más control, se añade `@capacitor/camera`).
 - Acceso directo desde el escritorio del teléfono, sin escribir una URL.
 
+## Notificaciones con la app cerrada (FCM) — cómo se monta
+
+Hoy los avisos viajan por **WebSocket** (`/topic/notificaciones/{userId}`), y eso tiene un
+límite duro: **solo llegan con la app abierta**. Cuando Android la manda a segundo plano
+suspende el WebView y el socket se cae; con el teléfono bloqueado, más aún. Para avisar con la
+app cerrada hace falta **FCM (Firebase Cloud Messaging)**, que es el único canal que Android
+entrega sin que la app esté viva.
+
+**Esto obliga a regenerar el APK** (plugin nativo + `google-services.json`), y una vez montado,
+cambiar el *contenido* de los avisos ya no lo obliga.
+
+### 1. Firebase (consola, una sola vez)
+
+1. Crear el proyecto en <https://console.firebase.google.com>.
+2. *Agregar app* → **Android**. El **nombre del paquete debe ser idéntico** al `appId` de
+   `capacitor.config.json`: `bo.edu.uap.unifex`. Si no coincide, FCM rechaza el registro y no
+   hay error visible en la app — solo no llega nada.
+3. Descargar **`google-services.json`** y ponerlo en **`frontend/android/app/google-services.json`**
+   (ahí exactamente, junto al `build.gradle` del módulo `app`, no en la raíz).
+4. En *Configuración del proyecto → Cuentas de servicio*, generar una **clave privada** (JSON).
+   Ese archivo es el que usa el **backend** para enviar. **No se versiona**: va por variable de
+   entorno como el resto de secretos (ver `DEPLOY.md`).
+
+### 2. Android (proyecto nativo)
+
+En `frontend/android/build.gradle` (el de nivel raíz), dentro de `dependencies` del bloque
+`buildscript`:
+
+```gradle
+classpath 'com.google.gms:google-services:4.4.2'
+```
+
+En `frontend/android/app/build.gradle`, **al final del archivo**:
+
+```gradle
+apply plugin: 'com.google.gms.google-services'
+```
+
+En `AndroidManifest.xml` (`frontend/android/app/src/main/AndroidManifest.xml`), dentro de
+`<manifest>`, el permiso que Android 13+ **exige** para poder notificar:
+
+```xml
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+```
+
+> Sin ese permiso, en Android 13 o superior la app **no muestra ninguna notificación** y no
+> falla: simplemente no aparece nada. Es el motivo más común de "no me llegan".
+
+### 3. Cliente (SPA)
+
+```bash
+npm --prefix frontend install @capacitor/push-notifications
+npx --prefix frontend cap sync android
+```
+
+Al iniciar sesión (en `stores/auth.js`, tras guardar el token, o en `AppLayout.vue` al montar):
+
+```js
+import { PushNotifications } from '@capacitor/push-notifications';
+
+// 1. Pedir permiso (en Android 13+ abre el diálogo del sistema)
+const permiso = await PushNotifications.requestPermissions();
+if (permiso.receive !== 'granted') return;
+
+// 2. Registrar el dispositivo en FCM
+await PushNotifications.register();
+
+// 3. FCM devuelve el token del dispositivo -> hay que MANDARLO AL BACKEND y guardarlo
+//    contra el usuario. Sin esto el servidor no sabe a qué teléfono avisar.
+PushNotifications.addListener('registration', (t) => {
+  apiFetch('/api/app/dispositivos', { method: 'POST', body: JSON.stringify({ token: t.value }) });
+});
+
+// 4. Aviso recibido con la app ABIERTA (Android no lo muestra solo en ese caso)
+PushNotifications.addListener('pushNotificationReceived', (n) => toast(n.title ?? 'Aviso', 'info'));
+
+// 5. El usuario tocó la notificación: llevarlo a donde corresponde
+PushNotifications.addListener('pushNotificationActionPerformed', (a) => {
+  router.push(a.notification.data?.ruta ?? '/');
+});
+```
+
+Al **cerrar sesión** hay que borrar ese token en el backend, o el siguiente usuario de ese
+teléfono recibiría los avisos del anterior.
+
+### 4. Backend (envío)
+
+- Tabla `dispositivo` (usuario, token FCM, plataforma, última vez visto). Un usuario puede
+  tener **varios** teléfonos, y un teléfono cambia de token al reinstalar: la tabla se limpia
+  sola cuando FCM responde `UNREGISTERED` a un envío.
+- Dependencia `com.google.firebase:firebase-admin` y un `FcmService` que envíe al token.
+- **Dónde engancharlo:** en el mismo sitio donde hoy se publica por WebSocket
+  (`NotificacionService`, después del commit). Es decir: se manda por los **dos** canales —
+  WebSocket si la app está abierta, FCM para cuando no lo está. No se sustituye uno por otro.
+- El cuerpo lleva `data` con la ruta a abrir (`{"ruta": "/mis-ventas"}`), que es lo que usa el
+  listener del punto 5.
+
+### Trampas que cuestan una tarde
+
+- **El paquete tiene que coincidir** (`bo.edu.uap.unifex`) entre Firebase y Capacitor.
+- **`POST_NOTIFICATIONS`** es obligatorio desde Android 13; sin él no se ve nada y no hay error.
+- **`google-services.json` va en `android/app/`**, no en la raíz del proyecto Android.
+- Los avisos **no funcionan en el navegador** con este plugin: es solo Android/iOS. En la web
+  se sigue usando el WebSocket.
+- Muchos teléfonos (Xiaomi, Huawei, Samsung con ahorro agresivo) **matan la app en segundo
+  plano** y retrasan los avisos: hay que pedirle al vendedor que excluya la app del ahorro de
+  batería. Es configuración del teléfono, no del código.
+- Tras cualquier cambio en `android/`, **`npx cap sync android`** antes de compilar.
+
 ## Pendiente
 
 - Icono y pantalla de arranque propios (ahora son los de Capacitor).
