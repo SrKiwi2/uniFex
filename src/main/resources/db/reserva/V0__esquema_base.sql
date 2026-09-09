@@ -41,7 +41,10 @@
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
-SET transaction_timeout = 0;
+-- OJO: aqui pg_dump 18 escribia "SET transaction_timeout = 0;". Ese parametro solo
+-- existe desde PostgreSQL 17, y los servidores donde corre esto son PostgreSQL 12,
+-- que aborta con 'unrecognized configuration parameter "transaction_timeout"'.
+-- Se quita: no hace falta para nada, solo era un limite de seguridad de la sesion.
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 -- pg_dump deja esto vacio por seguridad (fuerza a calificar todo con public.).
