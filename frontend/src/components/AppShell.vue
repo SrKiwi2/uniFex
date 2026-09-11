@@ -21,14 +21,17 @@ const enlaces = computed(() => {
     { a: '/mapa', icono: '🗺️', txt: 'Mapa de ventas' },
     { a: '/venta', icono: '🛒', txt: 'Registrar venta' },
     { a: '/mis-ventas', icono: '🧾', txt: 'Mis ventas' },
+    { a: '/notificaciones', icono: '🔔', txt: 'Notificaciones' },
   ];
   if (auth.puedeEditarPlano) {
     base.push(
+      { a: '/vendedores', icono: '👥', txt: 'Vendedores' },
       { a: '/inscripciones', icono: '📋', txt: 'Inscripciones' },
       { a: '/reportes', icono: '📊', txt: 'Reportes' },
       { a: '/editor', icono: '✏️', txt: 'Editor del plano' },
       { a: '/personas', icono: '🪪', txt: 'Personas' },
       { a: '/usuarios', icono: '👥', txt: 'Usuarios' },
+      { a: '/roles', icono: '🛡️', txt: 'Roles' },
     );
   }
   return base;
@@ -106,6 +109,9 @@ function salir() {
 .sidebar {
   width: var(--sidebar-w); flex: none; background: var(--panel);
   border-right: 1px solid var(--border); display: flex; flex-direction: column;
+  /* Va a pantalla completa (fijo, en móvil), así que su primer enlace caería bajo la barra
+     de estado igual que la cabecera. */
+  padding-top: var(--safe-top); padding-left: var(--safe-left);
   position: sticky; top: 0; height: 100vh;
 }
 .marca { display: flex; align-items: center; gap: 0.6rem; padding: 1.1rem 1rem; font-size: 1.1rem; }
@@ -130,8 +136,13 @@ nav { display: flex; flex-direction: column; gap: 2px; padding: 0.4rem 0.6rem; f
 .datos .r { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
 
 .area { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+/* El hueco de la barra de estado va en el PADDING de la cabecera, no en un margen por encima:
+   así el fondo de la cabecera pinta también esa franja y la hora y la batería del sistema se
+   leen sobre el color de la app, en vez de sobre lo que hubiera debajo. Era lo que dejaba el
+   botón de tema pegado al borde superior, tapado por los iconos y sin poder pulsarse. */
 .topbar {
-  display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 1.2rem;
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: calc(0.7rem + var(--safe-top)) calc(1.2rem + var(--safe-right)) 0.7rem calc(1.2rem + var(--safe-left));
   border-bottom: 1px solid var(--border); background: var(--panel); position: sticky; top: 0; z-index: 10;
 }
 .topbar h1 { margin: 0; font-size: 1.15rem; }
@@ -140,7 +151,10 @@ nav { display: flex; flex-direction: column; gap: 2px; padding: 0.4rem 0.6rem; f
    que se estira hasta la barra inferior en vez de dejar un hueco muerto), pero NO se encoge:
    una vista larga (una tabla de usuarios) conserva su alto natural y la pagina hace scroll
    como siempre. Con flex:1 a secas se comprimiria y quedaria cortada. */
-.contenido { flex: 1 0 auto; padding: 1.4rem; padding-bottom: calc(1.4rem + var(--tabbar-h)); max-width: 1200px; width: 100%; margin: 0 auto; }
+.contenido {
+  flex: 1 0 auto; max-width: 1200px; width: 100%; margin: 0 auto;
+  padding: 1.4rem calc(1.4rem + var(--safe-right)) calc(1.4rem + var(--tabbar-h)) calc(1.4rem + var(--safe-left));
+}
 /* Columna flex para que el plano (con la prop `llenar`) reparta con la barra de leyenda
    el alto disponible, sin tener que adivinar en CSS cuanto mide cada cosa. */
 .contenido.inmersivo { display: flex; flex-direction: column; padding: 0; padding-bottom: var(--tabbar-h); max-width: none; }
@@ -171,7 +185,8 @@ nav { display: flex; flex-direction: column; gap: 2px; padding: 0.4rem 0.6rem; f
   .tabbar {
     display: flex; flex-direction: row; gap: 0; overflow: visible; flex: none;
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 55;
-    height: var(--tabbar-h); padding: 0 0 env(safe-area-inset-bottom);
+    height: var(--tabbar-h);
+    padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left);
     background: var(--panel); border-top: 1px solid var(--border); box-shadow: 0 -2px 10px rgba(2, 6, 23, 0.06);
   }
   .tab {

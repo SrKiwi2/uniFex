@@ -28,6 +28,13 @@ public class WebConfig implements WebMvcConfigurer{
         String location = Paths.get(uploadRoot).toAbsolutePath().toUri().toString(); // e.g. file:/var/uniFex/uploads/
         registry.addResourceHandler("/files/**")
                 .addResourceLocations(location)
-                .setCachePeriod(3600); // 1h cache opcional
+                // Un año, no una hora. Todo lo que sirve este handler lo escribio
+                // FileStorageService.save, que le pone un UUID al nombre: un archivo nuevo
+                // es SIEMPRE una URL nueva, y una URL dada nunca cambia de contenido. Con
+                // una hora, el APK volvia a bajarse el plano (y las fotos de las casetas)
+                // varias veces al dia, y en la feria eso son segundos de pantalla en blanco
+                // con una red mala. Reemplazar el plano sigue viendose al instante porque
+                // llega con otra ruta.
+                .setCachePeriod(365 * 24 * 3600);
     }
 }

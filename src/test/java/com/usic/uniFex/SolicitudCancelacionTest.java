@@ -107,7 +107,7 @@ class SolicitudCancelacionTest {
     private Long venderUnaVenta() {
         RegistroVentaService.NuevaVenta venta = new RegistroVentaService.NuevaVenta(
                 NOMBRE_PRUEBA, "123456789", "Descripcion", "Objeto",
-                "Representante Legal", "99887766",
+                "Representante Legal", "99887766", "71234567",
                 jdbc.queryForObject("SELECT id FROM tipo_entidad ORDER BY id LIMIT 1", Long.class),
                 LocalDate.now(), LocalDate.now().plusDays(5),
                 List.of(new RegistroVentaService.DatosPersona("TITULAR", "Perez", "Lopez", "111", "t@x.com", "700")),

@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.usic.uniFex.model.dto.PersonaDTO;
@@ -44,6 +45,18 @@ public class PersonaApiController {
         return gestion.listar().stream()
                 .map(p -> PersonaDTO.de(p, conUsuario.contains(p.getId())))
                 .toList();
+    }
+
+    /**
+     * Persona por C.I. exacto, exista o no como persona del sistema. La usa el formulario de alta
+     * para avisar antes de guardar de que ese C.I. ya esta registrado -- puede ser un responsable
+     * de entidad, que no sale en el listado de arriba pero si ocupa el C.I.
+     */
+    @GetMapping("/por-ci")
+    public Map<String, Object> porCi(@RequestParam("ci") String ci) {
+        return gestion.buscarPorCi(ci)
+                .map(x -> Map.<String, Object>of("existe", true, "persona", gestion.comoSeleccionable(x)))
+                .orElse(Map.of("existe", false));
     }
 
     @PostMapping

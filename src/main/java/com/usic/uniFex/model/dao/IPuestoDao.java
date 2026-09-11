@@ -1,5 +1,6 @@
 package com.usic.uniFex.model.dao;
 
+import java.util.Collection;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -195,6 +196,37 @@ List<Puesto> findLibresPorCategoriaOrdenados(@Param("estadoPuesto") String estad
     int actualizarReferencia(@Param("id") Long id,
                              @Param("referencia") String referencia,
                              @Param("usuarioId") Long usuarioId);
+
+    /**
+     * Cambia el numero (codigo) que rotula la caseta en el plano.
+     *
+     * Como toda escritura sobre puesto es condicional: nunca toca una caseta anulada. No
+     * comprueba aqui que el codigo no se repita — eso depende del LOTE entero, porque
+     * renumerar es una permutacion (la 3 pasa a ser la 5 y la 5 a ser la 3) y fila a fila
+     * cualquier orden de aplicacion pasaria por un estado repetido. La unicidad la valida
+     * PuestoMapaService.renumerar antes de escribir nada.
+     */
+    @Modifying(clearAutomatically = true)
+    @Query(value = "UPDATE puesto SET codigo = :codigo, "
+           + "\"_fecha_modificacion\" = now(), \"_modificacion_id_usuario\" = :usuarioId "
+           + "WHERE id = :id AND (\"_estado\" IS NULL OR \"_estado\" <> 'X')", nativeQuery = true)
+    int actualizarCodigo(@Param("id") Long id,
+                         @Param("codigo") String codigo,
+                         @Param("usuarioId") Long usuarioId);
+
+    /**
+     * De un grupo de casetas, cuales NO se pueden renumerar porque arrastran una venta.
+     *
+     * El numero de la caseta no se copia a la venta: se lee en vivo con un JOIN a puesto
+     * (ver fn_get_inscripciones y el recibo en ReciboPdfService), asi que cambiarselo a una
+     * caseta vendida reescribiria lo que dice un comprobante ya entregado al expositor.
+     * Cuenta tanto la venta historica como la ocupacion actual.
+     */
+    @Query(value = "SELECT p.id FROM puesto p WHERE p.id IN (:ids) "
+           + "AND (p.estado_puesto = 'O' "
+           + "     OR EXISTS (SELECT 1 FROM inscripcion_puesto ip WHERE ip.id_puesto = p.id))",
+           nativeQuery = true)
+    List<Long> idsConVentas(@Param("ids") Collection<Long> ids);
 
     /** Ids de las casetas activas de una categoria (para difundir un cambio de color/forma/tamaño). */
     @Query("SELECT p.id FROM Puesto p WHERE p.categoria.id = :categoriaId " +

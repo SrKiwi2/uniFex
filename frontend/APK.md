@@ -19,21 +19,85 @@ en la red local, y que ambos estén en la misma red.
 Lo resuelve [`src/config.js`](src/config.js): con `VITE_API_BASE` definida usa esa base; sin
 ella, se queda en relativo (comportamiento de siempre en la web).
 
+## Tráfico sin cifrar (http://) — por qué hizo falta configurarlo
+
+El servidor de la feria es `http://virtual.uap.edu.bo:8070`, **sin TLS**. Desde Android 9
+(API 28) el tráfico sin cifrar está prohibido por defecto, y este proyecto compila contra
+API 36. Sin permitirlo explícitamente, **todas** las peticiones del APK fallan —el login el
+primero— con `ERR_CLEARTEXT_NOT_PERMITTED` en Logcat; dentro de la app no se ve un error
+claro, solo parece que el servidor no contesta.
+
+Se resolvió con dos archivos y un atributo:
+
+- `android/app/src/main/res/xml/network_security_config.xml` — autoriza **solo**
+  `virtual.uap.edu.bo`, `10.0.2.2` (el anfitrión visto desde el emulador) y `localhost`. Es
+  lo que va en un APK de **release**: el resto del tráfico sigue exigiendo TLS.
+- `android/app/src/debug/res/xml/network_security_config.xml` — versión permisiva, que
+  Android usa **solo en `assembleDebug`** porque una variante pisa los recursos del mismo
+  nombre. Así, probar contra la IP de tu laptop no obliga a editar dominios y recompilar
+  cada vez que cambia el wifi.
+- `android:networkSecurityConfig="@xml/network_security_config"` en el `<application>` del
+  manifiesto. `npx cap sync` **no** lo pisa: el manifiesto es tuyo, no lo regenera Capacitor.
+
+Cuando el backend tenga certificado y pase a `https://`, los tres se pueden retirar.
+
 ## Compilar
 
-```bash
-# 1. Averigua la IP de tu máquina en la red local (Windows: ipconfig)
-#    y compila la SPA apuntando ahí
-VITE_API_BASE=http://192.168.20.145:7676 npm run build
+Todo junto, con el script (compila, verifica que la URL quedó dentro, sincroniza y genera
+el APK):
 
-# 2. Copia los archivos al proyecto Android
+```bash
+cd frontend
+./build-apk.sh http://virtual.uap.edu.bo:8070
+```
+
+O paso a paso, que es lo mismo:
+
+```bash
+cd frontend
+
+# 1. Compilar la SPA apuntando al servidor. SIN esta variable el APK queda en relativo
+#    y llama a su propio contenedor: el login falla y parece un problema de red.
+VITE_API_BASE=http://virtual.uap.edu.bo:8070 npm run build
+
+# 2. Copiar los archivos al proyecto Android
 npx cap sync android
 
-# 3. Genera el APK de depuración
+# 3. Generar el APK de depuración
 cd android && ./gradlew assembleDebug
 ```
 
 El APK queda en `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+**Comprobación que evita perder una tarde:** que la URL de verdad esté dentro del APK.
+
+```bash
+unzip -p android/app/build/outputs/apk/debug/app-debug.apk \
+  assets/public/assets/index-*.js | grep -o "virtual.uap.edu.bo:8070" | head -1
+```
+
+Si eso no imprime nada, el APK está compilado en relativo y no va a poder ni entrar.
+
+## Abrirlo en Android Studio
+
+```bash
+cd frontend && npx cap open android
+```
+
+En esta máquina Android Studio está instalado como **snap**, y Capacitor busca en las rutas
+estándar, así que puede no encontrarlo. Si falla:
+
+```bash
+CAPACITOR_ANDROID_STUDIO_PATH=/snap/bin/android-studio npx cap open android
+```
+
+O directamente: abrir Android Studio y elegir la carpeta `frontend/android` (esa, no la raíz
+del repositorio). Dentro, el APK se genera con **Build → Build App Bundle(s)/APK(s) → Build
+APK(s)**.
+
+Ojo con el orden: Android Studio compila lo que hay en `android/app/src/main/assets/public`,
+que es una **copia**. Si tocas la SPA, hay que rehacer `npm run build` + `npx cap sync
+android` antes de compilar en Studio, o seguirás viendo la versión anterior.
 
 ## Instalarlo en el teléfono
 

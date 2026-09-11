@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Que hosts puede llamar la app SIN cifrar (http:// en vez de https://).
+
+  Desde Android 9 (API 28) el trafico sin cifrar esta prohibido por defecto, y este proyecto
+  compila contra API 36. Sin este archivo, apuntar el APK a http://virtual.uap.edu.bo:8070
+  falla en TODAS las peticiones -incluido el login- con ERR_CLEARTEXT_NOT_PERMITTED en
+  Logcat. En la app no se ve un error claro: parece que el servidor no responde.
+
+  Se autoriza solo lo necesario, no todo, para que el resto del trafico siga exigiendo TLS.
+  Cuando el backend tenga certificado y pase a https://, este archivo puede borrarse junto
+  con el atributo android:networkSecurityConfig del manifiesto.
+
+  Para probar contra OTRO servidor (por ejemplo tu laptop en la red local) no hace falta
+  tocar esto: la variante de depuracion usa su propia copia permisiva, en
+  app/src/debug/res/xml/network_security_config.xml.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- Servidor de la feria -->
+        <domain includeSubdomains="true">virtual.uap.edu.bo</domain>
+        <!-- El "localhost" de la maquina anfitriona visto desde el emulador de Android -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <!-- El propio contenedor de Capacitor -->
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

@@ -59,7 +59,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class RegistroVentaService {
 
-    /** Maximo de responsables por entidad: el dueño y un acompañante. */
+    /** Maximo de responsables por entidad: Responsable 1 y Responsable 2, los que atienden. */
     public static final int MAX_RESPONSABLES = 2;
 
     /** Valor de {@code persona._estado} y {@code responsable._estado} para un responsable. */
@@ -92,7 +92,8 @@ public class RegistroVentaService {
 
     public record NuevaVenta(
             String entidadNombre, String nit, String descripcion, String objeto,
-            String representanteLegal, String ciRepresentante, Long tipoEntidadId,
+            String representanteLegal, String ciRepresentante, String celularRepresentante,
+            Long tipoEntidadId,
             LocalDate fechaInicio, LocalDate fechaFin,
             List<DatosPersona> responsables,
             String entidadBancaria, Long numComprobante, Boolean pagoContado,
@@ -260,15 +261,22 @@ public class RegistroVentaService {
         if (req == null) return "Faltan los datos de la venta";
         if (vacio(req.entidadNombre())) return "El nombre de la entidad es obligatorio";
         if (req.tipoEntidadId() == null) return "Falta el tipo de entidad";
+        // El responsable legal es el DUEÑO de la caseta. Antes era opcional y se colaban
+        // ventas cuyo unico contacto era el tercero que atiende el puesto: cuando habia que
+        // reclamar un pago, no habia a quien llamar. Los responsables de mas abajo son quien
+        // ATIENDE, que no es lo mismo.
+        if (vacio(req.representanteLegal())) return "Falta el nombre del responsable legal";
+        if (vacio(req.ciRepresentante())) return "Falta el C.I. del responsable legal";
+        if (vacio(req.celularRepresentante())) return "Falta el celular del responsable legal";
         if (req.puestos() == null || req.puestos().isEmpty()) return "No se selecciono ninguna caseta";
         if (req.puestos().stream().distinct().count() != req.puestos().size()) {
             return "Hay casetas repetidas en la seleccion";
         }
         if (req.responsables() == null || req.responsables().isEmpty()) {
-            return "Hace falta al menos el responsable titular";
+            return "Hace falta al menos el Responsable 1";
         }
         if (req.responsables().size() > MAX_RESPONSABLES) {
-            return "Solo se permiten " + MAX_RESPONSABLES + " responsables: el titular y un acompañante";
+            return "Solo se permiten " + MAX_RESPONSABLES + " responsables (Responsable 1 y Responsable 2)";
         }
         for (DatosPersona p : req.responsables()) {
             if (vacio(p.nombre())) return "Cada responsable necesita nombre";
@@ -285,13 +293,14 @@ public class RegistroVentaService {
         e.setObjeto(req.objeto());
         e.setRepresentanteLegal(req.representanteLegal());
         e.setCiRepresentante(req.ciRepresentante());
+        e.setCelularRepresentante(req.celularRepresentante());
         e.setTipoEntidad(tipo);
         e.setEstado(ACTIVO);
         sellar(e, ahora, usuarioId);
         return entidadService.save(e);
     }
 
-    /** El primero de la lista es el titular; el segundo, su acompañante. */
+    /** El primero de la lista es el Responsable 1 (queda como titular); el segundo, el 2. */
     private void crearResponsables(List<DatosPersona> datos, Entidad entidad, Date ahora, Long usuarioId) {
         for (int i = 0; i < datos.size(); i++) {
             DatosPersona d = datos.get(i);

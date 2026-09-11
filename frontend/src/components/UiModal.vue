@@ -33,7 +33,7 @@ onUnmounted(() => window.removeEventListener('keydown', onTecla));
 
 <style scoped>
 .overlay {
-  position: fixed; inset: 0; z-index: 900; display: grid; place-items: center; padding: 1rem;
+  position: fixed; inset: 0; z-index: 900; display: grid; place-items: center; padding: calc(1rem + var(--safe-top)) calc(1rem + var(--safe-right)) calc(1rem + var(--safe-bottom)) calc(1rem + var(--safe-left));
   background: rgba(2, 6, 23, 0.5); backdrop-filter: blur(2px);
 }
 .dialogo { width: 100%; max-height: 90vh; overflow: auto; box-shadow: var(--sombra-md); }

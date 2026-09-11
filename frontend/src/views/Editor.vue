@@ -6,7 +6,7 @@ import { apiFetch } from '../api';
 import { useAuthStore } from '../stores/auth';
 import { usePuestosStore } from '../stores/puestos';
 import { usePlanoStore } from '../stores/plano';
-import { estiloPin } from '../mapa';
+import { anchoParaLeer, anchoParaTocar, estiloPin, numeracionCompacta, numerosVisibles, ordenLectura } from '../mapa';
 
 /*
  * Diseñador del plano. De 531 casetas solo unas pocas estan colocadas, asi que la herramienta
@@ -139,6 +139,10 @@ const porColocar = computed(() =>
     .sort((a, b) => (parseInt(a.codigo) || 0) - (parseInt(b.codigo) || 0)),
 );
 const colocadas = computed(() => puestos.value.filter((p) => p.mapaX != null));
+// Mismo criterio que el visor: el tope de zoom y el umbral del rótulo salen del tamaño real
+// de las casetas, para que colocar una caseta de 0.005 no obligue a apuntar a un punto.
+const topeZoom = computed(() => anchoParaTocar(colocadas.value));
+const umbralNumeros = computed(() => anchoParaLeer(colocadas.value));
 const seleccionadas = computed(() => [...seleccion.value].map(buscar).filter(Boolean));
 
 // ---- coordenadas ----
@@ -398,6 +402,10 @@ async function eliminarCasetas() {
   const rotulo = objetivo.map((p) => `${p.categoria} ${p.codigo}`).join(', ');
   if (!confirm(`¿Eliminar ${objetivo.length} caseta(s)?\n\n${rotulo}\n\nNo se puede deshacer. Las que tengan ventas serán rechazadas.`)) return;
 
+  // Se apuntan antes de borrar: después de `cargar()` las casetas eliminadas ya no están
+  // en la lista y no se sabría qué categorías quedaron con un hueco.
+  const categoriasTocadas = [...new Set(objetivo.map((p) => p.categoriaId))];
+
   ocupado.value = true;
   try {
     let ok = 0;
@@ -409,9 +417,12 @@ async function eliminarCasetas() {
     }
     seleccion.value = new Set();
     await cargar();
-    mensaje.value = rechazadas.length
-      ? `Eliminadas ${ok}. Rechazadas (vendidas o reservadas): ${rechazadas.join(', ')}`
-      : `Eliminadas ${ok} caseta(s)`;
+
+    const partes = [`Eliminadas ${ok} caseta(s)`];
+    if (rechazadas.length) partes.push(`rechazadas (vendidas o reservadas): ${rechazadas.join(', ')}`);
+    // Borrar la 7 de 10 dejaba la numeración en 1..6, 8..10. Se cierra el hueco.
+    if (ok) partes.push(...await compactarNumeracion(categoriasTocadas));
+    mensaje.value = partes.join(' · ');
   } finally {
     ocupado.value = false;
   }
@@ -559,9 +570,10 @@ async function aplicarCantidad(valor) {
   const n = parseInt(valor, 10);
   if (isNaN(n) || n < 0) { mensaje.value = 'Cantidad inválida.'; return; }
   if (n === activa.value.total) return;
+  const categoriaId = activa.value.id;
   ocupado.value = true;
   try {
-    const r = await apiFetch(`/api/app/categorias/${activa.value.id}/cantidad`, {
+    const r = await apiFetch(`/api/app/categorias/${categoriaId}/cantidad`, {
       method: 'PATCH', body: JSON.stringify({ cantidad: n }),
     });
     const d = await r.json();
@@ -571,6 +583,8 @@ async function aplicarCantidad(valor) {
     if (d.creadas) partes.push(`${d.creadas} creada(s)`);
     if (d.anuladas) partes.push(`${d.anuladas} eliminada(s)`);
     if (d.noQuitadas) partes.push(`${d.noQuitadas} no se pudieron quitar (vendidas o reservadas)`);
+    // Bajar la cantidad salta las vendidas, así que puede dejar huecos igual que un borrado.
+    if (d.anuladas) partes.push(...await compactarNumeracion([categoriaId]));
     mensaje.value = partes.length ? partes.join(', ') : 'Sin cambios';
   } finally {
     ocupado.value = false;
@@ -591,6 +605,93 @@ async function eliminarCategoria() {
     catSel.value = null;
     await cargar();
     mensaje.value = `Categoría "${c.nombre}" eliminada (${d.eliminadas} caseta(s))`;
+  } finally {
+    ocupado.value = false;
+  }
+}
+
+/*
+ * ---- numeración ----
+ *
+ * El número de la caseta (`codigo`) es como se la nombra: el vendedor le dice al cliente
+ * "la 14" y el cliente la busca en el plano. Al crearlas se numeran por orden de creación,
+ * que no tiene nada que ver con dónde acaban puestas, así que un pasillo puede quedar
+ * 7-3-19-5. Esto renumera lo seleccionado siguiendo el recorrido físico.
+ *
+ * Va al servidor de una sola vez, como lote: renumerar es una permutación (la 3 pasa a ser
+ * la 5 y la 5 a ser la 3) y mandarlo caseta por caseta pasaría por estados con números
+ * repetidos. El backend valida el conjunto entero y, si choca, no escribe nada.
+ */
+const inicioNumeracion = ref(1);
+const ordenNumeracion = ref('filas'); // filas | columnas
+
+/** Lo que se numeraría ahora mismo, en el orden en que se va a numerar. */
+const aNumerar = computed(() =>
+  ordenLectura(seleccionadas.value, planoTienda.aspecto, ordenNumeracion.value === 'columnas'));
+
+async function numerarSeleccion() {
+  if (ocupado.value) return;
+  const orden = aNumerar.value;
+  if (!orden.length) { mensaje.value = 'Selecciona casetas colocadas primero.'; return; }
+  const inicio = parseInt(inicioNumeracion.value, 10);
+  if (!Number.isFinite(inicio) || inicio < 0) { mensaje.value = 'Número inicial inválido.'; return; }
+
+  ocupado.value = true;
+  try {
+    const cambios = orden.map((p, i) => ({ id: p.id, codigo: String(inicio + i) }));
+    const r = await apiFetch('/api/app/puestos/codigos', {
+      method: 'PATCH', body: JSON.stringify(cambios),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!d.ok) { mensaje.value = d.mensaje || 'No se pudo renumerar.'; return; }
+    // Sin recargar: los números nuevos llegan por el broadcast, como cualquier otro cambio.
+    mensaje.value = `Numeradas ${orden.length} caseta(s): ${inicio}–${inicio + orden.length - 1}`;
+  } catch (e) {
+    mensaje.value = e.message;
+  } finally {
+    ocupado.value = false;
+  }
+}
+
+/**
+ * Cierra los huecos de numeración de unas categorías: si se elimina la caseta 7 de 10, las
+ * que venían detrás bajan un número y la categoría vuelve a ser 1..N corrida.
+ *
+ * Conserva el orden numérico que ya tenían, así que **solo viaja lo que cambia** — y eso es
+ * lo que la hace usable con la feria en marcha: una caseta vendida que esté por delante del
+ * hueco no entra en el lote y no lo bloquea. Si la vendida está detrás, el backend rechaza esa
+ * categoría entera (renumerarla reescribiría su recibo) y aquí solo se avisa: la eliminación
+ * ya se hizo y no se deshace por esto.
+ */
+async function compactarNumeracion(categoriaIds) {
+  const partes = [];
+  for (const catId of new Set(categoriaIds)) {
+    const cambios = numeracionCompacta(puestos.value, catId);
+    if (!cambios.length) continue;
+
+    const nombre = puestos.value.find((p) => p.categoriaId === catId)?.categoria ?? 'la categoría';
+    try {
+      const r = await apiFetch('/api/app/puestos/codigos', {
+        method: 'PATCH', body: JSON.stringify(cambios),
+      });
+      const d = await r.json().catch(() => ({}));
+      partes.push(d.ok
+        ? `${nombre} renumerada (${d.cambiados})`
+        : `${nombre} sin renumerar: ${d.mensaje || 'rechazado'}`);
+    } catch (e) {
+      partes.push(`${nombre} sin renumerar: ${e.message}`);
+    }
+  }
+  return partes;
+}
+
+/** Cierra los huecos de la categoría activa a petición, sin tener que borrar nada. */
+async function compactarActiva() {
+  if (ocupado.value || !activa.value) return;
+  ocupado.value = true;
+  try {
+    const partes = await compactarNumeracion([activa.value.id]);
+    mensaje.value = partes.length ? partes.join(' · ') : 'La numeración ya está corrida (1..N)';
   } finally {
     ocupado.value = false;
   }
@@ -838,6 +939,9 @@ onUnmounted(() => {
       <label class="campo" title="Alinea la colocación, el arrastre y el pegado a pasos de 2%">
         <input type="checkbox" v-model="rejilla" /> ⧉ Rejilla
       </label>
+      <label class="campo" title="Rotula cada caseta con su número. Hay que acercarse para leerlo: al ver la feria entera no cabe.">
+        <input type="checkbox" v-model="numerosVisibles" /> 🔢 Números
+      </label>
 
       <div v-if="modo === 'seleccionar'" class="grupo">
         <span class="cuenta">{{ seleccion.size }} sel.</span>
@@ -857,6 +961,23 @@ onUnmounted(() => {
         <button :disabled="ocupado || !seleccion.size" @click="quitarDelMapa" title="Quitar del plano, sin borrar">⏏ Quitar</button>
         <button :disabled="ocupado || !seleccion.size" @click="alternarBloqueo" :title="accionBloqueo.titulo">{{ accionBloqueo.txt }}</button>
         <button :disabled="ocupado || !seleccion.size" class="peligro" @click="eliminarCasetas" title="Baja definitiva">🗑 Eliminar</button>
+      </div>
+
+      <!-- Numerar: el número es como se nombra la caseta ("la 14"), así que tiene que
+           seguir el recorrido del pasillo y no el orden en que se fueron creando. Se aplica
+           a la selección entera, porque una fila se numera de una vez o no se numera. -->
+      <div v-if="modo === 'seleccionar'" class="grupo">
+        <label class="campo" title="Número que recibirá la primera caseta del recorrido">
+          Nº desde <input type="number" min="0" v-model.number="inicioNumeracion" />
+        </label>
+        <select v-model="ordenNumeracion" class="orden" title="Cómo se recorre la selección">
+          <option value="filas">↔ Por filas</option>
+          <option value="columnas">↕ Por columnas</option>
+        </select>
+        <button :disabled="ocupado || !aNumerar.length" @click="numerarSeleccion"
+                :title="aNumerar.length ? `Numera ${aNumerar.length} caseta(s), de ${inicioNumeracion} a ${inicioNumeracion + aNumerar.length - 1}` : 'Selecciona casetas colocadas'">
+          🔢 Numerar<span v-if="aNumerar.length"> ({{ aNumerar.length }})</span>
+        </button>
       </div>
 
       <!-- Documentar la caseta: lo que el vendedor le enseñará al cliente desde el mapa.
@@ -958,6 +1079,8 @@ onUnmounted(() => {
           <p class="hint">{{ activa.puestas }} colocadas de {{ activa.total }}. Subir crea; bajar quita las libres.</p>
           <div class="acciones">
             <button class="sec" :disabled="ocupado" @click="agregarCaseta">＋ Una caseta</button>
+            <button class="sec" :disabled="ocupado" @click="compactarActiva"
+                    title="Cierra los huecos de numeración: deja la categoría en 1..N corrido">⇩ Compactar Nº</button>
             <button class="peligro" :disabled="ocupado" @click="eliminarCategoria">🗑 Eliminar categoría</button>
           </div>
         </div>
@@ -974,8 +1097,9 @@ onUnmounted(() => {
       </aside>
 
       <PanZoom :key="planoTienda.src" :selectMode="modo !== 'mapa'"
-               :focus="{ x: 0.44, y: 0.34, scale: 2.4 }" :aspect="planoTienda.aspecto">
-        <div class="plano" ref="lienzo" :class="`modo-${modo}`"
+               :focus="{ x: 0.44, y: 0.34, scale: 2.4 }" :aspect="planoTienda.aspecto"
+               :umbral-detalle="umbralNumeros" :max-ancho="topeZoom">
+        <div class="plano" ref="lienzo" :class="[`modo-${modo}`, { 'con-numeros': numerosVisibles }]"
              @pointerdown="onDown" @pointermove="onMove" @pointerup="onUp" @pointercancel="onUp">
           <!-- width/height intrinsecos: reservan la proporcion antes de descargar, para que
                las casetas no se desplacen mientras carga. Vienen del plano de la edicion
@@ -996,7 +1120,7 @@ onUnmounted(() => {
                class="pin" :class="[`forma-${p.forma || 'cuadrado'}`, `est-${p.estado}`, { sel: seleccion.has(p.id) }]"
                :style="{ ...estiloPin(p), background: p.color || '#94a3b8' }"
                :title="`${p.categoria} ${p.codigo}`"
-               @pointerdown="onPinDown($event, p)"></div>
+               @pointerdown="onPinDown($event, p)"><span class="num-caseta">{{ p.codigo }}</span></div>
 
           <div v-if="lineaActiva" ref="guia" class="guia"></div>
 
@@ -1033,6 +1157,10 @@ onUnmounted(() => {
 .campo { font-size: 0.85rem; display: flex; align-items: center; gap: 0.35rem; }
 .campo input[type='number'] { width: 4rem; padding: 0.25rem; border: 1px solid var(--border); border-radius: 6px; }
 .campo input[type='checkbox'] { accent-color: #2563eb; }
+.orden {
+  border: 1px solid var(--border); border-radius: 8px; padding: 0.35rem 0.4rem;
+  font: inherit; font-size: 0.85rem; background: var(--panel); color: var(--text);
+}
 .apariencia { margin-left: auto; }
 .apariencia .et { font-weight: 600; font-size: 0.9rem; }
 .guardar { background: var(--libre) !important; color: #fff !important; border-color: var(--libre) !important; font-weight: 600; }
@@ -1102,30 +1230,96 @@ aside li button.sel { background: #eff6ff; border-color: #bfdbfe; }
      descolocadas. Mismo arreglo que en Mapa.vue. */
   width: 100%; height: auto; display: block;
   pointer-events: none; user-select: none; -webkit-user-select: none;
-  will-change: transform;
+  /* `translateZ(0)` le da al plano su propia capa: cambiar de color UNA caseta no obliga a
+     re-rasterizar la imagen entera. Lo que SI se quito es `will-change: transform`, que
+     ademas congelaba la escala de rasterizado y dejaba la imagen borrosa al acercarse. */
   transform: translateZ(0);
 }
 .modo-colocar { cursor: crosshair; }
 .modo-seleccionar { cursor: default; }
 
+/* ---- REGLA DE ORO DE ESTE BLOQUE ----
+   Dentro del mundo que transforma PanZoom, un `px` NO es un pixel: el zoom es un
+   `transform: scale()`, asi que toda medida absoluta se multiplica por el aumento. Con las
+   casetas a 0.005 del ancho del plano, una caseta mide ~2 px de maquetacion, y de ahi salian
+   los tres defectos que se veian en el APK:
+     · `border-radius: 2px` sobre una caja de 2 px = circulo perfecto. Por eso las casetas
+       cuadradas se veian redondas — y en el monitor no, porque alli la caseta mide 6 px.
+     · `box-shadow: 0 0 0 1px` = aro blanco de 22 px al acercarse. Ese era el halo.
+     · `0 1px 3px` de sombra difusa = 66 px de desenfoque. Ese era el velo gris.
+   Todo lo que se dibuje aqui va en fracciones de `--pin` (el ancho de la caseta, que publica
+   estiloPin) o en porcentaje. Nada en px absolutos. */
 .pin {
   position: absolute; aspect-ratio: 1; transform: translate(-50%, -50%);
-  border: 1px solid rgba(255, 255, 255, 0.9); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --borde: calc(var(--pin, 20) * 0.06px);
+  --aro: calc(var(--pin, 20) * 0.12px);
+  /* El separador va en box-shadow y no en `border`: con `box-sizing: border-box`, 1 px de
+     borde sobre una caseta de 2 px se come la caseta entera y solo queda el marco. */
+  border: none;
+  box-shadow: 0 0 0 var(--borde) rgba(255, 255, 255, 0.9);
 }
 .modo-seleccionar .pin { cursor: move; }
-.pin.sel { outline: 2px solid #0f172a; outline-offset: 1px; z-index: 4; }
+.pin.sel { outline: var(--aro) solid #0f172a; outline-offset: var(--borde); z-index: 4; }
 
 /* El pin del editor se pinta con el color de su CATEGORÍA, así que hasta ahora una caseta
    bloqueada, vendida o reservada se veía idéntica a una libre: el editor no delataba en qué
    estado estaba lo que uno iba a tocar (y son justo las que el servidor rechaza bloquear o
    eliminar). Se marca el estado sin perder el color de categoría. */
-.pin.est-X { filter: grayscale(1) brightness(0.85); border: 2px dashed rgba(255, 255, 255, 0.9); }
-.pin.est-O { box-shadow: 0 0 0 2px var(--ocupado); }
-.pin.est-T { box-shadow: 0 0 0 2px var(--tramite); }
-.forma-cuadrado { border-radius: 2px; }
+.pin.est-X { filter: grayscale(1) brightness(0.85); box-shadow: 0 0 0 var(--aro) rgba(255, 255, 255, 0.9); }
+.pin.est-O { box-shadow: 0 0 0 var(--aro) var(--ocupado); }
+.pin.est-T { box-shadow: 0 0 0 var(--aro) var(--tramite); }
+/* En porcentaje, no en px: ver la regla de oro de arriba. */
+.forma-cuadrado { border-radius: 10%; }
 .forma-circulo { border-radius: 50%; }
 .forma-triangulo { clip-path: polygon(50% 0%, 100% 100%, 0% 100%); border: none; }
 
-.guia { position: absolute; height: 2px; background: #2563eb; transform-origin: 0 50%; opacity: 0.7; pointer-events: none; }
-.caja { position: absolute; border: 1.5px dashed #2563eb; background: rgba(37, 99, 235, 0.08); pointer-events: none; }
+/* ---- número de la caseta ----
+   El rótulo NO se mide con el font-size del pin, y esa es toda la historia: con casetas de
+   0.005 del ancho del plano el pin mide ~2 px de maquetación, su fuente saldría a ~1 px, y el
+   WebView de Android impone un tamaño MÍNIMO de fuente (8 px por defecto). El número salía
+   cuatro veces más grande que su caseta y `overflow: hidden` lo dejaba en un borrón: por eso
+   "no se veían las numeraciones" al acercarse.
+
+   En su lugar, una caja FIJA de 100 px con el texto a 52 px —tamaños normales, que ningún
+   mínimo toca— reducida con `transform: scale()` al tamaño real de la caseta. Un transform no
+   está sujeto a mínimos de fuente y además se compone con el zoom del mundo, así que el
+   navegador rasteriza el texto directamente a la escala final: nítido a cualquier zoom.
+
+   Está siempre en el DOM y lo encienden DOS condiciones, las dos en CSS a propósito — si
+   fueran reactivas, encenderlas obligaría a repintar los 500+ pines:
+     · `.con-numeros`   — la casilla "🔢 Números" de la barra.
+     · `.world.detalle` — PanZoom avisa de que el plano se ve lo bastante grande. Sin esto,
+       al ver la feria entera el número mediría 2 px y sería una mancha. */
+.num-caseta {
+  display: none;
+  /* Caja FIJA de 100 px, reducida al tamaño real de la caseta con transform (ver arriba). */
+  position: absolute; left: 50%; top: 50%;
+  width: 100px; height: 100px; margin: -50px 0 0 -50px;
+  transform: scale(calc(var(--pin, 20) / 100));
+  transform-origin: 50% 50%;
+  align-items: center; justify-content: center;
+  font-size: 52px; line-height: 1; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  /* El color lo elige el administrador y puede salir claro: la sombra mantiene el número
+     legible sobre cualquiera, sin un fondo que taparía la caseta. */
+  text-shadow: 0 2px 4px rgba(2, 6, 23, 0.92), 0 0 4px rgba(2, 6, 23, 0.85);
+  pointer-events: none;
+  overflow: hidden;
+}
+.world.detalle .con-numeros .num-caseta { display: flex; }
+/* En un triángulo el centro geométrico cae en la punta, donde no hay superficie: el número
+   se baja al tercio ancho. */
+.forma-triangulo .num-caseta { align-items: flex-end; padding-bottom: 8px; font-size: 40px; }
+
+/* Tambien viven dentro del mundo: en px absolutos, la guia se volvia una franja gruesa al
+   acercarse. Se miden contra `--mundo`, el ancho de diseño del plano que publica PanZoom. */
+.guia {
+  position: absolute; height: calc(var(--mundo, 1200) * 0.002px);
+  background: #2563eb; transform-origin: 0 50%; opacity: 0.7; pointer-events: none;
+}
+.caja {
+  position: absolute; border: calc(var(--mundo, 1200) * 0.0015px) dashed #2563eb;
+  background: rgba(37, 99, 235, 0.08); pointer-events: none;
+}
 </style>

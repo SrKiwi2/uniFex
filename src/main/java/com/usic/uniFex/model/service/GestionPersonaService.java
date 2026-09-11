@@ -1,15 +1,16 @@
 package com.usic.uniFex.model.service;
 
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.usic.uniFex.model.IService.IPersonaService;
-import com.usic.uniFex.model.IService.IUsuarioService;
+import com.usic.uniFex.model.dao.IUsuarioDao;
 import com.usic.uniFex.model.entity.Persona;
 
 import lombok.RequiredArgsConstructor;
@@ -32,7 +33,7 @@ public class GestionPersonaService {
     public static final String ELIMINADO = "ELIMINADO";
 
     private final IPersonaService personaService;
-    private final IUsuarioService usuarioService;
+    private final IUsuarioDao usuarioDao;
 
     public record Datos(String nombre, String paterno, String materno, String ci,
                         String correo, String celular) {
@@ -50,11 +51,7 @@ public class GestionPersonaService {
 
     /** Ids de personas que ya tienen un usuario no eliminado (para marcarlas en el listado). */
     public Set<Long> idsConUsuario() {
-        return usuarioService.findAll().stream()
-                .filter(u -> !"ELIMINADO".equalsIgnoreCase(u.getEstado()))
-                .filter(u -> u.getPersona() != null)
-                .map(u -> u.getPersona().getId())
-                .collect(Collectors.toSet());
+        return Set.copyOf(usuarioDao.idsDePersonasConUsuario());
     }
 
     @Transactional
@@ -98,6 +95,71 @@ public class GestionPersonaService {
         p.setModificacion(new Date());
         p.setModificacionIdUsuario(actorId);
         return Resultado.exito("Persona eliminada.", personaService.save(p));
+    }
+
+
+    /**
+     * Personas para el selector del alta de usuarios.
+     *
+     * Devuelve las personas del sistema (ACTIVO) que casen con el texto, y ademas, si el texto es
+     * un C.I. exacto, la persona que lo tenga aunque NO sea del sistema. Ese anadido resuelve un
+     * callejon sin salida real: los responsables de entidad y los promotores traidos de la UAP
+     * viven en la misma tabla con {@code _estado} RESPONSABLE / PROMOTOR, asi que no salian en el
+     * buscador — pero el alta rechazaba su C.I. por duplicado. El administrador no podia ni
+     * encontrarlos ni crearlos. Ahora los encuentra y les puede dar un usuario, que es lo que
+     * ocurre cuando un responsable ademas trabaja en la feria.
+     *
+     * El limite acota la lista: son cientos de personas y un desplegable no las necesita todas.
+     */
+    public List<Seleccionable> buscarParaSelector(String texto, int limite) {
+        String q = texto == null ? "" : texto.trim().toLowerCase();
+        Set<Long> conUsuario = idsConUsuario();
+
+        List<Persona> encontradas = new ArrayList<>(listar().stream()
+                .filter(p -> q.isEmpty() || textoBuscable(p).contains(q))
+                .limit(limite)
+                .toList());
+
+        if (!q.isEmpty() && encontradas.stream().noneMatch(p -> q.equalsIgnoreCase(trim(p.getCi())))) {
+            buscarPorCi(q).filter(p -> encontradas.stream().noneMatch(e -> e.getId().equals(p.getId())))
+                    .ifPresent(encontradas::add);
+        }
+
+        return encontradas.stream()
+                .map(p -> new Seleccionable(p.getId(), nombreCompleto(p), p.getCi(),
+                        conUsuario.contains(p.getId()), p.getEstado()))
+                .toList();
+    }
+
+    /**
+     * Persona por C.I. exacto, sea del sistema o no, siempre que no este dada de baja.
+     * Es la comprobacion que evita crear dos veces a la misma persona desde el alta de usuarios.
+     */
+    public Optional<Persona> buscarPorCi(String ci) {
+        String buscado = trim(ci);
+        if (buscado == null || buscado.isEmpty()) return Optional.empty();
+        return personaService.findFirstByCi(buscado)
+                .filter(p -> !ELIMINADO.equalsIgnoreCase(p.getEstado()));
+    }
+
+    /** Convierte una persona en la forma que consume un selector. */
+    public Seleccionable comoSeleccionable(Persona p) {
+        return new Seleccionable(p.getId(), nombreCompleto(p), p.getCi(),
+                idsConUsuario().contains(p.getId()), p.getEstado());
+    }
+
+    /** Una persona tal como la ve un selector: quien es, si ya tiene login y de donde salio. */
+    public record Seleccionable(Long id, String nombre, String ci, boolean tieneUsuario, String origen) {
+    }
+
+    private String textoBuscable(Persona p) {
+        return (nombreCompleto(p) + " " + (p.getCi() == null ? "" : p.getCi())).toLowerCase();
+    }
+
+    private static String nombreCompleto(Persona p) {
+        return java.util.stream.Stream.of(p.getNombre(), p.getPaterno(), p.getMaterno())
+                .filter(s -> s != null && !s.isBlank())
+                .reduce((a, b) -> a + " " + b).orElse("(sin nombre)");
     }
 
     // ===== helpers =====

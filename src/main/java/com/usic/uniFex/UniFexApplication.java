@@ -26,9 +26,10 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.usic.uniFex.model.IService.IPersonaService;
-import com.usic.uniFex.model.IService.IRolService;
 import com.usic.uniFex.model.IService.IUsuarioService;
 import com.usic.uniFex.model.IService.UtilidadesService;
+import com.usic.uniFex.model.service.GestionRolService;
+import com.usic.uniFex.security.RolesSistema;
 import com.usic.uniFex.model.entity.Persona;
 import com.usic.uniFex.model.entity.Rol;
 import com.usic.uniFex.model.entity.Usuario;
@@ -56,26 +57,28 @@ public class UniFexApplication {
 	}
 
 	@Bean
-	ApplicationRunner init(IUsuarioService usuarioService, IPersonaService personaService, IRolService rolService, UtilidadesService utilidadesService, DataSource dataSource) {
+	ApplicationRunner init(IUsuarioService usuarioService, IPersonaService personaService, GestionRolService gestionRol, UtilidadesService utilidadesService, DataSource dataSource) {
 
 		return args -> {
 
 			aplicarEsquemaSiFalta(dataSource);
 
 			logger.info("SISTEMA UNIFEXPO...");
-			String[] roles = { "SUPER USUARIO", "ADMINISTRADOR" };
-			Rol[] rolObjects = new Rol[roles.length];
 
-			for (int i = 0; i < roles.length; i++) {
-				Rol rol = rolService.findByNombre(roles[i]).orElse(null);
-				if (rol == null) {
-					rol = new Rol();
-					rol.setNombre(roles[i]);
-					rol.setEstado("ACTIVO");
-					rolService.save(rol);
-				}
-				rolObjects[i] = rol;
-			}
+			// Los CINCO roles del sistema, no dos. Antes solo se sembraban SUPER USUARIO y
+			// ADMINISTRADOR, con lo que en una base nueva era imposible dar de alta a un
+			// vendedor (ADMINISTRATIVO), a un control de puerta (CONTROL) o a asesoria: el
+			// selector del modulo de usuarios solo ofrecia esos dos. La definicion vive en
+			// security/RolesSistema y el sembrado es idempotente.
+			gestionRol.asegurarRolesDelSistema();
+
+			// admin1 es el SUPER USUARIO y admin2 el ADMINISTRADOR. Se nombran explicitamente
+			// en vez de indexar el arreglo de roles: al crecer el catalogo, un "i % roles.length"
+			// repartiria las cuentas semilla entre roles que no les tocan.
+			Rol[] rolObjects = {
+					gestionRol.delSistema(RolesSistema.SUPER_USUARIO),
+					gestionRol.delSistema(RolesSistema.ADMINISTRADOR)
+			};
 
 			String[] cis = { "123456789", "987654321" };
 			String[] nombres = { "PRIMER USUARIO", "SEGUNDO USUARIO" };
@@ -100,7 +103,7 @@ public class UniFexApplication {
 					usuario.setUsername(usuarios[i]);
 					usuario.setPassword(passwordEncoder.encode(password[i]));
 					usuario.setPersona(persona);
-					usuario.setRol(rolObjects[i % roles.length]);
+					usuario.setRol(rolObjects[i % rolObjects.length]);
 					usuario.setEstado("ACTIVO");
 					usuarioService.save(usuario);
 				}

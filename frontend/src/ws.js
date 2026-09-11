@@ -22,9 +22,10 @@ import { urlWebSocket } from './config.js';
  * @param onRechazo      el token fue rechazado o expiro
  * @param onConectado    se llamo al suscribirse con exito
  * @param onNotificacion recibe las notificaciones personales (solicitudes de cancelacion)
+ * @param onCerrado      la conexion se cayo (no es un rechazo: stompjs reintentara sola)
  * @returns el cliente (usar .deactivate() al cerrar sesion)
  */
-export function crearClientePuestos(onEstado, onRechazo, onConectado, onNotificacion) {
+export function crearClientePuestos(onEstado, onRechazo, onConectado, onNotificacion, onCerrado) {
   const auth = useAuthStore();
 
   const client = new Client({
@@ -55,6 +56,14 @@ export function crearClientePuestos(onEstado, onRechazo, onConectado, onNotifica
         });
       }
       if (onConectado) onConectado();
+    },
+    // Una caida NO es un rechazo: stompjs reintenta sola cada reconnectDelay. Pero hasta
+    // que vuelva, el mapa esta congelado y el usuario tiene que saberlo. Sin esto,
+    // `enVivo` se quedaba en true para siempre despues de la primera conexion: el indicador
+    // habria mentido justo cuando mas importa (Android corta los sockets al mandar la app
+    // al fondo, y ahi es cuando el mapa se queda viejo).
+    onWebSocketClose: () => {
+      if (onCerrado) onCerrado();
     },
     onStompError: (frame) => {
       // Token ausente, invalido o expirado. Reintentar en bucle no arregla nada:

@@ -33,6 +33,7 @@ import com.usic.uniFex.model.service.CancelarInscripcionService;
 import com.usic.uniFex.model.service.ReciboPdfService;
 import com.usic.uniFex.model.service.ResponsableFotoService;
 import com.usic.uniFex.model.service.RegistroVentaService;
+import com.usic.uniFex.model.service.VendedorAsignacionService;
 import com.usic.uniFex.security.JwtUser;
 import com.usic.uniFex.security.Roles;
 
@@ -58,6 +59,7 @@ public class InscripcionApiController {
     private final ReciboPdfService reciboPdfService;
     private final CancelarInscripcionService cancelarInscripcion;
     private final ResponsableFotoService responsableFoto;
+    private final VendedorAsignacionService vendedorAsignacion;
 
     /**
      * Listado de inscripciones. Solo administracion.
@@ -139,6 +141,16 @@ public class InscripcionApiController {
         Long usuarioId = usuarioActual();
         if (usuarioId == null) {
             return ResponseEntity.status(401).body(Map.of("ok", false, "mensaje", "No autenticado"));
+        }
+        // Un vendedor no vende casetas que no tiene asignadas. Hay que comprobarlo tambien aqui y
+        // no solo en el carrito: este endpoint recibe la lista de casetas directamente y ocupa las
+        // que estén libres, asi que sin esto bastaba con saltarse el carrito para vender cualquiera.
+        if (req != null && esVendedor()) {
+            List<Long> noPermitidas = vendedorAsignacion.casetasNoPermitidas(usuarioId, req.puestos());
+            if (!noPermitidas.isEmpty()) {
+                return ResponseEntity.status(403).body(Map.of("ok", false,
+                        "mensaje", "Hay casetas que no estan asignadas a ti: " + noPermitidas));
+            }
         }
         try {
             RegistroVentaService.Resultado r = registroVenta.registrar(req, usuarioId, origenDe(origen));
@@ -315,6 +327,14 @@ public class InscripcionApiController {
      * De donde llega la peticion, para la auditoria: WEB por defecto, o APK si el
      * cliente (el futuro empaquetado Capacitor) envia el header {@code X-Origen}.
      */
+    /** ¿Quien vende es un vendedor? Administracion no se filtra por asignaciones. */
+    private boolean esVendedor() {
+        org.springframework.security.core.Authentication auth =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMINISTRATIVO".equals(a.getAuthority()));
+    }
+
     private static String origenDe(String origen) {
         return AuditoriaService.ORIGEN_APK.equalsIgnoreCase(origen == null ? "" : origen.trim())
                 ? AuditoriaService.ORIGEN_APK

@@ -35,7 +35,12 @@ public class AuthController {
             return ResponseEntity.status(401)
                     .body(Map.<String, Object>of("ok", false, "mensaje", "Usuario o contrasena incorrectos"));
         }
-        if ("INACTIVO".equals(u.getEstado())) {
+        // Cualquier estado que no sea ACTIVO cierra la puerta. Antes solo se miraba INACTIVO,
+        // asi que un usuario dado de baja logica (_estado = ELIMINADO) seguia pudiendo entrar:
+        // desaparecia del modulo de gestion, pero su login seguia vivo. Un _estado nulo se trata
+        // como activo, que es lo que hay en las filas antiguas creadas antes de que existiera.
+        String estado = u.getEstado();
+        if (estado != null && !"ACTIVO".equalsIgnoreCase(estado.trim())) {
             return ResponseEntity.status(403)
                     .body(Map.<String, Object>of("ok", false, "mensaje", "Usuario inactivo"));
         }

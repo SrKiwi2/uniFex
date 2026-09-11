@@ -45,6 +45,20 @@ public class CategoriaMapaService {
     public record ResultadoAjuste(int creadas, int anuladas, int noQuitadas, List<Long> afectados) {
     }
 
+    /**
+     * Las categorias vivas, en orden alfabetico. Las anuladas ({@code _estado = 'X'}) no salen:
+     * asignarle a un vendedor una categoria dada de baja no significaria nada.
+     */
+    @Transactional(readOnly = true)
+    public List<Categoria> listar() {
+        return categoriaService.findAll().stream()
+                .filter(c -> !Puesto.REGISTRO_ANULADO.equalsIgnoreCase(c.getEstado()))
+                .sorted(java.util.Comparator.comparing(
+                        c -> c.getNombre() == null ? "" : c.getNombre(),
+                        String.CASE_INSENSITIVE_ORDER))
+                .toList();
+    }
+
     /** Crea una categoria y sus N casetas (codigo 1..N, libres). */
     @Transactional
     public Categoria crear(NuevaCategoria req, Long usuarioId) {

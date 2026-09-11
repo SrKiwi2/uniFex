@@ -36,15 +36,37 @@
   --sombra-md: 0 10px 30px rgba(2, 6, 23, 0.10);
   --sidebar-w: 232px;
 
+  /* ---- Márgenes seguros del dispositivo ----
+     El APK se dibuja de borde a borde: desde la API 35 Android lo impone y no hay forma de
+     desactivarlo, así que la barra de estado (hora, señal, batería) y la barra de gestos
+     quedan ENCIMA de la página. Lo que las esquiva es esto.
+
+     Se declaran aquí, una vez y con nombre, en vez de repartir `env()` por los componentes:
+     así hay un único sitio donde mirar por qué existe ese hueco, y un único sitio que tocar.
+     Fuera del APK valen 0 y no cambian nada. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
   /* Alto de la barra de navegación inferior (solo existe en móvil). 0 por defecto para
      que cualquier calc() que la use no cambie nada en escritorio. */
   --tabbar-h: 0px;
 }
 
+/* Dentro del APK, un SUELO por si el WebView no reporta los insets: hay versiones y capas de
+   fabricante que devuelven 0 aunque la app sea de borde a borde, y entonces la cabecera queda
+   bajo los iconos del sistema y no se puede pulsar. 28 px cubre la barra de estado típica
+   (24 dp) con holgura; si el sistema informa de más, manda el valor real. */
+.apk {
+  --safe-top: max(env(safe-area-inset-top, 0px), 28px);
+  --safe-bottom: max(env(safe-area-inset-bottom, 0px), 16px);
+}
+
 /* Barra de navegación inferior tipo app: aparece solo por debajo de este ancho,
    el mismo punto de corte que usa AppShell para el resto de lo móvil. */
 @media (max-width: 820px) {
-  :root { --tabbar-h: calc(58px + env(safe-area-inset-bottom)); }
+  :root { --tabbar-h: calc(58px + var(--safe-bottom)); }
 }
 
 @media (prefers-color-scheme: dark) {

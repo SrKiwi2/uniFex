@@ -15,8 +15,37 @@ import { url as urlServidor } from '../config.js';
  */
 const RESPALDO = { url: '/mapa.png', ancho: 1836, alto: 2376, version: 0, propio: false };
 
+/*
+ * El plano tambien se recuerda entre arranques, y no solo por velocidad.
+ *
+ * Sin esto, cada arranque empieza con el plano de RESPALDO —otra imagen y, sobre todo, otra
+ * proporcion— y salta al de verdad cuando contesta el servidor. En una red lenta eso son
+ * segundos de plano equivocado y, cuando llega el bueno, un reencuadre a la vista. Guardar la
+ * ficha (que son cuatro campos, no la imagen) hace que el segundo arranque abra ya con el
+ * plano correcto; la imagen en si la cachea el navegador, que para eso el backend la sirve
+ * con un año de caducidad (las rutas llevan UUID y nunca cambian de contenido).
+ */
+const CLAVE_CACHE = 'plano.cache.v1';
+
+function leerCache() {
+  try {
+    const guardado = JSON.parse(localStorage.getItem(CLAVE_CACHE) || 'null');
+    return guardado && guardado.url && guardado.ancho ? guardado : null;
+  } catch {
+    return null;
+  }
+}
+
+function guardarCache(p) {
+  try {
+    localStorage.setItem(CLAVE_CACHE, JSON.stringify(p));
+  } catch {
+    // Cuota llena o modo privado: se pierde el arranque rapido, nada mas.
+  }
+}
+
 export const usePlanoStore = defineStore('plano', () => {
-  const plano = ref({ ...RESPALDO });
+  const plano = ref(leerCache() || { ...RESPALDO });
   let promesa = null;
 
   /**
@@ -36,7 +65,10 @@ export const usePlanoStore = defineStore('plano', () => {
     promesa = (async () => {
       try {
         const r = await apiFetch('/api/app/plano');
-        if (r.ok) plano.value = await r.json();
+        if (r.ok) {
+          plano.value = await r.json();
+          guardarCache(plano.value);
+        }
       } catch {
         // Sin red se sigue con el plano de respaldo: es preferible un mapa viejo a
         // ninguno, sobre todo en la feria, donde el wifi se cae.
@@ -47,7 +79,9 @@ export const usePlanoStore = defineStore('plano', () => {
 
   /** Tras subir uno nuevo: refresca sin recargar la pagina. */
   function aplicar(nuevo) {
-    if (nuevo) plano.value = nuevo;
+    if (!nuevo) return;
+    plano.value = nuevo;
+    guardarCache(nuevo);
   }
 
   return { plano, src, aspecto, asegurar, aplicar };

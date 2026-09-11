@@ -133,12 +133,14 @@ async function main() {
   const venta = {
     entidadNombre: 'HUMO AUTOMATICO ' + Date.now(),
     nit: '999', descripcion: 'Prueba', objeto: 'Prueba',
-    representanteLegal: 'Rep Legal', ciRepresentante: '123',
+    // El celular del responsable legal es OBLIGATORIO desde V16: sin el, el registro
+    // responde 400 y todo lo que viene despues (recibo, comprobante, cancelacion) cae con el.
+    representanteLegal: 'Rep Legal', ciRepresentante: '123', celularRepresentante: '70000000',
     tipoEntidadId: tipos[0].id,
     fechaInicio: null, fechaFin: null,
     responsables: [
-      { nombre: 'TITULAR', paterno: 'Uno', materno: 'Dos', ci: 'T1', correo: null, celular: null },
-      { nombre: 'ACOMPANIANTE', paterno: 'Tres', materno: 'Cuatro', ci: 'A1', correo: null, celular: null },
+      { nombre: 'TITULAR', paterno: 'Uno', materno: 'Dos', ci: 'T1', celular: null },
+      { nombre: 'ACOMPANIANTE', paterno: 'Tres', materno: 'Cuatro', ci: 'A1', celular: null },
     ],
     entidadBancaria: 'Banco Humo', numComprobante: 1, pagoContado: false,
     puestos: ids,

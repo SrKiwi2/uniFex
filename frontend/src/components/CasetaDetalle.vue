@@ -120,21 +120,29 @@ const precio = computed(() => Number(props.puesto?.precio || 0));
   position: fixed; inset: 0; z-index: 80; background: rgba(2, 6, 23, 0.45);
   display: flex; align-items: flex-end; justify-content: center;
 }
+/* La ficha es lo que el vendedor le PONE DELANTE al cliente: la foto, la medida y el
+   precio se miran entre dos personas y a un brazo de distancia. Con el tamaño anterior
+   (460px de ancho, foto en 4:3, texto de 0.95rem) había que acercarse a leerla. */
 .ficha {
-  background: var(--panel); width: 100%; max-width: 460px;
+  background: var(--panel); width: 100%; max-width: 560px;
   border-radius: var(--radio) var(--radio) 0 0;
-  box-shadow: var(--sombra-md); max-height: 88vh; overflow-y: auto;
-  display: flex; flex-direction: column; gap: 0.9rem; padding: 1rem 1.1rem 1.2rem;
+  box-shadow: var(--sombra-md); max-height: 92vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 1rem;
+  /* El botón de acción vive al final de la hoja: sin el margen seguro cae justo debajo de
+     la barra de gestos de Android y se pulsa el gesto en vez del botón. */
+  padding: 1.1rem 1.2rem calc(1.3rem + var(--safe-bottom));
 }
 header { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; }
-header h2 { margin: 0 0 0.3rem; font-size: 1.15rem; }
+header h2 { margin: 0 0 0.35rem; font-size: 1.35rem; }
 .chip { padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; }
 
 .galeria { position: relative; border-radius: var(--radio-sm); overflow: hidden; background: var(--panel-2); }
-.galeria img { width: 100%; display: block; aspect-ratio: 4 / 3; object-fit: cover; }
+/* 3:2 en vez de 4:3: la foto de una caseta es apaisada y con 4:3 se recortaba por los
+   lados justo lo que se quiere enseñar. */
+.galeria img { width: 100%; display: block; aspect-ratio: 3 / 2; object-fit: cover; }
 .galeria.vacia {
-  display: grid; place-items: center; aspect-ratio: 4 / 3;
-  color: var(--muted); font-size: 0.9rem; border: 1px dashed var(--border);
+  display: grid; place-items: center; aspect-ratio: 3 / 2;
+  color: var(--muted); font-size: 0.95rem; border: 1px dashed var(--border);
 }
 .puntos { position: absolute; bottom: 0.5rem; left: 0; right: 0; display: flex; justify-content: center; gap: 0.35rem; }
 .punto {
@@ -146,18 +154,21 @@ header h2 { margin: 0 0 0.3rem; font-size: 1.15rem; }
 
 .datos { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; margin: 0; }
 .datos .ancho { grid-column: 1 / -1; }
-.datos dt { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 700; }
-.datos dd { margin: 0.1rem 0 0; font-size: 0.95rem; }
-.datos .precio { font-weight: 750; font-variant-numeric: tabular-nums; }
+.datos dt { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 700; }
+.datos dd { margin: 0.15rem 0 0; font-size: 1.1rem; }
+/* El precio es el dato que se dice en voz alta: se lee de lejos y sin buscarlo. */
+.datos .precio { font-weight: 800; font-size: 1.45rem; font-variant-numeric: tabular-nums; }
 
 footer { display: flex; flex-direction: column; gap: 0.5rem; }
-.motivo { margin: 0; font-size: 0.88rem; color: var(--muted); text-align: center; }
-.grande { width: 100%; padding: 0.8rem; font-size: 1rem; }
+.motivo { margin: 0; font-size: 0.92rem; color: var(--muted); text-align: center; }
+/* 56px de alto: se pulsa de pie, con una mano y con el cliente mirando. El mínimo táctil
+   recomendado son 44 y este es EL botón de la pantalla. */
+.grande { width: 100%; min-height: 56px; padding: 0.9rem; font-size: 1.1rem; font-weight: 700; }
 
 /* En pantalla grande deja de ser una hoja y pasa a panel lateral. */
 @media (min-width: 720px) {
   .velo { align-items: center; }
-  .ficha { border-radius: var(--radio); max-height: 85vh; }
+  .ficha { border-radius: var(--radio); max-height: 88vh; }
 }
 
 .hoja-enter-active, .hoja-leave-active { transition: opacity 0.18s ease; }

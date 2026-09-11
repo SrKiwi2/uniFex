@@ -2,7 +2,11 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- `viewport-fit=cover` no es decorativo: sin el, env(safe-area-inset-*) devuelve 0 y
+         TODO el codigo que ya lo usaba (barra inferior, avisos) no hacia nada. Desde que el
+         APK apunta a la API 35+, Android dibuja la app de borde a borde sin opcion a
+         desactivarlo, asi que los margenes seguros los tiene que respetar la propia pagina. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>UniFex — Casetas</title>
   </head>
   <body>

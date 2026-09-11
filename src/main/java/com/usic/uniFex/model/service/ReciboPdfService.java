@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.itextpdf.text.BaseColor;
 import com.itextpdf.text.Document;
+import com.itextpdf.text.DocumentException;
 import com.itextpdf.text.Element;
 import com.itextpdf.text.Font;
 import com.itextpdf.text.Font.FontFamily;
@@ -24,6 +25,8 @@ import com.itextpdf.text.Paragraph;
 import com.itextpdf.text.Phrase;
 import com.itextpdf.text.Rectangle;
 import com.itextpdf.text.pdf.BarcodeQRCode;
+import com.itextpdf.text.pdf.ColumnText;
+import com.itextpdf.text.pdf.PdfContentByte;
 import com.itextpdf.text.pdf.PdfPCell;
 import com.itextpdf.text.pdf.PdfPTable;
 import com.itextpdf.text.pdf.PdfWriter;
@@ -44,25 +47,12 @@ import lombok.RequiredArgsConstructor;
 /**
  * La nota de venta de una inscripcion, en PDF.
  *
- * Es un documento INTERNO (no una factura fiscal): respalda que la venta existe y que se
- * cobro, y por eso lo que mas importa aqui no es el adorno sino que (a) los datos sean los de
- * ESA venta y (b) el papel se pueda comprobar contra el sistema.
+ * <b>Formato duplicado:</b> tamaño carta (612×792 pt) con DOS mitades idénticas
+ * (superior e inferior, ~396 pt cada una) separadas por una línea de corte punteada.
+ * Cada mitad contiene todos los datos de la venta + QR verificable.
  *
- * <h2>Lo que estaba mal y se corrigio</h2>
- * <ul>
- *   <li><b>Responsables de otra venta.</b> Se listaban TODOS los de la entidad, incluidos los
- *       dados de baja. Ahora salen los vigentes y el titular primero.</li>
- *   <li><b>"null - null".</b> El representante legal concatenaba antes de comprobar el nulo,
- *       asi que una entidad sin representante imprimia literalmente esa palabra.</li>
- *   <li><b>Fecha que cambiaba en cada impresion.</b> Se imprimia {@code new Date()}, de modo
- *       que la misma venta salia con fecha distinta cada vez — y el codigo tambien.</li>
- *   <li><b>Una venta cancelada se imprimia como si nada.</b> Ahora sale marcada ANULADA.</li>
- *   <li><b>Faltaba el pago</b> (contado o banco y comprobante), que es justo lo que respalda
- *       el documento.</li>
- *   <li><b>El membrete no cargaba en produccion:</b> se leia de {@code src/main/resources/...}
- *       relativo al directorio de ejecucion, que no existe al correr desde el jar. Fallaba en
- *       silencio. Se quito: el documento ahora es sobrio a proposito, sin imagen de fondo.</li>
- * </ul>
+ * Se imprime una hoja y se corta a la mitad: una copia para el cliente,
+ * otra para archivo firmada/sellada.
  */
 @Service
 @RequiredArgsConstructor
@@ -74,29 +64,46 @@ public class ReciboPdfService {
     private final IAdministrativoService administrativoService;
     private final NotaVentaCodigoService codigoService;
 
-    /**
-     * Donde apunta el QR. Si esta vacio, el QR lleva solo el codigo: se puede teclear a mano
-     * en el verificador. Con la URL puesta, escanear la nota abre la comprobacion directa.
-     */
     @Value("${unifex.nota.verificacion-url:}")
     private String urlVerificacion;
 
     private static final BaseColor GRIS_LINEA = new BaseColor(210, 214, 220);
     private static final BaseColor GRIS_FONDO = new BaseColor(243, 244, 246);
+    private static final BaseColor GRIS_CORTE = new BaseColor(150, 156, 163);
     private static final BaseColor TINTA = new BaseColor(17, 24, 39);
     private static final BaseColor TINTA_SUAVE = new BaseColor(107, 114, 128);
     private static final BaseColor ROJO = new BaseColor(185, 28, 28);
 
     private static final DateTimeFormatter F_HORA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
+    // Letter: 612 x 792 pt. Mitad ≈ 396 pt. Márgenes 36 pt → área útil ~360 pt por mitad.
+    private static final float ALTO_PAGINA = PageSize.LETTER.getHeight(); // 792
+    private static final float ANCHO_PAGINA = PageSize.LETTER.getWidth();  // 612
+    private static final float MARGEN = 36f;
+    private static final float ANCHO_UTIL = ANCHO_PAGINA - 2 * MARGEN; // 540
     /**
-     * Genera la nota sobre el stream dado.
+     * Hueco reservado para la linea de corte, entre las dos mitades.
      *
-     * `@Transactional(readOnly = true)` no es decorativo: el metodo recorre relaciones LAZY
-     * (entidad, tipo de entidad, edicion, persona del usuario). Fuera de una peticion web
-     * —una prueba, una tarea programada, un envio por correo— sin esto revienta con
-     * LazyInitializationException. La emision del codigo va en su propia transaccion de
-     * escritura (ver {@link NotaVentaCodigoService}), justamente porque esta es de lectura.
+     * Sin el, el contenido de la copia de arriba llegaba justo hasta la linea y las tijeras
+     * pasaban por encima del pie. Aqui hay sitio para la linea punteada y su rotulo.
+     */
+    private static final float ALTO_CORTE = 18f;
+
+    /** Lo que le toca a cada mitad, ya descontados los margenes y el hueco del corte. */
+    private static final float ALTO_MITAD = (ALTO_PAGINA - 2 * MARGEN - ALTO_CORTE) / 2f;
+
+    /**
+     * Colchon que se le exige de sobra a cada mitad.
+     *
+     * {@code getTotalHeight()} mide las cajas de las celdas, pero las letras sobresalen un poco
+     * de su caja y los bordes tienen grosor. Sin este margen, una mitad que "cabia" por medio
+     * punto acababa mordiendo la linea de corte.
+     */
+    private static final float COLCHON = 6f;
+
+    /**
+     * Genera la nota de venta en formato DUPLICADO (dos mitades en una hoja carta).
+     * Cada mitad es una nota completa con sus datos y QR verificable.
      */
     @Transactional(readOnly = true)
     public void generarRecibo(Long idInscripcion, OutputStream os) throws Exception {
@@ -106,11 +113,6 @@ public class ReciboPdfService {
         Entidad entidad = ins.getEntidad();
         boolean anulada = "X".equalsIgnoreCase(ins.getEstado());
 
-        // El detalle sale del propio grafo JPA y no de `obtener_puestos_por_inscripcion`.
-        // Esa funcion devuelve SOLO codigo, tamano y costo: no tiene columna de categoria, asi
-        // que la columna "Categoria" del recibo salia vacia desde siempre. Aqui estan los tres
-        // datos y ademas la categoria, y el costo sigue siendo el CONGELADO en la venta
-        // (`inscripcion_puesto.costo`), no el precio actual de la categoria.
         List<InscripcionPuesto> detalle = ins.getInscripcionPuestos() == null
                 ? List.of()
                 : ins.getInscripcionPuestos().stream()
@@ -127,273 +129,358 @@ public class ReciboPdfService {
                 ? responsableDao.findVigentesDeEntidad(entidad.getId())
                 : List.of();
 
-        // El codigo se emite la primera vez y despues no cambia: es lo que hace que dos
-        // copias de la misma nota sean el mismo documento.
         String codigo = codigoService.obtenerOEmitir(idInscripcion);
         Inscripcion refrescada = inscripcionService.findById(idInscripcion);
         LocalDateTime emitida = refrescada != null && refrescada.getNotaEmitidaEn() != null
                 ? refrescada.getNotaEmitidaEn()
                 : LocalDateTime.now();
 
-        Document doc = new Document(PageSize.LETTER, 42, 42, 40, 46);
-        PdfWriter.getInstance(doc, os);
+        Document doc = new Document(PageSize.LETTER, MARGEN, MARGEN, MARGEN, MARGEN);
+        PdfWriter writer = PdfWriter.getInstance(doc, os);
         doc.open();
+        PdfContentByte cb = writer.getDirectContent();
 
-        Font fMarca = new Font(FontFamily.HELVETICA, 15, Font.BOLD, TINTA);
-        Font fDoc = new Font(FontFamily.HELVETICA, 11, Font.BOLD, TINTA_SUAVE);
-        Font fSeccion = new Font(FontFamily.HELVETICA, 9, Font.BOLD, TINTA_SUAVE);
-        Font fEtiqueta = new Font(FontFamily.HELVETICA, 9, Font.BOLD, TINTA);
-        Font fNorm = new Font(FontFamily.HELVETICA, 9.5f, Font.NORMAL, TINTA);
-        Font fSmall = new Font(FontFamily.HELVETICA, 8, Font.NORMAL, TINTA_SUAVE);
-        Font fTotal = new Font(FontFamily.HELVETICA, 12, Font.BOLD, TINTA);
-        Font fAnulada = new Font(FontFamily.HELVETICA, 13, Font.BOLD, ROJO);
+        Datos datos = new Datos(ins, entidad, anulada, detalle, total, responsables, codigo, emitida);
 
-        // ---- Cabecera: quien emite a la izquierda, identificacion del documento a la derecha
-        String edicionNombre = ins.getEdicion() != null ? ins.getEdicion().getNombre() : "FEXPO UAP";
-        PdfPTable cab = new PdfPTable(new float[] { 60, 40 });
-        cab.setWidthPercentage(100);
-
-        Paragraph marca = new Paragraph();
-        marca.add(new Phrase("Universidad Adventista de Bolivia\n", fMarca));
-        marca.add(new Phrase(edicionNombre + "\n", fDoc));
-        marca.add(new Phrase("NOTA DE VENTA · documento interno", fSmall));
-        cab.addCell(sinBorde(marca));
-
-        PdfPTable ident = new PdfPTable(new float[] { 45, 55 });
-        ident.setWidthPercentage(100);
-        identFila(ident, "N.º", String.valueOf(ins.getId()), fSmall, fEtiqueta);
-        identFila(ident, "Emitida", emitida.format(F_HORA), fSmall, fNorm);
-        identFila(ident, "Código", codigo != null ? codigo : "—", fSmall, fEtiqueta);
-        PdfPCell cIdent = new PdfPCell(ident);
-        cIdent.setBorder(Rectangle.NO_BORDER);
-        cab.addCell(cIdent);
-        doc.add(cab);
-
-        doc.add(linea());
-
-        if (anulada) {
-            Paragraph aviso = new Paragraph(
-                    "VENTA ANULADA" + (vacio(ins.getMotivoCancelacion()) ? "" : " — " + ins.getMotivoCancelacion()),
-                    fAnulada);
-            aviso.setSpacingBefore(6f);
-            aviso.setSpacingAfter(2f);
-            doc.add(aviso);
-            doc.add(new Paragraph("Esta nota ya no ampara la compra de las casetas detalladas.", fSmall));
+        // Se busca la escala mas grande con la que la mitad ENTERA cabe en su hueco.
+        //
+        // Antes se escribia de arriba abajo sin medir nada, y cuando la venta tenia varios
+        // responsables o varias casetas el contenido se pasaba de largo: invadia la otra mitad y
+        // el final —el total, el QR— se salia de la hoja. Con una hoja partida en dos para
+        // recortar, no hay "pagina siguiente" a la que se pueda ir lo que sobra.
+        //
+        // Medir y encoger es lo unico que garantiza que quepa con CUALQUIER venta. Si ni al
+        // minimo entra, las casetas pasan a listarse en una linea corrida en vez de una por fila.
+        PdfPTable cuerpo = null;
+        for (float esc : ESCALAS) {
+            PdfPTable intento = construirMitad(datos, esc, false);
+            if (intento.getTotalHeight() <= ALTO_MITAD - COLCHON) { cuerpo = intento; break; }
         }
-
-        // ---- Entidad
-        doc.add(seccion("DATOS DE LA ENTIDAD", fSeccion));
-        PdfPTable tEnt = new PdfPTable(new float[] { 26, 74 });
-        tEnt.setWidthPercentage(100);
-        dato(tEnt, "Entidad", entidad != null ? entidad.getNombre() : null, fEtiqueta, fNorm);
-        dato(tEnt, "NIT", entidad != null ? entidad.getNit() : null, fEtiqueta, fNorm);
-        // El " - " solo aparece si hay las dos partes: antes se concatenaba primero y una
-        // entidad sin representante imprimia "null - null".
-        dato(tEnt, "Representante legal",
-                unir(" · ", entidad != null ? entidad.getRepresentanteLegal() : null,
-                        entidad != null ? entidad.getCiRepresentante() : null),
-                fEtiqueta, fNorm);
-        dato(tEnt, "Tipo",
-                entidad != null && entidad.getTipoEntidad() != null ? entidad.getTipoEntidad().getNombre() : null,
-                fEtiqueta, fNorm);
-        dato(tEnt, "Rubro", entidad != null ? entidad.getObjeto() : null, fEtiqueta, fNorm);
-        dato(tEnt, "Vigencia",
-                unir(" a ", formatFecha(ins.getFechaInicio()), formatFecha(ins.getFechaFin())),
-                fEtiqueta, fNorm);
-        doc.add(tEnt);
-
-        // ---- Responsables
-        if (!responsables.isEmpty()) {
-            doc.add(seccion("RESPONSABLES", fSeccion));
-            PdfPTable tResp = new PdfPTable(new float[] { 24, 30, 16, 30 });
-            tResp.setWidthPercentage(100);
-            encabezado(tResp, fSeccion, "Nombre", "Apellidos", "C.I.", "Contacto");
-            for (Responsable r : responsables) {
-                Persona p = r.getPersona();
-                if (p == null) continue;
-                String rol = r.isEsTitular() ? " (titular)" : "";
-                celda(tResp, nvl(p.getNombre()) + rol, fNorm);
-                celda(tResp, unir(" ", p.getPaterno(), p.getMaterno()), fNorm);
-                celda(tResp, nvl(p.getCi()), fNorm);
-                celda(tResp, unir(" · ", p.getCelular(), p.getCorreo()), fNorm);
+        if (cuerpo == null) {
+            for (float esc : ESCALAS) {
+                PdfPTable intento = construirMitad(datos, esc, true);
+                if (intento.getTotalHeight() <= ALTO_MITAD - COLCHON) { cuerpo = intento; break; }
             }
-            doc.add(tResp);
+        }
+        if (cuerpo == null) cuerpo = construirMitad(datos, ESCALAS[ESCALAS.length - 1], true);
+
+        // Las dos mitades son identicas: se construye una vez y se escribe dos veces.
+        for (int mitad = 0; mitad < 2; mitad++) {
+            // La copia de abajo arranca en su tope y crece hacia el margen inferior; la de
+            // arriba, desde el borde superior. En medio queda el hueco del corte.
+            float topeSuperior = mitad == 0 ? MARGEN + ALTO_MITAD : ALTO_PAGINA - MARGEN;
+            cuerpo.writeSelectedRows(0, -1, MARGEN, topeSuperior, cb);
         }
 
-        // ---- Detalle
-        doc.add(seccion("CASETAS", fSeccion));
-        PdfPTable tDet = new PdfPTable(new float[] { 18, 18, 42, 22 });
-        tDet.setWidthPercentage(100);
-        encabezado(tDet, fSeccion, "Código", "Tamaño", "Categoría", "Costo (Bs)");
-        for (InscripcionPuesto ip : detalle) {
-            celda(tDet, ip.getPuesto().getCodigo(), fNorm);
-            celda(tDet, ip.getPuesto().getTamano(), fNorm);
-            celda(tDet, ip.getPuesto().getCategoria() != null
-                    ? ip.getPuesto().getCategoria().getNombre() : null, fNorm);
-            celdaDerecha(tDet, money(ip.getCosto()), fNorm);
-        }
-        PdfPCell lblTotal = celdaSuelta("TOTAL Bs", fTotal);
-        lblTotal.setColspan(3);
-        lblTotal.setHorizontalAlignment(Element.ALIGN_RIGHT);
-        lblTotal.setBackgroundColor(GRIS_FONDO);
-        tDet.addCell(lblTotal);
-        PdfPCell valTotal = celdaSuelta(money(total), fTotal);
-        valTotal.setHorizontalAlignment(Element.ALIGN_RIGHT);
-        valTotal.setBackgroundColor(GRIS_FONDO);
-        tDet.addCell(valTotal);
-        doc.add(tDet);
-
-        // ---- Pago: es lo que respalda el documento y no se imprimia
-        doc.add(seccion("PAGO", fSeccion));
-        PdfPTable tPago = new PdfPTable(new float[] { 26, 74 });
-        tPago.setWidthPercentage(100);
-        dato(tPago, "Forma", ins.isPagoContado() ? "Contado" : "Depósito / transferencia", fEtiqueta, fNorm);
-        if (!ins.isPagoContado()) {
-            dato(tPago, "Banco", ins.getEntidadBancaria(), fEtiqueta, fNorm);
-            dato(tPago, "N.º comprobante",
-                    ins.getNumComprobante() != null ? String.valueOf(ins.getNumComprobante()) : null,
-                    fEtiqueta, fNorm);
-        }
-        dato(tPago, "Vendedor", quienEmite(ins), fEtiqueta, fNorm);
-        doc.add(tPago);
-
-        // ---- Sello verificable
-        doc.add(linea());
-        PdfPTable sello = new PdfPTable(new float[] { 72, 28 });
-        sello.setWidthPercentage(100);
-
-        Paragraph texto = new Paragraph();
-        texto.add(new Phrase("Verificación\n", fEtiqueta));
-        texto.add(new Phrase(
-                "Este documento es una nota de venta interna, no una factura. Su validez se comprueba "
-                        + "con el código impreso: escanee el código QR o consúltelo en el sistema. "
-                        + "Una copia sin código, o con un código que el sistema no reconozca, no respalda ninguna venta.\n\n",
-                fSmall));
-        texto.add(new Phrase("Código: " + (codigo != null ? codigo : "—") + "\n", fEtiqueta));
-        texto.add(new Phrase("Emitida: " + emitida.format(F_HORA), fSmall));
-        sello.addCell(sinBorde(texto));
-
-        if (codigo != null) {
-            String contenidoQr = vacio(urlVerificacion) ? codigo : urlVerificacion + codigo;
-            BarcodeQRCode qr = new BarcodeQRCode(contenidoQr, 200, 200, null);
-            Image qrImg = qr.getImage();
-            qrImg.scaleAbsolute(78, 78);
-            PdfPCell cQr = new PdfPCell(qrImg, false);
-            cQr.setBorder(Rectangle.NO_BORDER);
-            cQr.setHorizontalAlignment(Element.ALIGN_RIGHT);
-            sello.addCell(cQr);
-        } else {
-            sello.addCell(sinBorde(new Paragraph("")));
-        }
-        doc.add(sello);
-
+        dibujarLineaCorte(cb);
         doc.close();
     }
 
-    /** Quien vendio. Se degrada con cuidado: nombre completo, si no el codigo, si no el usuario. */
-    private String quienEmite(Inscripcion ins) {
-        Usuario usuario = ins.getRegistroIdUsuario() != null
-                ? usuarioService.findById(ins.getRegistroIdUsuario())
-                : null;
-        Persona persona = usuario != null ? usuario.getPersona() : null;
-        if (persona != null) {
-            String nombre = unir(" ", persona.getNombre(), persona.getPaterno(), persona.getMaterno());
-            if (!vacio(nombre)) return nombre;
+    /** Todo lo que necesita una mitad, junto, para no arrastrar doce parametros. */
+    private record Datos(Inscripcion ins, Entidad entidad, boolean anulada,
+                         List<InscripcionPuesto> detalle, BigDecimal total,
+                         List<Responsable> responsables, String codigo, LocalDateTime emitida) {
+    }
+
+    /**
+     * Una mitad completa como UNA tabla, para poder medirla antes de escribirla.
+     *
+     * @param esc      factor de escala de fuentes y separaciones (1 = tamaño base)
+     * @param compacto las casetas en una linea corrida en vez de una fila cada una
+     */
+    private PdfPTable construirMitad(Datos d, float esc, boolean compacto) throws DocumentException {
+        Font fMarca    = fuente(10.5f, esc, Font.BOLD, TINTA);
+        Font fEdicion  = fuente(8f,    esc, Font.BOLD, TINTA_SUAVE);
+        Font fSeccion  = fuente(6.2f,  esc, Font.BOLD, TINTA_SUAVE);
+        Font fEtiqueta = fuente(6.4f,  esc, Font.BOLD, TINTA);
+        Font fNorm     = fuente(7f,    esc, Font.NORMAL, TINTA);
+        Font fSmall    = fuente(5.8f,  esc, Font.NORMAL, TINTA_SUAVE);
+        Font fTotal    = fuente(9f,    esc, Font.BOLD, TINTA);
+        Font fAnulada  = fuente(9f,    esc, Font.BOLD, ROJO);
+        float pad = 2.6f * esc;
+        float hueco = 4f * esc;
+
+        PdfPTable hoja = new PdfPTable(1);
+        hoja.setTotalWidth(ANCHO_UTIL);
+        hoja.setLockedWidth(true);
+
+        // ---- Cabecera: quien emite a la izquierda, identificacion a la derecha ----
+        PdfPTable cab = tabla(new float[] { 62, 38 });
+        Paragraph izq = new Paragraph();
+        izq.add(new Phrase("Universidad Adventista de Bolivia\n", fMarca));
+        izq.add(new Phrase(nvl(d.ins().getEdicion() != null ? d.ins().getEdicion().getNombre() : "FEXPO UAP") + "\n", fEdicion));
+        izq.add(new Phrase("NOTA DE VENTA · documento interno", fSmall));
+        izq.setLeading(fMarca.getSize() * 1.15f);
+        cab.addCell(sinBorde(izq));
+
+        Paragraph der = new Paragraph();
+        der.add(new Phrase("N.º " + d.ins().getId() + "\n", fEtiqueta));
+        der.add(new Phrase("Código " + (d.codigo() != null ? d.codigo() : "—") + "\n", fEtiqueta));
+        der.add(new Phrase(d.emitida().format(F_HORA), fSmall));
+        der.setLeading(fEtiqueta.getSize() * 1.3f);
+        der.setAlignment(Element.ALIGN_RIGHT);
+        cab.addCell(sinBorde(der));
+        hoja.addCell(envolver(cab, 0, hueco));
+
+        hoja.addCell(separador(hueco));
+
+        if (d.anulada()) {
+            Paragraph av = new Paragraph("VENTA ANULADA"
+                    + (vacio(d.ins().getMotivoCancelacion()) ? "" : " — " + d.ins().getMotivoCancelacion()), fAnulada);
+            hoja.addCell(envolver(av, pad, hueco));
         }
-        Administrativo adm = persona != null
-                ? administrativoService.findByPersonaId(persona.getId()).orElse(null)
-                : null;
-        if (adm != null && adm.getCodigoFuncionario() != null) return adm.getCodigoFuncionario();
-        return usuario != null && usuario.getUsername() != null ? usuario.getUsername() : "—";
+
+        // ---- Entidad: rejilla de dos pares etiqueta/valor por fila, la mitad de alto ----
+        hoja.addCell(rotulo("ENTIDAD", fSeccion, pad));
+        PdfPTable ent = tabla(new float[] { 15, 35, 15, 35 });
+        Entidad e = d.entidad();
+        par(ent, "Entidad", e != null ? e.getNombre() : null, fEtiqueta, fNorm, pad);
+        par(ent, "NIT", e != null ? e.getNit() : null, fEtiqueta, fNorm, pad);
+        par(ent, "Rep. legal", unir(" · ", e != null ? e.getRepresentanteLegal() : null,
+                e != null ? e.getCiRepresentante() : null), fEtiqueta, fNorm, pad);
+        par(ent, "Tipo", e != null && e.getTipoEntidad() != null ? e.getTipoEntidad().getNombre() : null,
+                fEtiqueta, fNorm, pad);
+        par(ent, "Rubro", e != null ? e.getObjeto() : null, fEtiqueta, fNorm, pad);
+        par(ent, "Vigencia", unir(" a ", formatFecha(d.ins().getFechaInicio()), formatFecha(d.ins().getFechaFin())),
+                fEtiqueta, fNorm, pad);
+        hoja.addCell(envolver(ent, 0, hueco));
+
+        // ---- Responsables: nombre completo en una sola columna ----
+        if (!d.responsables().isEmpty()) {
+            hoja.addCell(rotulo("RESPONSABLES", fSeccion, pad));
+            PdfPTable resp = tabla(new float[] { 52, 20, 28 });
+            encabezado(resp, fSeccion, pad, -1, "Nombre", "C.I.", "Contacto");
+            for (Responsable r : d.responsables()) {
+                Persona p = r.getPersona();
+                if (p == null) continue;
+                celda(resp, unir(" ", p.getNombre(), p.getPaterno(), p.getMaterno())
+                        + (r.isEsTitular() ? " (titular)" : ""), fNorm, pad);
+                celda(resp, p.getCi(), fNorm, pad);
+                celda(resp, unir(" · ", p.getCelular(), p.getCorreo()), fNorm, pad);
+            }
+            hoja.addCell(envolver(resp, 0, hueco));
+        }
+
+        // ---- Casetas ----
+        hoja.addCell(rotulo("CASETAS", fSeccion, pad));
+        if (compacto) {
+            // Una linea corrida: cabe una venta de muchas casetas sin comerse la mitad entera.
+            String lista = d.detalle().stream()
+                    .map(ip -> nvl(ip.getPuesto().getCodigo())
+                            + (ip.getPuesto().getCategoria() != null ? " " + ip.getPuesto().getCategoria().getNombre() : "")
+                            + " (" + money(ip.getCosto()) + ")")
+                    .reduce((a, b) -> a + " · " + b).orElse("—");
+            PdfPTable comp = tabla(new float[] { 78, 22 });
+            PdfPCell cl = new PdfPCell(new Phrase(lista, fNorm));
+            cl.setBorder(Rectangle.BOTTOM);
+            cl.setBorderColorBottom(GRIS_LINEA);
+            cl.setPadding(pad);
+            comp.addCell(cl);
+            PdfPCell ct = new PdfPCell(new Phrase("TOTAL Bs " + money(d.total()), fTotal));
+            ct.setHorizontalAlignment(Element.ALIGN_RIGHT);
+            ct.setBackgroundColor(GRIS_FONDO);
+            ct.setBorder(Rectangle.BOTTOM);
+            ct.setBorderColorBottom(GRIS_LINEA);
+            ct.setPadding(pad);
+            comp.addCell(ct);
+            hoja.addCell(envolver(comp, 0, hueco));
+        } else {
+            PdfPTable det = tabla(new float[] { 16, 16, 44, 24 });
+            // El rotulo del importe va a la derecha, sobre sus cifras: alineado a la izquierda
+            // quedaba a media tabla y parecia pertenecer a la columna de al lado.
+            encabezado(det, fSeccion, pad, Element.ALIGN_RIGHT, "Código", "Tamaño", "Categoría", "Costo (Bs)");
+            for (InscripcionPuesto ip : d.detalle()) {
+                celda(det, ip.getPuesto().getCodigo(), fNorm, pad);
+                celda(det, ip.getPuesto().getTamano(), fNorm, pad);
+                celda(det, ip.getPuesto().getCategoria() != null ? ip.getPuesto().getCategoria().getNombre() : null, fNorm, pad);
+                celdaDerecha(det, money(ip.getCosto()), fNorm, pad);
+            }
+            PdfPCell lbl = celdaSuelta("TOTAL Bs", fTotal, pad);
+            lbl.setColspan(3);
+            lbl.setHorizontalAlignment(Element.ALIGN_RIGHT);
+            lbl.setBackgroundColor(GRIS_FONDO);
+            det.addCell(lbl);
+            PdfPCell val = celdaSuelta(money(d.total()), fTotal, pad);
+            val.setHorizontalAlignment(Element.ALIGN_RIGHT);
+            val.setBackgroundColor(GRIS_FONDO);
+            det.addCell(val);
+            hoja.addCell(envolver(det, 0, hueco));
+        }
+
+        // ---- Pago y vendedor, en una sola fila de cuatro columnas ----
+        hoja.addCell(rotulo("PAGO", fSeccion, pad));
+        PdfPTable pago = tabla(new float[] { 15, 35, 15, 35 });
+        par(pago, "Forma", d.ins().isPagoContado() ? "Contado" : "Depósito / transferencia", fEtiqueta, fNorm, pad);
+        par(pago, "Vendedor", quienEmite(d.ins()), fEtiqueta, fNorm, pad);
+        if (!d.ins().isPagoContado()) {
+            par(pago, "Banco", d.ins().getEntidadBancaria(), fEtiqueta, fNorm, pad);
+            par(pago, "N.º comprob.", d.ins().getNumComprobante() != null
+                    ? String.valueOf(d.ins().getNumComprobante()) : null, fEtiqueta, fNorm, pad);
+        }
+        hoja.addCell(envolver(pago, 0, hueco));
+
+        // ---- Pie: verificacion + QR, y el espacio de firma ----
+        hoja.addCell(separador(hueco * 0.5f));
+        PdfPTable pie = tabla(new float[] { 58, 20, 22 });
+
+        Paragraph verif = new Paragraph();
+        verif.add(new Phrase("Verificación · ", fEtiqueta));
+        verif.add(new Phrase("Nota de venta interna, no es factura. Su validez se comprueba con el "
+                + "código impreso: escanee el QR o consúltelo en el sistema. Una copia sin código, "
+                + "o con uno que el sistema no reconozca, no respalda ninguna venta.", fSmall));
+        verif.setLeading(fSmall.getSize() * 1.25f);
+        pie.addCell(sinBorde(verif));
+
+        Paragraph firma = new Paragraph();
+        firma.add(new Phrase("\n\n_______________________\n", fSmall));
+        firma.add(new Phrase("Firma y sello", fSmall));
+        firma.setAlignment(Element.ALIGN_CENTER);
+        firma.setLeading(fSmall.getSize() * 1.2f);
+        pie.addCell(sinBorde(firma));
+
+        if (d.codigo() != null) {
+            String contenidoQr = vacio(urlVerificacion) ? d.codigo() : urlVerificacion + d.codigo();
+            BarcodeQRCode qr = new BarcodeQRCode(contenidoQr, 200, 200, null);
+            Image img = qr.getImage();
+            float lado = 54f * esc;
+            img.scaleAbsolute(lado, lado);
+            PdfPCell cq = new PdfPCell(img, false);
+            cq.setBorder(Rectangle.NO_BORDER);
+            cq.setHorizontalAlignment(Element.ALIGN_RIGHT);
+            pie.addCell(cq);
+        } else {
+            pie.addCell(sinBorde(new Paragraph("")));
+        }
+        hoja.addCell(envolver(pie, 0, 0));
+
+        return hoja;
     }
 
-    // ===== Helpers de maquetacion =====
+    /** Escalas que se prueban, de la mas legible a la mas apretada. */
+    private static final float[] ESCALAS = { 1f, 0.94f, 0.88f, 0.82f, 0.76f, 0.7f, 0.64f };
 
-    private Paragraph seccion(String txt, Font f) {
-        Paragraph p = new Paragraph(txt, f);
-        p.setSpacingBefore(14f);
-        p.setSpacingAfter(5f);
-        return p;
+    private static Font fuente(float base, float esc, int estilo, BaseColor color) {
+        return new Font(FontFamily.HELVETICA, base * esc, estilo, color);
     }
 
-    private PdfPTable linea() {
-        PdfPTable t = new PdfPTable(1);
+    private static PdfPTable tabla(float[] anchos) {
+        PdfPTable t = new PdfPTable(anchos);
         t.setWidthPercentage(100);
-        PdfPCell c = new PdfPCell();
-        c.setBorder(Rectangle.BOTTOM);
-        c.setBorderColorBottom(GRIS_LINEA);
-        c.setFixedHeight(8f);
-        t.addCell(c);
         return t;
     }
 
-    private PdfPCell sinBorde(Paragraph p) {
-        PdfPCell c = new PdfPCell(p);
+    /** Mete un elemento en una celda sin bordes de la tabla exterior, con su separacion abajo. */
+    private static PdfPCell envolver(Element contenido, float pad, float huecoAbajo) {
+        PdfPCell c = new PdfPCell();
         c.setBorder(Rectangle.NO_BORDER);
+        c.setPadding(pad);
+        c.setPaddingBottom(pad + huecoAbajo);
+        c.addElement(contenido);
         return c;
     }
 
-    private void identFila(PdfPTable t, String etiqueta, String valor, Font fEt, Font fVal) {
-        PdfPCell e = new PdfPCell(new Phrase(etiqueta, fEt));
-        e.setBorder(Rectangle.NO_BORDER);
-        e.setPaddingBottom(2f);
-        t.addCell(e);
-        PdfPCell v = new PdfPCell(new Phrase(nvl(valor), fVal));
-        v.setBorder(Rectangle.NO_BORDER);
-        v.setPaddingBottom(2f);
-        t.addCell(v);
+    private static PdfPCell separador(float hueco) {
+        PdfPCell c = new PdfPCell();
+        c.setBorder(Rectangle.BOTTOM);
+        c.setBorderColorBottom(GRIS_LINEA);
+        c.setFixedHeight(Math.max(1f, hueco));
+        return c;
     }
 
-    /** Fila etiqueta/valor. Un valor vacio se imprime como "—" y no como un hueco. */
-    private void dato(PdfPTable t, String etiqueta, String valor, Font fEt, Font fVal) {
+    private static PdfPCell rotulo(String txt, Font f, float pad) {
+        PdfPCell c = new PdfPCell(new Phrase(txt, f));
+        c.setBorder(Rectangle.NO_BORDER);
+        c.setPaddingTop(pad);
+        c.setPaddingBottom(pad * 0.5f);
+        return c;
+    }
+
+    /** Una pareja etiqueta/valor dentro de una rejilla de cuatro columnas. */
+    private static void par(PdfPTable t, String etiqueta, String valor, Font fEt, Font fVal, float pad) {
         PdfPCell e = new PdfPCell(new Phrase(etiqueta, fEt));
         e.setBorder(Rectangle.BOTTOM);
         e.setBorderColorBottom(GRIS_LINEA);
-        e.setPadding(5f);
+        e.setPadding(pad);
         t.addCell(e);
         PdfPCell v = new PdfPCell(new Phrase(vacio(valor) ? "—" : valor, fVal));
         v.setBorder(Rectangle.BOTTOM);
         v.setBorderColorBottom(GRIS_LINEA);
-        v.setPadding(5f);
+        v.setPadding(pad);
         t.addCell(v);
     }
 
-    private void encabezado(PdfPTable t, Font f, String... cols) {
-        for (String s : cols) {
-            PdfPCell h = new PdfPCell(new Phrase(s, f));
+    /** Línea de corte punteada centrada entre las dos mitades. */
+    private void dibujarLineaCorte(PdfContentByte cb) {
+        float yCorte = MARGEN + ALTO_MITAD + ALTO_CORTE / 2f; // centrado en el hueco
+        cb.saveState();
+        cb.setLineWidth(0.8f);
+        cb.setLineDash(4f, 4f); // 4pt trazo, 4pt espacio
+        cb.setColorStroke(GRIS_CORTE);
+        cb.moveTo(MARGEN + 20, yCorte);
+        cb.lineTo(ANCHO_PAGINA - MARGEN - 20, yCorte);
+        cb.stroke();
+        // Texto "CORTAR AQUÍ" - usar font base directamente
+        try {
+            com.itextpdf.text.pdf.BaseFont bf = com.itextpdf.text.pdf.BaseFont.createFont(
+                    com.itextpdf.text.pdf.BaseFont.HELVETICA,
+                    com.itextpdf.text.pdf.BaseFont.CP1252,
+                    com.itextpdf.text.pdf.BaseFont.NOT_EMBEDDED);
+            cb.beginText();
+            cb.setFontAndSize(bf, 7);
+            cb.setColorFill(GRIS_CORTE);
+            cb.showTextAligned(Element.ALIGN_CENTER, "CORTAR AQUI", ANCHO_PAGINA / 2f, yCorte - 10, 0);
+            cb.endText();
+        } catch (com.itextpdf.text.DocumentException | java.io.IOException ignored) {}
+        cb.restoreState();
+    }
+
+    // ===== Helpers de celdas =====
+
+    /**
+     * Fila de encabezado. {@code alineaUltima} alinea la ULTIMA columna (o -1 para dejarla como
+     * las demas): el rotulo del importe tiene que caer sobre sus cifras, no a media tabla.
+     */
+    private static void encabezado(PdfPTable t, Font f, float pad, int alineaUltima, String... cols) {
+        for (int i = 0; i < cols.length; i++) {
+            PdfPCell h = new PdfPCell(new Phrase(cols[i], f));
             h.setBackgroundColor(GRIS_FONDO);
             h.setBorder(Rectangle.BOTTOM);
             h.setBorderColorBottom(GRIS_LINEA);
-            h.setPadding(5f);
+            h.setPadding(pad);
+            if (alineaUltima >= 0 && i == cols.length - 1) h.setHorizontalAlignment(alineaUltima);
             t.addCell(h);
         }
     }
 
-    private void celda(PdfPTable t, String txt, Font f) {
-        t.addCell(celdaSuelta(vacio(txt) ? "—" : txt, f));
+    private static void celda(PdfPTable t, String txt, Font f, float pad) {
+        t.addCell(celdaSuelta(vacio(txt) ? "—" : txt, f, pad));
     }
 
-    private void celdaDerecha(PdfPTable t, String txt, Font f) {
-        PdfPCell c = celdaSuelta(txt, f);
+    private static void celdaDerecha(PdfPTable t, String txt, Font f, float pad) {
+        PdfPCell c = celdaSuelta(txt, f, pad);
         c.setHorizontalAlignment(Element.ALIGN_RIGHT);
         t.addCell(c);
     }
 
-    private PdfPCell celdaSuelta(String txt, Font f) {
+    private static PdfPCell celdaSuelta(String txt, Font f, float pad) {
         PdfPCell c = new PdfPCell(new Phrase(nvl(txt), f));
         c.setBorder(Rectangle.BOTTOM);
         c.setBorderColorBottom(GRIS_LINEA);
-        c.setPadding(5f);
+        c.setPadding(pad);
+        return c;
+    }
+
+    private static PdfPCell sinBorde(Paragraph p) {
+        PdfPCell c = new PdfPCell(p);
+        c.setBorder(Rectangle.NO_BORDER);
         return c;
     }
 
     // ===== Helpers de datos =====
 
     private static boolean vacio(String s) { return s == null || s.trim().isEmpty(); }
-
     private static String nvl(Object o) { return o == null ? "" : String.valueOf(o); }
 
-    /** Une solo las partes que existen: evita los "null - null" y los separadores sueltos. */
     private static String unir(String sep, String... partes) {
         return java.util.Arrays.stream(partes)
                 .filter(s -> s != null && !s.trim().isEmpty())
@@ -408,5 +495,22 @@ public class ReciboPdfService {
 
     private static String formatFecha(Date d) {
         return d == null ? "" : new SimpleDateFormat("dd/MM/yyyy").format(d);
+    }
+
+    /** Quien vendió. Degrada con cuidado: nombre completo → código funcionario → username. */
+    private String quienEmite(Inscripcion ins) {
+        Usuario usuario = ins.getRegistroIdUsuario() != null
+                ? usuarioService.findById(ins.getRegistroIdUsuario())
+                : null;
+        Persona persona = usuario != null ? usuario.getPersona() : null;
+        if (persona != null) {
+            String nombre = unir(" ", persona.getNombre(), persona.getPaterno(), persona.getMaterno());
+            if (!vacio(nombre)) return nombre;
+        }
+        Administrativo adm = persona != null
+                ? administrativoService.findByPersonaId(persona.getId()).orElse(null)
+                : null;
+        if (adm != null && adm.getCodigoFuncionario() != null) return adm.getCodigoFuncionario();
+        return usuario != null && usuario.getUsername() != null ? usuario.getUsername() : "—";
     }
 }

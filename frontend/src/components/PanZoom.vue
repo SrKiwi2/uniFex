@@ -20,6 +20,15 @@ const props = defineProps({
   // inferior; sin esto sobra un hueco muerto abajo, porque un vh fijo no sabe cuanto miden
   // la cabecera, la leyenda ni la barra.
   llenar: { type: Boolean, default: false },
+  // Ancho del contenido renderizado (px, ya con el zoom) a partir del cual se enciende la
+  // clase `detalle` en el mundo. Sirve para que el contenido muestre rotulos solo cuando
+  // se ve lo bastante grande. 0 = nunca. Ver `actualizarDetalle`.
+  umbralDetalle: { type: Number, default: 0 },
+  // Techo de acercamiento expresado como ancho máximo del contenido renderizado (px), en vez
+  // de como factor de aumento. Un factor fijo no sirve: 10x en un celular de 390 px deja el
+  // plano en 3900 px y en un monitor de 1400 px lo deja en 14000, así que el mismo número da
+  // casetas de 19 px o de 70. Solo puede SUBIR el techo de `max`, nunca bajarlo. 0 = sin usar.
+  maxAncho: { type: Number, default: 0 },
 });
 
 const viewport = ref(null);
@@ -29,14 +38,98 @@ const world = ref(null);
 // 500+ casetas del mapa — solo compone la capa transformada.
 const t = { x: 0, y: 0, scale: 1 };
 
-function pintar() {
+/*
+ * ---- por que el zoom se veia borroso ----
+ *
+ * `will-change: transform` permanente le dice a Chromium "el transform de esta capa va a
+ * seguir cambiando", y Chromium responde CONGELANDO la escala a la que la rasteriza: a 20
+ * aumentos seguia mostrando la textura dibujada a 1x, estirada. Los pines y sus numeros son
+ * DOM —deberian salir nitidos a cualquier zoom— y salian emborronados junto con el plano.
+ *
+ * La cura no es quitarlo: sin el, cada fotograma del arrastre repinta 500+ casetas. Se pone
+ * al empezar a mover y se quita poco despues de soltar. Durante el gesto se gana la fluidez;
+ * en reposo —que es cuando de verdad se mira— el navegador vuelve a rasterizar a la escala
+ * actual y todo queda nitido.
+ */
+const MS_NITIDEZ = 220;
+let capaPromovida = false;
+let temporizadorNitidez = null;
+
+function promoverCapa() {
   const el = world.value;
-  if (el) el.style.transform = `translate(${t.x}px, ${t.y}px) scale(${t.scale})`;
+  if (!el) return;
+  if (!capaPromovida) {
+    el.style.willChange = 'transform';
+    capaPromovida = true;
+  }
+  clearTimeout(temporizadorNitidez);
+  temporizadorNitidez = setTimeout(bajarCapa, MS_NITIDEZ);
 }
 
-const clamp = (v) => Math.min(props.max, Math.max(props.min, v));
+function bajarCapa() {
+  capaPromovida = false;
+  if (world.value) world.value.style.willChange = 'auto';
+}
+
+function pintar() {
+  const el = world.value;
+  if (!el) return;
+  el.style.transform = `translate(${t.x}px, ${t.y}px) scale(${t.scale})`;
+  promoverCapa();
+}
+
+// Ancho del viewport con el que se calculo el transform actual. Al redimensionar, el mundo
+// (width:100%) cambia de tamaño y el transform, que esta en pixeles, dejaria de apuntar al
+// mismo sitio del plano.
+let anchoPrevio = 0;
+
+/** Ancho del visor con el que se calcula todo. `anchoPrevio` lo mantiene el ResizeObserver. */
+function anchoVisor() {
+  return anchoPrevio || (viewport.value ? vpRect().width : 0);
+}
+
+/**
+ * Publica el ancho del mundo (`width: 100%` del visor) como variable CSS heredable.
+ *
+ * El contenido la usa para medir cosas en fracciones de si mismo — el numero dentro de una
+ * caseta, el grosor de su aro — sin unidades de container query, que exigen un WebView
+ * moderno y fallaban en silencio. Es un ancho de DISEÑO, no de pantalla: no cambia con el
+ * zoom, porque del zoom ya se encarga el transform.
+ *
+ * Va SIN UNIDAD a proposito. CSS no sabe dividir una longitud entre otra para sacar un
+ * numero, y el rotulo necesita justamente eso: un factor de escala. Con un numero pelado,
+ * `calc(var(--mundo) * 0.005)` da los pixeles del pin y `calc(... / 100)` da el factor.
+ */
+function publicarAncho(ancho) {
+  if (world.value && ancho) world.value.style.setProperty('--mundo', String(Math.round(ancho)));
+}
+
+/** El techo real de zoom: el mayor entre el factor `max` y el que pide `maxAncho`. */
+function escalaMaxima() {
+  const w = props.maxAncho ? anchoVisor() : 0;
+  return w ? Math.max(props.max, props.maxAncho / w) : props.max;
+}
+
+const clamp = (v) => Math.min(escalaMaxima(), Math.max(props.min, v));
 
 function vpRect() { return viewport.value.getBoundingClientRect(); }
+
+/**
+ * Enciende o apaga la clase `detalle` en el mundo segun lo grande que se vea el contenido.
+ *
+ * Es una CLASE en el DOM y no un dato reactivo, por lo mismo que el transform: el contenido
+ * son 500+ casetas y volverlas a renderizar en cada rueda del raton se nota. Ademas solo se
+ * escribe cuando el valor CRUZA el umbral, no en cada fotograma; y no se llama al arrastrar,
+ * porque un desplazamiento no cambia la escala.
+ */
+let detalle = false;
+function actualizarDetalle(anchoViewport) {
+  if (!props.umbralDetalle) return;
+  const visible = anchoViewport * t.scale >= props.umbralDetalle;
+  if (visible === detalle) return;
+  detalle = visible;
+  world.value?.classList.toggle('detalle', visible);
+}
 
 /** Centra el punto normalizado (nx,ny) de la imagen a la escala dada. */
 function focusOn(nx, ny, scale) {
@@ -46,6 +139,7 @@ function focusOn(nx, ny, scale) {
   t.scale = clamp(scale);
   t.x = r.width / 2 - nx * worldW * t.scale;
   t.y = r.height / 2 - ny * worldH * t.scale;
+  actualizarDetalle(r.width);
   pintar();
 }
 
@@ -76,6 +170,7 @@ function zoomAt(cx, cy, factor) {
   t.scale = ns;
   t.x = px - wx * ns;
   t.y = py - wy * ns;
+  actualizarDetalle(r.width);
   pintar();
 }
 
@@ -125,10 +220,6 @@ function onUp(e) {
 }
 
 let ro;
-// Ancho del viewport con el que se calculo el transform actual. Al redimensionar, el
-// mundo (width:100%) cambia de tamaño y el transform, que esta en pixeles, dejaria de
-// apuntar al mismo sitio del plano.
-let anchoPrevio = 0;
 
 /**
  * Reacciona a un cambio de tamaño CONSERVANDO lo que el usuario esta mirando.
@@ -149,16 +240,21 @@ function alRedimensionar() {
   const nx = (r.width / 2 - t.x) / (mundoAncho * t.scale);
   const ny = (r.height / 2 - t.y) / (mundoAlto * t.scale);
   anchoPrevio = r.width;
+  publicarAncho(anchoPrevio);
   focusOn(nx, ny, t.scale);
 }
 
 onMounted(() => {
-  reset();
   anchoPrevio = vpRect().width;
+  publicarAncho(anchoPrevio);
+  reset();
   ro = new ResizeObserver(alRedimensionar);
   ro.observe(viewport.value);
 });
-onBeforeUnmount(() => { if (ro) ro.disconnect(); });
+onBeforeUnmount(() => {
+  if (ro) ro.disconnect();
+  clearTimeout(temporizadorNitidez);
+});
 
 defineExpose({ focusOn, reset, zoomAt });
 </script>
@@ -206,7 +302,10 @@ defineExpose({ focusOn, reset, zoomAt });
    encogerse por debajo de su contenido: sin eso un hijo alto lo empuja y vuelve a
    desbordar la pantalla. */
 .viewport.llenar { height: auto; flex: 1; min-height: 0; border-radius: 0; border-left: none; border-right: none; }
-.world { position: absolute; top: 0; left: 0; width: 100%; transform-origin: 0 0; will-change: transform; }
+/* Sin `will-change` aqui: lo pone y lo quita el JS alrededor de cada gesto (ver
+   promoverCapa). Fijo en el CSS congelaba la escala de rasterizado y era lo que hacia que
+   al acercarse se viera todo borroso. */
+.world { position: absolute; top: 0; left: 0; width: 100%; transform-origin: 0 0; }
 .controls {
   position: absolute; right: 10px; bottom: 10px; display: flex; flex-direction: column; gap: 4px;
 }

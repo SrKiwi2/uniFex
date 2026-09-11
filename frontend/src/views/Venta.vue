@@ -5,16 +5,25 @@ import { apiFetch } from '../api';
 import { useAuthStore } from '../stores/auth';
 import { usePuestosStore } from '../stores/puestos';
 import { toast } from '../ui/toast';
+import { descargarRecibo } from '../ui/descargas';
 import { guardarBorrador, leerBorrador, borrarBorrador } from '../ui/borrador';
 
 /*
  * Registro de una venta. Es la pantalla que convierte un carrito de casetas en una
- * inscripcion, y la que acabara en el APK, asi que esta pensada para una mano y una
+ * inscripcion, y la que se usa desde el APK, asi que esta pensada para una mano y una
  * pantalla pequeña: un paso por vez, campos grandes y el resumen siempre visible.
  *
  * Las casetas no viven aqui: son las que el vendedor ya tiene reservadas (estado T a su
  * nombre), asi que salir de esta vista no pierde nada. Lo que si se guarda en local es lo
  * tecleado, para que cerrar la app a mitad no obligue a repetirlo.
+ *
+ * Quien es quien, que era la mayor fuente de confusion delante del cliente:
+ *   - Responsable legal  -> el DUEÑO. Va con la entidad, porque es de la empresa, y es a
+ *                           quien hay que llamar por un cobro. Obligatorio.
+ *   - Responsable 1 y 2  -> quien ATIENDE la caseta durante la feria. Pueden ser terceros,
+ *                           y son los que necesitan credencial (de ahi la foto).
+ * Antes se llamaban "Titular - dueño de la caseta" y "Acompañante", que decia justo lo
+ * contrario de lo que el sistema hace con ellos.
  */
 
 const auth = useAuthStore();
@@ -31,54 +40,171 @@ const perdidas = ref([]);
 const carrito = computed(() => tienda.carritoDe(auth.id));
 const total = computed(() => carrito.value.reduce((s, p) => s + Number(p.precio || 0), 0));
 
-const personaVacia = () => ({ nombre: '', paterno: '', materno: '', ci: '', correo: '', celular: '' });
+// Sin `correo`: no se usaba para nada y era un campo mas que rellenar delante del cliente.
+const personaVacia = () => ({ nombre: '', paterno: '', materno: '', ci: '', celular: '' });
 
 const form = reactive({
   entidadNombre: '', nit: '', descripcion: '', objeto: '',
-  representanteLegal: '', ciRepresentante: '', tipoEntidadId: null,
+  representanteLegal: '', ciRepresentante: '', celularRepresentante: '',
+  tipoEntidadId: null,
   fechaInicio: '', fechaFin: '',
+  /** El Responsable 1 es el mismo responsable legal: copia sus datos y bloquea los campos. */
+  copiaLegal: false,
   responsables: [personaVacia()],
   entidadBancaria: '', numComprobante: null, pagoContado: false,
 });
 
-const hayAcompaniante = computed(() => form.responsables.length > 1);
+/*
+ * Fotos de los responsables, FUERA de `form` a proposito.
+ *
+ * Son objetos File y el borrador se guarda como JSON: metidas ahi se convertirian en `{}` al
+ * recuperarlas, y ademas no tiene sentido conservar un archivo de una sesion a otra. Se suben
+ * DESPUES de que la venta exista, porque hasta entonces el responsable no tiene id.
+ */
+const fotos = ref([null, null]);
 
-// ---- validacion por paso: el boton "Siguiente" no deja avanzar con datos incompletos,
-// que es mejor que dejarle llegar al final y rechazarle todo de golpe.
-const errorPaso = computed(() => {
+const hayResponsable2 = computed(() => form.responsables.length > 1);
+
+/** Mientras "es el mismo" este marcado, el Responsable 1 sigue al responsable legal. */
+watch(
+  () => [form.copiaLegal, form.representanteLegal, form.ciRepresentante, form.celularRepresentante],
+  () => {
+    if (!form.copiaLegal) return;
+    const r = form.responsables[0];
+    if (!r) return; // un borrador recuperado puede llegar sin la lista todavia
+    // El responsable legal se pide como nombre completo en un solo campo (asi lo guarda
+    // `entidad`), asi que va entero al nombre y los apellidos quedan vacios.
+    r.nombre = form.representanteLegal;
+    r.paterno = '';
+    r.materno = '';
+    r.ci = form.ciRepresentante;
+    r.celular = form.celularRepresentante;
+  },
+);
+
+// ---- validacion por paso ----
+/*
+ * Antes esto era un unico `toast` con la primera falta ("El titular necesita nombre"), y en
+ * un formulario de doce campos el vendedor tenia que ADIVINAR cual. Ahora se devuelven todas
+ * las que faltan, con la etiqueta que se lee en pantalla: se listan arriba, se marcan en rojo
+ * y el foco salta a la primera. Solo se resaltan tras pulsar "Siguiente", para no ir en rojo
+ * desde el primer segundo.
+ */
+const intentado = ref(false);
+
+const algoEscrito = (p) => Boolean(p.nombre || p.paterno || p.materno || p.ci || p.celular);
+
+const faltantes = computed(() => {
+  const falta = new Map();
+  const pide = (clave, etiqueta, cumplido) => {
+    if (!cumplido) falta.set(clave, etiqueta);
+  };
+
   if (paso.value === 0) {
-    if (!form.entidadNombre.trim()) return 'El nombre de la entidad es obligatorio.';
-    if (!form.tipoEntidadId) return 'Elige el tipo de entidad.';
+    pide('entidadNombre', 'Nombre de la entidad', form.entidadNombre.trim());
+    pide('tipoEntidadId', 'Tipo de entidad', form.tipoEntidadId);
+    pide('representanteLegal', 'Nombre del responsable legal', form.representanteLegal.trim());
+    pide('ciRepresentante', 'C.I. del responsable legal', form.ciRepresentante.trim());
+    pide('celularRepresentante', 'Celular del responsable legal', form.celularRepresentante.trim());
   }
   if (paso.value === 1) {
-    const t = form.responsables[0];
-    if (!t.nombre.trim()) return 'El titular necesita nombre.';
-    if (!t.ci.trim()) return 'El titular necesita C.I.';
-    if (hayAcompaniante.value) {
-      const a = form.responsables[1];
-      const algo = a.nombre || a.paterno || a.materno || a.ci || a.correo || a.celular;
-      if (algo && (!a.nombre.trim() || !a.ci.trim())) {
-        return 'El acompañante necesita al menos nombre y C.I. (o quítalo).';
-      }
+    const r0 = form.responsables[0] || {};
+    pide('r0.nombre', 'Nombre del Responsable 1', (r0.nombre || '').trim());
+    pide('r0.ci', 'C.I. del Responsable 1', (r0.ci || '').trim());
+    const r1 = form.responsables[1];
+    // Un Responsable 2 a medias es peor que ninguno: o se completa o se quita.
+    if (r1 && algoEscrito(r1)) {
+      pide('r1.nombre', 'Nombre del Responsable 2', r1.nombre.trim());
+      pide('r1.ci', 'C.I. del Responsable 2', r1.ci.trim());
     }
   }
-  return '';
+  return falta;
 });
 
+const falta = (clave) => intentado.value && faltantes.value.has(clave);
+
 function siguiente() {
-  if (errorPaso.value) { toast(errorPaso.value, 'error'); return; }
+  intentado.value = true;
+  if (faltantes.value.size) {
+    nextTick(() => {
+      const primero = document.querySelector('.control.falta');
+      if (primero) {
+        primero.focus({ preventScroll: true });
+        primero.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    });
+    return;
+  }
+  intentado.value = false;
   if (paso.value < PASOS.length - 1) paso.value++;
 }
+
 function atras() {
+  intentado.value = false;
   if (paso.value > 0) paso.value--;
 }
 
-function agregarAcompaniante() {
-  if (form.responsables.length >= 2) return; // el sistema permite el dueño y uno mas
+function agregarResponsable2() {
+  if (form.responsables.length >= 2) return; // el sistema permite dos
   form.responsables.push(personaVacia());
 }
-function quitarAcompaniante() {
+function quitarResponsable2() {
   form.responsables.splice(1);
+  fotos.value[1] = null;
+}
+
+// ---- foto opcional de cada responsable ----
+/*
+ * Se toma aqui porque es el unico momento en que la persona esta DELANTE del vendedor. Si no
+ * se toma, no pasa nada: la venta se registra igual y las fotos se completan luego desde
+ * "Mis ventas", que es el modulo que ya existe para eso.
+ */
+function elegirFoto(indice, evento) {
+  const archivo = evento.target.files?.[0];
+  evento.target.value = '';
+  if (!archivo) return;
+  if (fotos.value[indice]?.url) URL.revokeObjectURL(fotos.value[indice].url);
+  fotos.value[indice] = { archivo, url: URL.createObjectURL(archivo) };
+}
+
+function quitarFoto(indice) {
+  if (fotos.value[indice]?.url) URL.revokeObjectURL(fotos.value[indice].url);
+  fotos.value[indice] = null;
+}
+
+/**
+ * Sube las fotos tomadas, ya con la venta registrada.
+ *
+ * Se empareja por C.I. y no por posicion: el servidor devuelve los responsables en el orden
+ * que le da la consulta, y confiar en el pondria la cara de uno en la ficha del otro.
+ * Ningun fallo de aqui puede tumbar la venta: ya esta hecha y las casetas ya son suyas.
+ */
+async function subirFotos(inscripcionId) {
+  const pendientes = fotos.value
+    .map((f, i) => ({ f, i }))
+    .filter((x) => x.f?.archivo && form.responsables[x.i]);
+  if (!pendientes.length) return true;
+
+  try {
+    const r = await apiFetch(`/api/app/inscripciones/${inscripcionId}/responsables`);
+    const lista = (await r.json())?.responsables || [];
+    let subidas = 0;
+    for (const { f, i } of pendientes) {
+      const ci = (form.responsables[i].ci || '').trim();
+      const destino = lista.find((x) => (x.ci || '').trim() === ci);
+      if (!destino) continue;
+      const datos = new FormData();
+      datos.append('archivo', f.archivo);
+      const res = await apiFetch(
+        `/api/app/inscripciones/${inscripcionId}/responsables/${destino.id}/foto`,
+        { method: 'POST', body: datos },
+      );
+      if (res.ok) subidas++;
+    }
+    return subidas === pendientes.length;
+  } catch {
+    return false;
+  }
 }
 
 /** Quita una caseta del carrito sin salir del formulario. */
@@ -96,29 +222,43 @@ async function quitarCaseta(p) {
   }
 }
 
+/*
+ * Los nombres van en MAYUSCULAS, como el resto del sistema (las entidades y personas que ya
+ * hay estan asi). Se normaliza al enviar y ademas se ven en mayusculas mientras se teclea
+ * (clase `.mayus`): transformar la tecla en vivo obliga a recolocar el cursor a mano y se
+ * rompe con el teclado predictivo de Android.
+ */
+const mayus = (v) => (typeof v === 'string' ? v.trim().toUpperCase() : v);
+
 async function registrar() {
   if (enviando.value) return;
   if (!carrito.value.length) { toast('No tienes casetas seleccionadas.', 'error'); return; }
   enviando.value = true;
   perdidas.value = [];
   try {
-    // Se manda solo el acompañante si de verdad lo rellenaron: un bloque vacio haria
+    // Se manda el Responsable 2 solo si de verdad lo rellenaron: un bloque vacio haria
     // fallar la validacion del servidor por "cada responsable necesita nombre".
-    const responsables = form.responsables.filter((p) => p.nombre.trim() && p.ci.trim());
+    const responsables = form.responsables
+      .filter((p) => p.nombre.trim() && p.ci.trim())
+      .map((p) => ({
+        nombre: mayus(p.nombre), paterno: mayus(p.paterno), materno: mayus(p.materno),
+        ci: p.ci.trim(), celular: p.celular.trim(), correo: null,
+      }));
     const r = await apiFetch('/api/app/inscripciones', {
       method: 'POST',
       body: JSON.stringify({
-        entidadNombre: form.entidadNombre,
+        entidadNombre: mayus(form.entidadNombre),
         nit: form.nit,
-        descripcion: form.descripcion,
-        objeto: form.objeto,
-        representanteLegal: form.representanteLegal,
-        ciRepresentante: form.ciRepresentante,
+        descripcion: mayus(form.descripcion),
+        objeto: mayus(form.objeto),
+        representanteLegal: mayus(form.representanteLegal),
+        ciRepresentante: form.ciRepresentante.trim(),
+        celularRepresentante: form.celularRepresentante.trim(),
         tipoEntidadId: form.tipoEntidadId,
         fechaInicio: form.fechaInicio || null,
         fechaFin: form.fechaFin || null,
         responsables,
-        entidadBancaria: form.entidadBancaria,
+        entidadBancaria: mayus(form.entidadBancaria),
         numComprobante: form.numComprobante,
         pagoContado: form.pagoContado,
         puestos: carrito.value.map((p) => p.id),
@@ -139,8 +279,16 @@ async function registrar() {
       return;
     }
 
+    // La venta ya existe. Las fotos van despues y no pueden hacerla fracasar.
+    const todas = await subirFotos(d.inscripcionId);
     borrarBorrador(auth.id);
     toast(`Venta registrada: ${Number(d.total).toLocaleString('es-BO')} Bs`, 'ok');
+    if (!todas) {
+      toast('Alguna foto no se subió. Puedes completarla desde Mis ventas.', 'info');
+    }
+    // El recibo se baja SOLO, que es el momento en que el cliente lo está esperando. Si algo
+    // falla no se toca la venta: ya está hecha, y se avisa de dónde volver a pedirlo.
+    await descargarRecibo(d.inscripcionId);
     router.push({ path: '/mis-ventas', query: { registrada: d.inscripcionId } });
   } catch (e) {
     toast(e.message, 'error');
@@ -197,6 +345,8 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('scroll', revisarDesplazamiento);
   window.removeEventListener('resize', revisarDesplazamiento);
+  // Las previsualizaciones son URLs de objeto: sin revocarlas se quedan en memoria.
+  fotos.value.forEach((f) => f?.url && URL.revokeObjectURL(f.url));
 });
 </script>
 
@@ -225,15 +375,25 @@ onUnmounted(() => {
         </li>
       </ol>
 
+      <!-- Lo que falta, dicho con las mismas palabras que las etiquetas de abajo. Aparece
+           solo tras pulsar "Siguiente": ir en rojo desde el primer segundo no informa. -->
+      <div v-if="intentado && faltantes.size" class="faltan card" role="alert">
+        <strong>Falta completar:</strong>
+        <ul>
+          <li v-for="[clave, etiqueta] in faltantes" :key="clave">{{ etiqueta }}</li>
+        </ul>
+      </div>
+
       <!-- Paso 1: entidad -->
       <section v-show="paso === 0" class="card bloque">
         <label class="campo">
           <span>Nombre de la entidad *</span>
-          <input class="control" v-model="form.entidadNombre" placeholder="Ej. Artesanías Illimani" />
+          <input class="control mayus" :class="{ falta: falta('entidadNombre') }"
+                 v-model="form.entidadNombre" placeholder="Ej. Artesanías Illimani" />
         </label>
         <label class="campo">
           <span>Tipo de entidad *</span>
-          <select class="control" v-model="form.tipoEntidadId">
+          <select class="control" :class="{ falta: falta('tipoEntidadId') }" v-model="form.tipoEntidadId">
             <option :value="null" disabled>Elige una opción…</option>
             <option v-for="t in tiposEntidad" :key="t.id" :value="t.id">{{ t.nombre }}</option>
           </select>
@@ -244,18 +404,39 @@ onUnmounted(() => {
             <input class="control" v-model="form.nit" inputmode="numeric" placeholder="Solo números" />
           </label>
           <label class="campo">
-            <span>C.I. del representante</span>
-            <input class="control" v-model="form.ciRepresentante" inputmode="numeric" placeholder="Ej. 8765432" />
+            <span>Rubro o descripción</span>
+            <input class="control mayus" v-model="form.descripcion" placeholder="Qué vende o expone" />
           </label>
         </div>
+
+        <div class="separador"></div>
+
+        <!-- El dueño va con la ENTIDAD, no con quien atiende la caseta. Es a quien se llama
+             por un cobro, y antes era opcional: se colaban ventas sin nadie a quien reclamar. -->
+        <h3 class="sub">
+          Responsable legal
+          <span class="muted">— el dueño de la caseta</span>
+        </h3>
         <label class="campo">
-          <span>Representante legal</span>
-          <input class="control" v-model="form.representanteLegal" autocapitalize="words" placeholder="Nombre y apellidos" />
+          <span>Nombre completo *</span>
+          <input class="control mayus" :class="{ falta: falta('representanteLegal') }"
+                 v-model="form.representanteLegal" placeholder="Ej. María Quispe Mamani" />
         </label>
-        <label class="campo">
-          <span>Rubro o descripción</span>
-          <input class="control" v-model="form.descripcion" placeholder="Qué vende o expone" />
-        </label>
+        <div class="dos">
+          <label class="campo">
+            <span>C.I. *</span>
+            <input class="control" :class="{ falta: falta('ciRepresentante') }"
+                   v-model="form.ciRepresentante" inputmode="numeric" placeholder="Ej. 8765432" />
+          </label>
+          <label class="campo">
+            <span>Celular *</span>
+            <input class="control" :class="{ falta: falta('celularRepresentante') }"
+                   v-model="form.celularRepresentante" type="tel" inputmode="tel" placeholder="Ej. 71234567" />
+          </label>
+        </div>
+
+        <div class="separador"></div>
+
         <div class="dos">
           <label class="campo"><span>Desde</span><input class="control" type="date" v-model="form.fechaInicio" /></label>
           <label class="campo"><span>Hasta</span><input class="control" type="date" v-model="form.fechaFin" /></label>
@@ -263,49 +444,78 @@ onUnmounted(() => {
       </section>
 
       <!-- Paso 2: responsables -->
-      <!-- Titular y acompañante piden exactamente los mismos datos, asi que van por el
-           mismo bucle: un campo nuevo se agrega una vez y sale en los dos. -->
+      <!-- Los dos piden exactamente los mismos datos, asi que van por el mismo bucle: un
+           campo nuevo se agrega una vez y sale en los dos. -->
       <section v-show="paso === 1" class="card bloque">
+        <p class="nota">
+          Quién <strong>atiende</strong> la caseta durante la feria. Son los que reciben
+          credencial, por eso se les puede tomar la foto aquí mismo.
+        </p>
+
         <template v-for="(r, i) in form.responsables" :key="i">
           <div v-if="i > 0" class="separador"></div>
-          <h3 class="sub">
-            {{ i === 0 ? 'Titular' : 'Acompañante' }}
-            <span class="muted">— {{ i === 0 ? 'el dueño de la caseta' : 'se permite uno' }}</span>
-          </h3>
+          <h3 class="sub">Responsable {{ i + 1 }}</h3>
+
+          <label v-if="i === 0" class="fila-check">
+            <input type="checkbox" v-model="form.copiaLegal" />
+            Es el mismo responsable legal
+          </label>
+
           <div class="dos">
             <label class="campo">
               <span>Nombre {{ i === 0 ? '*' : '' }}</span>
-              <input class="control" v-model="r.nombre" autocapitalize="words" placeholder="Ej. María" />
+              <input class="control mayus" :class="{ falta: falta(`r${i}.nombre`) }"
+                     :disabled="i === 0 && form.copiaLegal"
+                     v-model="r.nombre" placeholder="Ej. María" />
             </label>
             <label class="campo">
               <span>C.I. {{ i === 0 ? '*' : '' }}</span>
-              <input class="control" v-model="r.ci" inputmode="numeric" placeholder="Ej. 8765432" />
+              <input class="control" :class="{ falta: falta(`r${i}.ci`) }"
+                     :disabled="i === 0 && form.copiaLegal"
+                     v-model="r.ci" inputmode="numeric" placeholder="Ej. 8765432" />
             </label>
           </div>
           <div class="dos">
             <label class="campo">
               <span>Apellido paterno</span>
-              <input class="control" v-model="r.paterno" autocapitalize="words" placeholder="Ej. Quispe" />
+              <input class="control mayus" :disabled="i === 0 && form.copiaLegal"
+                     v-model="r.paterno" placeholder="Ej. Quispe" />
             </label>
             <label class="campo">
               <span>Apellido materno</span>
-              <input class="control" v-model="r.materno" autocapitalize="words" placeholder="Ej. Mamani" />
+              <input class="control mayus" :disabled="i === 0 && form.copiaLegal"
+                     v-model="r.materno" placeholder="Ej. Mamani" />
             </label>
           </div>
-          <div class="dos">
-            <label class="campo">
-              <span>Celular</span>
-              <input class="control" type="tel" inputmode="tel" v-model="r.celular" placeholder="Ej. 71234567" />
-            </label>
-            <label class="campo">
-              <span>Correo</span>
-              <input class="control" type="email" inputmode="email" autocapitalize="off" v-model="r.correo" placeholder="Ej. nombre@correo.com" />
-            </label>
+          <label class="campo">
+            <span>Celular</span>
+            <input class="control" type="tel" inputmode="tel" :disabled="i === 0 && form.copiaLegal"
+                   v-model="r.celular" placeholder="Ej. 71234567" />
+          </label>
+
+          <!-- Foto opcional. Es el unico momento en que la persona esta delante; si no se
+               toma, la venta se registra igual y se completa desde "Mis ventas". -->
+          <div class="foto">
+            <img v-if="fotos[i]?.url" :src="fotos[i].url" alt="Foto del responsable" />
+            <div v-else class="sinfoto">Sin foto</div>
+            <div class="foto-acciones">
+              <!-- Sin `capture`: forzar la cámara quita la galería en Android, y a veces la
+                   foto ya existe. Mismo criterio que FotosResponsables y el comprobante. -->
+              <input :id="`foto-${i}`" class="oculto" type="file" accept="image/*"
+                     @change="elegirFoto(i, $event)" />
+              <label :for="`foto-${i}`" class="btn btn-sm">
+                📷 {{ fotos[i] ? 'Cambiar foto' : 'Tomar foto' }}
+              </label>
+              <button v-if="fotos[i]" class="btn btn-peligro btn-sm" @click="quitarFoto(i)">Quitar</button>
+              <span class="muted opcional">Opcional</span>
+            </div>
           </div>
         </template>
 
-        <button v-if="hayAcompaniante" class="btn btn-peligro btn-sm" @click="quitarAcompaniante">Quitar acompañante</button>
-        <button v-else class="btn btn-sm" @click="agregarAcompaniante">＋ Agregar acompañante</button>
+        <button v-if="hayResponsable2" class="btn btn-peligro" @click="quitarResponsable2">
+          Quitar Responsable 2
+        </button>
+        <button v-else class="btn" @click="agregarResponsable2">＋ Agregar Responsable 2</button>
       </section>
 
       <!-- Paso 3: confirmar -->
@@ -331,7 +541,7 @@ onUnmounted(() => {
         <div v-if="!form.pagoContado" class="dos">
           <label class="campo">
             <span>Banco</span>
-            <input class="control" v-model="form.entidadBancaria" autocapitalize="words" placeholder="Ej. Banco Unión" />
+            <input class="control mayus" v-model="form.entidadBancaria" placeholder="Ej. Banco Unión" />
           </label>
           <label class="campo">
             <span>N.º de comprobante</span>
@@ -349,7 +559,7 @@ onUnmounted(() => {
            lo tapaba. -->
       <div class="pie">
         <button v-if="hayMasAbajo" class="mas-abajo" type="button" @click="bajar">
-          Desliza para ver más ↓
+          <span class="flecha">↓</span> Desliza para ver más
         </button>
         <div class="acciones">
           <button class="btn" :disabled="paso === 0 || enviando" @click="atras">Atrás</button>
@@ -387,12 +597,48 @@ onUnmounted(() => {
 .pasos .activo .num { background: var(--acento); border-color: var(--acento); color: var(--acento-texto); }
 .pasos .hecho .num { background: var(--ok); border-color: var(--ok); color: #fff; }
 
+/* Lista de lo que falta. Con las MISMAS palabras que las etiquetas de los campos: si aquí
+   dice "Celular del responsable legal", abajo hay un campo que se llama así. */
+.faltan {
+  padding: 0.8rem 1rem; border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+  background: var(--danger-suave); color: var(--danger); font-size: 0.9rem;
+}
+.faltan ul { margin: 0.3rem 0 0; padding-left: 1.1rem; }
+.faltan li { margin: 0.1rem 0; }
+
 .bloque { padding: 1.1rem; display: flex; flex-direction: column; gap: 0.85rem; }
 .sub { margin: 0; font-size: 0.95rem; font-weight: 700; }
 .dos { display: grid; gap: 0.85rem; grid-template-columns: 1fr 1fr; }
 .separador { height: 1px; background: var(--border); }
 .fila-check { display: flex; align-items: center; gap: 0.5rem; font-size: 0.92rem; }
 .nota { margin: 0; font-size: 0.83rem; color: var(--muted); line-height: 1.45; }
+
+/* Campo obligatorio sin rellenar. Borde grueso y fondo tenue, no solo el color del texto:
+   sobre un formulario largo el color solo no se encuentra de un vistazo. */
+.control.falta {
+  border-color: var(--danger); border-width: 2px;
+  background: var(--danger-suave);
+}
+.control:disabled { opacity: 0.65; cursor: not-allowed; }
+
+/* Los nombres se ven en mayúsculas mientras se teclean; el valor se normaliza al enviar.
+   El placeholder se queda como está: en mayúsculas parecería un valor ya escrito. */
+.mayus { text-transform: uppercase; }
+.mayus::placeholder { text-transform: none; }
+
+/* ---- foto del responsable ---- */
+.foto { display: flex; align-items: center; gap: 0.8rem; }
+.foto img, .foto .sinfoto {
+  width: 72px; height: 72px; border-radius: var(--radio-sm); flex: none;
+  border: 1px solid var(--border); object-fit: cover;
+}
+.foto .sinfoto {
+  display: grid; place-items: center; background: var(--panel-2);
+  color: var(--muted); font-size: 0.72rem; text-align: center;
+}
+.foto-acciones { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.foto-acciones .opcional { font-size: 0.78rem; }
+.oculto { display: none; }
 
 .casetas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .casetas li {
@@ -409,14 +655,29 @@ onUnmounted(() => {
 
 /* Franja inferior: aviso de "hay más" + botones, juntos y sobre fondo opaco. */
 .pie { display: flex; flex-direction: column; align-items: stretch; gap: 0.5rem; }
+
+/* El aviso de "hay más abajo" pasaba desapercibido: era gris sobre gris, del tamaño de una
+   nota al pie, justo encima de unos botones que sí llaman la atención. Ahora usa el color de
+   acento y la flecha se mueve, que es lo que el ojo persigue en una pantalla llena de texto. */
 .mas-abajo {
-  align-self: center; border: 1px solid var(--border); background: var(--panel);
-  color: var(--muted); border-radius: 999px; padding: 0.4rem 0.9rem; font: inherit;
-  font-size: 0.85rem; font-weight: 600; box-shadow: var(--sombra); cursor: pointer;
+  align-self: center; cursor: pointer; font: inherit;
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--acento) 45%, transparent);
+  background: color-mix(in srgb, var(--acento) 12%, var(--panel));
+  color: var(--acento); font-weight: 700; font-size: 0.9rem;
+  border-radius: 999px; padding: 0.5rem 1.1rem; box-shadow: var(--sombra);
+}
+.mas-abajo .flecha { display: inline-block; animation: rebote 1.4s ease-in-out infinite; }
+@keyframes rebote {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(3px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mas-abajo .flecha { animation: none; }
 }
 
 /* En móvil el formulario se vuelve de una columna y los botones ocupan el ancho:
-   es la misma pantalla que irá en el APK y ahí se usa con una mano. */
+   es la misma pantalla que va en el APK y ahí se usa con una mano. */
 @media (max-width: 560px) {
   .dos { grid-template-columns: 1fr; }
   .pie { position: sticky; bottom: var(--tabbar-h); background: var(--bg); padding: 0.6rem 0 1rem; z-index: 6; }
@@ -424,18 +685,26 @@ onUnmounted(() => {
   .acciones .btn { flex: 1; }
 
   /* Campos y textos más grandes: es la pantalla que más se teclea, y en un teléfono
-     chico los tamaños de escritorio obligan a apuntar. */
+     chico los tamaños de escritorio obligan a apuntar. Los botones de acción crecen a
+     52px de alto, bastante por encima del mínimo táctil, porque se pulsan de pie y
+     delante del cliente. */
   .venta { gap: 1.1rem; }
   .bloque { padding: 1.15rem 1rem 1.3rem; gap: 1.1rem; }
-  .sub { font-size: 1.05rem; }
+  .sub { font-size: 1.1rem; }
   .pasos li { font-size: 0.95rem; }
   .pasos .num { width: 1.75rem; height: 1.75rem; font-size: 0.85rem; }
   .resumen { padding: 0.9rem 1rem; font-size: 1rem; }
   .resumen .total { font-size: 1.15rem; }
   .casetas li { font-size: 1rem; padding: 0.7rem 0; gap: 0.7rem; }
-  .fila-check { font-size: 1rem; gap: 0.7rem; }
+  .fila-check { font-size: 1.02rem; gap: 0.7rem; }
   /* Casilla grande: con la de por defecto (13px) hay que apuntar con la uña. */
-  .fila-check input[type='checkbox'] { width: 22px; height: 22px; }
-  .nota { font-size: 0.92rem; }
+  .fila-check input[type='checkbox'] { width: 24px; height: 24px; }
+  .nota { font-size: 0.95rem; }
+  .faltan { font-size: 1rem; }
+  .acciones .btn { min-height: 52px; font-size: 1.05rem; }
+  .bloque > .btn { min-height: 50px; font-size: 1rem; }
+  .mas-abajo { font-size: 1rem; padding: 0.6rem 1.2rem; }
+  .foto img, .foto .sinfoto { width: 88px; height: 88px; }
+  .foto-acciones .btn { min-height: 44px; }
 }
 </style>

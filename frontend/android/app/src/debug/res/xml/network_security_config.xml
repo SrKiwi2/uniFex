@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Version de DEPURACION. Android usa este archivo en vez del de src/main al compilar
+  `assembleDebug`, porque una variante pisa los recursos del mismo nombre.
+
+  Aqui se permite trafico sin cifrar contra CUALQUIER host a proposito: durante las pruebas
+  el backend cambia de sitio todo el rato (la IP de la laptop en la red de la feria, el
+  emulador, el servidor). Tener que editar una lista de dominios y recompilar cada vez que
+  cambia el wifi seria una fuente segura de "no funciona y no se por que".
+
+  El APK de RELEASE no usa este archivo: ahi vale el de src/main, que solo autoriza el
+  servidor de la feria. Es decir, esta permisividad no llega a lo que se reparte.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

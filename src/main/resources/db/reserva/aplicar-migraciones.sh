@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Aplica en orden los scripts de esquema V1..V12 de este directorio contra la base
+# Aplica en orden los scripts de esquema V1..V23 de este directorio contra la base
 # indicada por las variables de entorno estandar de psql (PGHOST, PGPORT, PGUSER,
 # PGPASSWORD, PGDATABASE), registrando en la tabla de control public._migraciones_aplicadas
 # cuales ya corrieron para no repetirlas ni saltarse ninguna.

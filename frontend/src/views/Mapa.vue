@@ -8,8 +8,9 @@ import { useAuthStore } from '../stores/auth';
 import { usePuestosStore } from '../stores/puestos';
 import { usePlanoStore } from '../stores/plano';
 import { toast } from '../ui/toast';
+import { alerta } from '../ui/alerta';
 import { iniciarMedicion, marcarPintado, marcarRed, purgarMediciones } from '../ui/medir';
-import { CLASE_ESTADO, ETIQUETA_ESTADO, LEYENDA, estiloPin } from '../mapa';
+import { CLASE_ESTADO, ETIQUETA_ESTADO, LEYENDA, anchoParaLeer, anchoParaTocar, estiloPin, numerosVisibles } from '../mapa';
 
 // Las casetas y la conexion en tiempo real son compartidas con el Tablero y el Editor:
 // una sola descarga y un solo WebSocket para toda la app (ver stores/puestos.js).
@@ -47,6 +48,29 @@ const focoInicial = { x: 0.44, y: 0.34, scale: 2.4 };
 // ya un array, no un ref. Hay que envolverlo en un computed propio: leerlo suelto una vez
 // aqui daria un array plano, sin `.value` y sin reactividad (se quedaria congelado).
 const ubicados = computed(() => tienda.ubicadas);
+
+/*
+ * Cuánto hay que poder acercarse, y desde cuándo se lee el número. Los dos salen del tamaño
+ * REAL de las casetas de esta feria, no de una constante: el administrador dibuja las casetas
+ * contra el plano (en FEXPO valen 0.005 del ancho) y ningún factor de aumento fijo puede
+ * servir a la vez para eso y para un plano con casetas del doble.
+ */
+/**
+ * Aviso de que lo que se ve puede estar desfasado. null = el mapa es de fiar.
+ *
+ * Este aviso es la mitad de la cura del problema de "el mapa no se actualiza". La otra mitad
+ * (resincronizar al volver al frente y sondear sin tiempo real) vive en el store; esto es lo
+ * que evita que un fallo de conexion vuelva a ser INVISIBLE. Un vendedor mirando casetas
+ * verdes que ya estan vendidas necesita saberlo antes de prometerle una al cliente.
+ */
+const avisoSync = computed(() => {
+  if (tienda.desdeCache) return 'Copia guardada, aún sin confirmar';
+  if (!tienda.enVivo) return 'Sin tiempo real: el mapa puede estar desfasado';
+  return null;
+});
+
+const topeZoom = computed(() => anchoParaTocar(ubicados.value));
+const umbralNumeros = computed(() => anchoParaLeer(ubicados.value));
 const sinUbicar = computed(() => tienda.puestos.length - tienda.ubicadas.length);
 
 // El carrito se deduce del propio mapa (casetas en tramite mias), no se pide aparte:
@@ -193,7 +217,16 @@ async function cargarCualesTienenFoto() {
   }
 }
 
+// El cambio de asignaciones llega por el topic personal. El store ya recarga la lista solo;
+// aqui solo se muestra el mensaje, que es lo que le dice al vendedor QUE cambio y de que
+// categoria. Va como modal y no como toast porque cambia lo que puede vender.
+let dejarDeOirAsignaciones = null;
+
+
 onMounted(() => {
+  dejarDeOirAsignaciones = tienda.registrarNotificaciones((n) => {
+    if (n?.tipo === 'ASIGNACION_CAMBIADA' && n.cuerpo) alerta(n.cuerpo, 'info', 8000);
+  });
   tienda.asegurar(sesionCaducada);
   planoTienda.asegurar();
   cargarCualesTienenFoto();
@@ -203,7 +236,10 @@ onMounted(() => {
     temporizadorMedicion = setInterval(purgarMediciones, 3000);
   }
 });
-onUnmounted(() => clearInterval(temporizadorMedicion));
+onUnmounted(() => {
+  clearInterval(temporizadorMedicion);
+  if (dejarDeOirAsignaciones) dejarDeOirAsignaciones();
+});
 </script>
 
 <template>
@@ -211,6 +247,21 @@ onUnmounted(() => clearInterval(temporizadorMedicion));
       <div class="legend">
         <span v-for="l in LEYENDA" :key="l.clase" class="chip" :class="l.clase">{{ l.txt }}</span>
       </div>
+      <!-- Solo aparece cuando algo va mal, y ofrece la accion en el mismo sitio: pulsar
+           vuelve a pedir la lista y reintenta la conexion. -->
+      <button v-if="avisoSync" class="aviso-sync" @click="tienda.reintentar()"
+              :title="avisoSync + '. Tocá para actualizar ahora.'">
+        ⚠ {{ avisoSync }} · Actualizar
+      </button>
+
+
+      <!-- El número de la caseta es como se la nombra al cliente ("la 14"), así que el
+           rótulo lo puede encender también el vendedor, no solo quien edita el plano. -->
+      <button class="btn btn-fantasma btn-sm numeros" :class="{ on: numerosVisibles }"
+              :aria-pressed="numerosVisibles" @click="numerosVisibles = !numerosVisibles"
+              title="Muestra el número de cada caseta sobre el plano (hay que acercarse para leerlo)">
+        🔢 Nº
+      </button>
       <!-- El conteo de ubicadas/sin ubicar habla del Editor del plano: al vendedor no le
            dice nada y le mete ruido en la unica pantalla que usa todo el dia. -->
       <div v-if="auth.puedeEditarPlano" class="info">
@@ -232,10 +283,10 @@ onUnmounted(() => clearInterval(temporizadorMedicion));
           </span>
         </div>
         <div class="botones">
-          <button class="btn btn-fantasma btn-sm" :disabled="vaciando" @click="vaciarCarrito">
+          <button class="btn btn-fantasma" :disabled="vaciando" @click="vaciarCarrito">
             {{ vaciando ? 'Liberando…' : 'Vaciar' }}
           </button>
-          <router-link to="/venta" class="btn btn-primario btn-sm">
+          <router-link to="/venta" class="btn btn-primario">
             Registrar venta
           </router-link>
         </div>
@@ -251,11 +302,22 @@ onUnmounted(() => clearInterval(temporizadorMedicion));
       @quitar="(p) => click(p)"
     />
 
+    <!-- Sin casetas asignadas no hay nada que pintar, y el vendedor tiene que saber POR QUE.
+         Antes veia el plano vacio y no habia forma de distinguirlo de un fallo de carga. -->
+    <div v-if="tienda.sinAsignaciones" class="sin-asignaciones">
+      <span class="icono">🗺️</span>
+      <h2>Todavía no tienes casetas habilitadas</h2>
+      <p>
+        Administración aún no te asignó una categoría ni casetas para vender.
+        En cuanto lo haga, aparecerán aquí solas: no hace falta que cierres la aplicación.
+      </p>
+    </div>
+
     <!-- key: cambiar de plano cambia la proporcion y el encuadre, y `reset()` solo corre al
          montar. Remontar es lo que hace que el plano nuevo se vea bien encuadrado sin recargar. -->
-    <PanZoom :key="planoTienda.src" :focus="focoInicial" :contenido="esMovil ? zonaEncuadre : null"
-             :aspect="planoTienda.aspecto" llenar>
-      <div class="plano">
+    <PanZoom v-if="!tienda.sinAsignaciones" :key="planoTienda.src" :focus="focoInicial" :contenido="esMovil ? zonaEncuadre : null"
+             :aspect="planoTienda.aspecto" :umbral-detalle="umbralNumeros" :max-ancho="topeZoom" llenar>
+      <div class="plano" :class="{ 'con-numeros': numerosVisibles }">
         <!-- width/height intrinsecos: el navegador reserva la proporcion antes de
              descargar, asi los pines no bailan mientras carga el plano. Salen del propio
              plano (V13), no de un numero fijo, porque cada edicion puede traer el suyo. -->
@@ -275,20 +337,29 @@ onUnmounted(() => clearInterval(temporizadorMedicion));
         <button
           v-for="p in ubicados"
           :key="p.id"
-          v-memo="[p.estado, p.reservadoPor === auth.id, conFoto.has(p.id), p.mapaX, p.mapaY, p.mapaEscala, p.tamanoMapa, p.color, p.forma]"
+          v-memo="[p.estado, p.reservadoPor === auth.id, conFoto.has(p.id), p.mapaX, p.mapaY, p.mapaEscala, p.tamanoMapa, p.color, p.forma, p.codigo]"
           class="pin"
           :class="[CLASE_ESTADO[p.estado], `forma-${p.forma || 'cuadrado'}`,
                    { mia: esMia(p), 'con-foto': conFoto.has(p.id) }]"
-          :style="estiloPin(p)"
+          :style="{ ...estiloPin(p), '--categoria': p.color || 'transparent' }"
           :title="rotulo(p)"
           @pointerdown.stop
           @click="abrirFicha(p)"
-        ></button>
+        ><span class="num-caseta">{{ p.codigo }}</span></button>
       </div>
     </PanZoom>
 </template>
 
 <style scoped>
+
+.sin-asignaciones {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.6rem; padding: 2.5rem 1.5rem; text-align: center; color: var(--muted);
+}
+.sin-asignaciones .icono { font-size: 2.6rem; }
+.sin-asignaciones h2 { margin: 0; font-size: 1.15rem; color: var(--text); }
+.sin-asignaciones p { margin: 0; max-width: 42ch; line-height: 1.5; }
+
 .barra {
   display: flex; justify-content: space-between; align-items: center;
   padding: 0.6rem 1rem; gap: 1rem; flex-wrap: wrap;
@@ -296,6 +367,17 @@ onUnmounted(() => clearInterval(temporizadorMedicion));
 .legend { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 .chip { padding: 0.2rem 0.55rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600; }
 .info { font-size: 0.9rem; }
+.numeros.on { border-color: var(--acento); color: var(--acento); font-weight: 700; }
+
+/* Ambar y no rojo: el mapa sigue siendo utilizable, solo que puede ir atrasado. El rojo esta
+   reservado a las casetas vendidas y repetirlo aqui compite con la lectura del plano. */
+.aviso-sync {
+  border: 1px solid color-mix(in srgb, var(--tramite) 45%, transparent);
+  background: color-mix(in srgb, var(--tramite) 14%, transparent);
+  color: var(--tramite);
+  border-radius: 999px; padding: 0.25rem 0.7rem;
+  font: inherit; font-size: 0.8rem; font-weight: 700; cursor: pointer;
+}
 .muted { color: var(--muted); }
 /* Los avisos van por toast (ToastHost, montado en App.vue). Antes eran un parrafo aqui
    encima del plano: al aparecer y desaparecer cambiaba el alto de la pagina, el
@@ -323,7 +405,9 @@ onUnmounted(() => clearInterval(temporizadorMedicion));
   width: 100%; height: auto; display: block;
   pointer-events: none;
   user-select: none; -webkit-user-select: none;
-  will-change: transform;
+  /* `translateZ(0)` le da al plano su propia capa: cambiar de color UNA caseta no obliga a
+     re-rasterizar la imagen entera. Lo que SI se quito es `will-change: transform`, que
+     ademas congelaba la escala de rasterizado y dejaba la imagen borrosa al acercarse. */
   transform: translateZ(0);
 }
 
@@ -335,12 +419,39 @@ onUnmounted(() => clearInterval(temporizadorMedicion));
    pixeles, asi que 1px de borde blanco (y 2px mas de borde en la propia) dejaban solo una
    mota de color en el centro — se veia un cuadro con marco en vez de una caseta de color.
    El box-shadow se dibuja FUERA de la caja: separa igual y no roba superficie. */
+/* ---- REGLA DE ORO DE ESTE BLOQUE ----
+   Dentro del mundo que transforma PanZoom, un `px` NO es un pixel: el zoom es un
+   `transform: scale()`, asi que toda medida absoluta se multiplica por el aumento. Con las
+   casetas a 0.005 del ancho del plano, una caseta mide ~2 px de maquetacion, y de ahi salian
+   los tres defectos que se veian en el APK:
+     · `border-radius: 2px` sobre una caja de 2 px = circulo perfecto. Por eso las casetas
+       cuadradas se veian redondas — y en el monitor no, porque alli la caseta mide 6 px.
+     · `box-shadow: 0 0 0 1px` = aro blanco de 22 px al acercarse. Ese era el halo.
+     · `0 1px 3px` de sombra difusa = 66 px de desenfoque. Ese era el velo gris.
+   Todo lo que se dibuje aqui va en fracciones de `--pin` (el ancho de la caseta, que publica
+   estiloPin) o en porcentaje. Nada en px absolutos. */
 .pin {
   position: absolute; aspect-ratio: 1;
   transform: translate(-50%, -50%);
   border: none;
   padding: 0; cursor: pointer;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.75), 0 1px 3px rgba(0, 0, 0, 0.35);
+  /* Separador con la caseta vecina y aro de categoria, los dos en fraccion de caseta. */
+  --borde: calc(var(--pin, 20) * 0.06px);
+  --aro: calc(var(--pin, 20) * 0.12px);
+  /* Sin sombra difusa: al acercarse se convertia en un velo gris enorme, y el separador
+     blanco ya despega la caseta del plano. */
+  box-shadow: 0 0 0 var(--borde) rgba(255, 255, 255, 0.75);
+}
+
+/* El relleno dice el ESTADO (libre, vendida, reservada) porque es lo que decide si se puede
+   vender, y eso no se negocia. El color de la categoria va en un aro alrededor: aparece solo
+   con el plano acercado, igual que el numero, porque a zoom de feria entera el pin mide 2 px
+   y un aro de ese grosor tenirla el punto entero y arruinaria la lectura del estado.
+   El grosor va en fraccion de caseta, asi que crece con el zoom sin desbordarse. */
+.world.detalle .pin {
+  box-shadow:
+    0 0 0 var(--aro) var(--categoria, transparent),
+    0 0 0 calc(var(--aro) + var(--borde)) rgba(255, 255, 255, 0.75);
 }
 .pin:hover { z-index: 5; filter: brightness(1.12); }
 .pin.ocupado, .pin.bloqueado { cursor: default; }
@@ -356,7 +467,7 @@ onUnmounted(() => clearInterval(temporizadorMedicion));
 .pin.con-foto::after {
   content: ""; position: absolute; top: 8%; right: 8%;
   width: 26%; height: 26%; border-radius: 50%;
-  background: #fff; box-shadow: 0 0 0 1px rgba(2, 6, 23, 0.35);
+  background: #fff; box-shadow: 0 0 0 var(--borde) rgba(2, 6, 23, 0.35);
 }
 
 /* ---- carrito ---- */
@@ -377,7 +488,18 @@ onUnmounted(() => clearInterval(temporizadorMedicion));
   background: color-mix(in srgb, var(--tramite) 15%, transparent);
   border-radius: 999px; padding: 0.1rem 0.5rem;
 }
-.carrito .botones { display: flex; gap: 0.4rem; }
+/* Son los dos botones con los que se cierra una venta, y estaban en tamaño `btn-sm`, el
+   mismo que un icono secundario. Se pulsan de pie y con una mano: 48px de alto. */
+.carrito .botones { display: flex; gap: 0.5rem; }
+.carrito .botones .btn { min-height: 48px; padding-left: 1.1rem; padding-right: 1.1rem; font-size: 1rem; }
+@media (max-width: 560px) {
+  .carrito { left: 1rem; right: 1rem; transform: none; }
+  .carrito .botones { flex: 1; }
+  .carrito .botones .btn { flex: 1; }
+  /* Sin esto entraría volando desde la izquierda: la transición de arriba desplaza medio
+     ancho para compensar el centrado, y aquí ya no hay centrado que compensar. */
+  .subir-enter-from, .subir-leave-to { transform: translateY(0.5rem); }
+}
 
 .subir-enter-active, .subir-leave-active { transition: opacity 0.15s ease, transform 0.15s ease; }
 .subir-enter-from, .subir-leave-to { opacity: 0; transform: translateX(-50%) translateY(0.5rem); }
@@ -385,7 +507,48 @@ onUnmounted(() => clearInterval(temporizadorMedicion));
   .subir-enter-active, .subir-leave-active { transition: none; }
 }
 
-.forma-cuadrado { border-radius: 2px; }
+/* En porcentaje, no en px: el 2px de antes era mas que el radio de la propia caseta y la
+   dejaba redonda. Un 10% es la esquina apenas matada que se buscaba. */
+.forma-cuadrado { border-radius: 10%; }
 .forma-circulo { border-radius: 50%; }
 .forma-triangulo { clip-path: polygon(50% 0%, 100% 100%, 0% 100%); border: none; }
+
+/* ---- número de la caseta ----
+   El rótulo NO se mide con el font-size del pin, y esa es toda la historia: con casetas de
+   0.005 del ancho del plano el pin mide ~2 px de maquetación, su fuente saldría a ~1 px, y el
+   WebView de Android impone un tamaño MÍNIMO de fuente (8 px por defecto). El número salía
+   cuatro veces más grande que su caseta y `overflow: hidden` lo dejaba en un borrón: por eso
+   "no se veían las numeraciones" al acercarse.
+
+   En su lugar, una caja FIJA de 100 px con el texto a 52 px —tamaños normales, que ningún
+   mínimo toca— reducida con `transform: scale()` al tamaño real de la caseta. Un transform no
+   está sujeto a mínimos de fuente y además se compone con el zoom del mundo, así que el
+   navegador rasteriza el texto directamente a la escala final: nítido a cualquier zoom.
+
+   Está siempre en el DOM y lo encienden DOS condiciones, las dos en CSS a propósito — si
+   fueran reactivas, encenderlas obligaría a repintar los 500+ pines:
+     · `.con-numeros`   — el botón "🔢 Nº" de la barra.
+     · `.world.detalle` — PanZoom avisa de que el plano se ve lo bastante grande. Sin esto,
+       al ver la feria entera el número mediría 2 px y sería una mancha. */
+.num-caseta {
+  display: none;
+  /* Caja FIJA de 100 px, reducida al tamaño real de la caseta con transform (ver arriba). */
+  position: absolute; left: 50%; top: 50%;
+  width: 100px; height: 100px; margin: -50px 0 0 -50px;
+  transform: scale(calc(var(--pin, 20) / 100));
+  transform-origin: 50% 50%;
+  align-items: center; justify-content: center;
+  font-size: 52px; line-height: 1; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  /* El color de la categoría lo elige el administrador y puede salir claro: la sombra es lo
+     que mantiene el número legible encima de cualquiera, sin un fondo que taparía la caseta. */
+  text-shadow: 0 2px 4px rgba(2, 6, 23, 0.92), 0 0 4px rgba(2, 6, 23, 0.85);
+  pointer-events: none;
+  overflow: hidden;
+}
+.world.detalle .con-numeros .num-caseta { display: flex; }
+/* En un triángulo el centro geométrico cae en la punta, donde no hay superficie donde
+   apoyar el número: se baja al tercio ancho. */
+.forma-triangulo .num-caseta { align-items: flex-end; padding-bottom: 8px; font-size: 40px; }
 </style>

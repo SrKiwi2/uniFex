@@ -30,6 +30,7 @@ import com.usic.uniFex.model.service.PuestoEventPublisher;
 import com.usic.uniFex.model.service.PuestoFotoService;
 import com.usic.uniFex.model.service.PuestoMapaService;
 import com.usic.uniFex.model.service.PuestoReservaService;
+import com.usic.uniFex.model.service.VendedorAsignacionService;
 import com.usic.uniFex.security.JwtUser;
 import com.usic.uniFex.security.Roles;
 
@@ -54,11 +55,21 @@ public class PuestoApiController {
     private final PuestoMapaService mapaService;
     private final PuestoFotoService fotoService;
     private final IPuestoDao puestoDao;
+    private final VendedorAsignacionService vendedorAsignacionService;
 
-    /** Estado de todas las casetas no anuladas (opcionalmente filtrado por categoria). */
+    /** Estado de todas las casetas no anuladas (opcionalmente filtrado por categoria).
+     * Para vendedores (ADMINISTRATIVO): solo devuelve sus casetas asignadas.
+     * Para admin: devuelve todas (con filtro opcional por categoria). */
     @GetMapping
     public List<PuestoEstadoDTO> listar(@RequestParam(value = "categoriaId", required = false) Long categoriaId) {
-        return puestoDao.listarActivos().stream()
+        Long usuarioId = usuarioActual();
+        if (usuarioId == null) return List.of();
+
+        List<Puesto> base = esVendedor()
+                ? vendedorAsignacionService.getPuestosVisiblesParaVendedor(usuarioId)
+                : puestoDao.listarActivos();
+
+        return base.stream()
                 .filter(p -> categoriaId == null
                         || (p.getCategoria() != null && categoriaId.equals(p.getCategoria().getId())))
                 .map(PuestoEstadoDTO::de)
@@ -133,6 +144,16 @@ public class PuestoApiController {
         return operarCarrito(req, false);
     }
 
+    /**
+     * ¿Quien pide es un vendedor? Decide si se le filtran las casetas por asignacion.
+     * Administracion no se filtra nunca: vende y edita cualquier caseta del plano.
+     */
+    private boolean esVendedor() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMINISTRATIVO".equals(a.getAuthority()));
+    }
+
     private ResponseEntity<Map<String, Object>> operarCarrito(LotePuestos req, boolean agregar) {
         Long usuarioId = usuarioActual();
         if (usuarioId == null) return noAutenticado();
@@ -141,17 +162,42 @@ public class PuestoApiController {
                     .body(Map.of("ok", false, "mensaje", "No se indico ninguna caseta"));
         }
 
+        // Un vendedor no reserva lo que no tiene asignado. Se comprueba AQUI, en el servidor, y no
+        // solo escondiendo casetas en el mapa: la peticion lleva ids y un cliente puede mandar
+        // cualquiera. Solo se filtra al AGREGAR; soltar una caseta propia siempre se permite,
+        // porque si no una asignacion retirada a media venta dejaria la caseta bloqueada en 'T'
+        // hasta que venciera sola.
+        List<Long> ids = req.ids();
+        List<Long> noPermitidas = List.of();
+        if (agregar && esVendedor()) {
+            noPermitidas = vendedorAsignacionService.casetasNoPermitidas(usuarioId, ids);
+            if (!noPermitidas.isEmpty()) {
+                List<Long> permitidas = new java.util.ArrayList<>(ids);
+                permitidas.removeAll(noPermitidas);
+                ids = permitidas;
+            }
+        }
+        if (ids.isEmpty()) {
+            return ResponseEntity.status(403).body(Map.of(
+                    "ok", false,
+                    "logradas", List.of(),
+                    "rechazadas", noPermitidas,
+                    "mensaje", "Esas casetas no estan asignadas a ti"));
+        }
+
         PuestoReservaService.ResultadoLote r = agregar
-                ? reservaService.agregarAlCarrito(req.ids(), usuarioId)
-                : reservaService.quitarDelCarrito(req.ids(), usuarioId);
+                ? reservaService.agregarAlCarrito(ids, usuarioId)
+                : reservaService.quitarDelCarrito(ids, usuarioId);
 
         // Solo se difunde lo que de verdad cambio de estado.
         publisher.publicarVarios(r.logradas());
 
         Map<String, Object> cuerpo = new LinkedHashMap<>();
-        cuerpo.put("ok", r.todoOk());
+        List<Long> rechazadas = new java.util.ArrayList<>(r.rechazadas());
+        rechazadas.addAll(noPermitidas);
+        cuerpo.put("ok", r.todoOk() && noPermitidas.isEmpty());
         cuerpo.put("logradas", r.logradas());
-        cuerpo.put("rechazadas", r.rechazadas());
+        cuerpo.put("rechazadas", rechazadas);
         cuerpo.put("mensaje", r.todoOk()
                 ? (agregar ? "Casetas agregadas" : "Casetas liberadas")
                 : (agregar
@@ -278,6 +324,30 @@ public class PuestoApiController {
     }
 
     public record NuevaCaseta(Long categoriaId, String codigo, String tamano) {
+    }
+
+    /**
+     * Renumera un grupo de casetas de una vez: el editor manda los numeros ya calculados en
+     * el orden en que se leen sobre el plano.
+     *
+     * Va como lote y no caseta por caseta porque renumerar es una permutacion: mandar los
+     * cambios sueltos obligaria a pasar por estados con numeros repetidos y cualquier fallo a
+     * medias dejaria el plano incoherente. El servicio valida el conjunto entero y, si algo
+     * choca, no escribe nada y esto responde 409.
+     */
+    @PatchMapping("/codigos")
+    @PreAuthorize(Roles.EDITA_PLANO)
+    public ResponseEntity<Map<String, Object>> renumerar(
+            @RequestBody List<PuestoMapaService.Codigo> cambios) {
+        Long usuarioId = usuarioActual();
+        if (usuarioId == null) return noAutenticado();
+
+        PuestoMapaService.ResultadoRenumeracion r = mapaService.renumerar(cambios, usuarioId);
+        // El numero rotula la caseta en TODOS los mapas abiertos, asi que se difunde igual
+        // que un cambio de estado: el cliente no vuelve a pedir la lista.
+        if (r.ok()) publisher.publicarVarios(r.cambiados());
+        return ResponseEntity.status(r.ok() ? 200 : 409).body(Map.<String, Object>of(
+                "ok", r.ok(), "mensaje", r.mensaje(), "cambiados", r.cambiados().size()));
     }
 
     /**

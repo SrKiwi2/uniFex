@@ -88,7 +88,7 @@ class ResponsableFotoTest {
 
     private Long registrarVenta(String entidad, Long puestoId) {
         NuevaVenta v = new NuevaVenta(
-                entidad, "123", "Desc", "Objeto", "Rep Legal", "999",
+                entidad, "123", "Desc", "Objeto", "Rep Legal", "999", "71234567",
                 jdbc.queryForObject("SELECT id FROM tipo_entidad ORDER BY id LIMIT 1", Long.class),
                 LocalDate.now(), LocalDate.now().plusDays(3),
                 List.of(new DatosPersona("TITULAR", "Perez", "Lopez", "111", "t@x.com", "700"),

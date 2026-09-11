@@ -1,6 +1,8 @@
 package com.usic.uniFex.controller.puesto;
 
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
@@ -8,6 +10,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -41,6 +44,33 @@ public class CategoriaApiController {
     private final CategoriaMapaService service;
     private final PuestoEventPublisher publisher;
     private final IPuestoDao puestoDao;
+
+    /**
+     * Las categorias vivas del plano.
+     *
+     * Faltaba: este controlador solo tenia POST, PATCH y DELETE, asi que un GET a
+     * /api/app/categorias no lo atendia nadie, caia en /error y volvia al cliente como un 302 al
+     * login. La pantalla de Vendedores lo pedia para llenar su desplegable y se quedaba vacio
+     * sin dar ningun error entendible.
+     *
+     * El Editor no lo necesita porque saca las categorias de la propia lista de casetas, pero eso
+     * solo muestra las que YA tienen casetas: para asignar una categoria recien creada hace falta
+     * la lista de verdad.
+     */
+    @GetMapping
+    public List<Map<String, Object>> listar() {
+        return service.listar().stream()
+                .map(c -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("id", c.getId());
+                    m.put("nombre", c.getNombre());
+                    m.put("color", c.getColor());
+                    m.put("forma", c.getForma());
+                    m.put("precioBase", c.getPrecioBase());
+                    return m;
+                })
+                .toList();
+    }
 
     /** Crea la categoria y sus N casetas, y las difunde para que aparezcan en los mapas abiertos. */
     @PostMapping

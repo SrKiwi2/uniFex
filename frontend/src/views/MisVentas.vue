@@ -2,9 +2,11 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { apiFetch } from '../api';
 import { toast } from '../ui/toast';
+import { descargarRecibo } from '../ui/descargas';
 import { usePuestosStore } from '../stores/puestos.js';
 import UiModal from '../components/UiModal.vue';
 import FotosResponsables from '../components/FotosResponsables.vue';
+import ArchivoPreview from '../components/ArchivoPreview.vue';
 
 const tienda = usePuestosStore();
 const items = ref([]);       // filas de fn_get_inscripciones: una por (inscripción, categoría)
@@ -175,6 +177,7 @@ const pendientes = ref([]);
 const subiendo = ref(null);   // id de la inscripcion cuyo comprobante esta subiendo
 const entradaArchivo = ref(null);
 const idParaComprobante = ref(null);
+const archivoSeleccionado = ref(null); // para vista previa
 
 async function cargarPendientes() {
   try {
@@ -189,10 +192,17 @@ function elegirComprobante(id) {
   entradaArchivo.value?.click();
 }
 
-async function subirComprobante(evento) {
+/** Archivo elegido -> abre vista previa para confirmar antes de subir. */
+function onArchivoElegido(evento) {
   const archivo = evento.target.files?.[0];
-  const id = idParaComprobante.value;
   evento.target.value = ''; // permitir volver a elegir el mismo archivo
+  if (!archivo) return;
+  archivoSeleccionado.value = archivo;
+}
+
+/** Sube el comprobante confirmado desde la vista previa. */
+async function confirmarSubidaComprobante(archivo) {
+  const id = idParaComprobante.value;
   if (!archivo || !id) return;
 
   subiendo.value = id;
@@ -211,24 +221,16 @@ async function subirComprobante(evento) {
   } finally {
     subiendo.value = null;
     idParaComprobante.value = null;
+    archivoSeleccionado.value = null;
   }
 }
 
 /**
- * Descarga el recibo. Se pide con apiFetch (lleva el token) y se abre desde un blob:
- * un <a href> normal no puede mandar la cabecera Authorization, asi que caeria en un 401.
+ * Baja el recibo. Va por el mismo helper que el registro de la venta para que se comporte
+ * igual en los dos sitios: en el APK, abrir un blob en una pestaña no hace nada.
  */
-async function verRecibo(id) {
-  try {
-    const r = await apiFetch(`/api/app/inscripciones/${id}/recibo`);
-    if (!r.ok) { toast('No se pudo generar el recibo', 'error'); return; }
-    const url = URL.createObjectURL(await r.blob());
-    window.open(url, '_blank');
-    // Liberar el objeto: si no, el blob se queda en memoria toda la sesion.
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-  } catch (e) {
-    toast(e.message, 'error');
-  }
+function verRecibo(id) {
+  return descargarRecibo(id);
 }
 
 // ---------------------------------------------------------------- tiempo real
@@ -265,11 +267,11 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
     <span v-if="edicionSel" class="muted">mostrando {{ edicionVisible }}</span>
   </div>
 
-  <!-- Entrada de archivo unica y oculta: en el móvil abre la cámara o la galería.
+  <!-- Entrada de archivo única y oculta: en el móvil abre la cámara o la galería.
        `capture` no se fuerza a propósito — muchos comprobantes ya están en la galería
        como captura de la transferencia. -->
   <input ref="entradaArchivo" type="file" accept="image/*,application/pdf"
-         class="oculto" @change="subirComprobante" />
+         class="oculto" @change="onArchivoElegido" />
 
   <!-- Pendientes primero: es lo único de esta pantalla sobre lo que hay que actuar. -->
   <section v-if="pendientes.length" class="card pendientes">
@@ -294,6 +296,17 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
       </li>
     </ul>
   </section>
+
+  <!-- Vista previa del comprobante antes de subir -->
+  <ArchivoPreview
+    v-if="archivoSeleccionado"
+    :archivo="archivoSeleccionado"
+    :texto-confirmar="'Subir comprobante'"
+    :texto-cancelar="'Cancelar'"
+    :previsualizar-imagen="true"
+    @confirmar="confirmarSubidaComprobante"
+    @cancelar="archivoSeleccionado = null"
+  />
 
   <div class="tarjetas">
       <div class="card kpi">

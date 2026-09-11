@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue';
 import { apiFetch } from '../api';
 import { url as urlServidor } from '../config';
 import { toast } from '../ui/toast';
+import ArchivoPreview from './ArchivoPreview.vue';
 
 /*
  * Las fotos de los responsables de UNA venta: las que despues van en su credencial.
@@ -23,6 +24,10 @@ const cargando = ref(false);
 /** Id del responsable con una subida en curso: bloquea SOLO su tarjeta, no la lista. */
 const ocupado = ref(null);
 const entradas = ref({});
+/** Archivo seleccionado para vista previa antes de subir. */
+const archivoSeleccionado = ref(null);
+/** Id del responsable al que se le va a subir la foto. */
+const responsableParaFoto = ref(null);
 
 const completas = computed(() =>
   responsables.value.length > 0 && responsables.value.every((r) => r.tieneFoto));
@@ -45,25 +50,34 @@ async function cargar() {
   }
 }
 
-async function subir(responsable, evento) {
+/** Al elegir archivo -> abre vista previa. */
+function onArchivoElegido(responsable, evento) {
   const archivo = evento.target.files?.[0];
   evento.target.value = '';
   if (!archivo) return;
+  responsableParaFoto.value = responsable.id;
+  archivoSeleccionado.value = archivo;
+}
 
-  ocupado.value = responsable.id;
+/** Sube la foto confirmada desde la vista previa. */
+async function confirmarSubidaFoto(archivo) {
+  const responsableId = responsableParaFoto.value;
+  if (!archivo || !responsableId) return;
+
+  ocupado.value = responsableId;
   try {
     const datos = new FormData();
     datos.append('archivo', archivo);
     const r = await apiFetch(
-      `/api/app/inscripciones/${props.inscripcionId}/responsables/${responsable.id}/foto`,
+      `/api/app/inscripciones/${props.inscripcionId}/responsables/${responsableId}/foto`,
       { method: 'POST', body: datos });
     const d = await r.json().catch(() => ({}));
     if (r.ok && d.ok) {
       // Se reemplaza en el sitio con lo que devolvio el servidor (trae la url nueva), en vez
       // de recargar la lista entera: el resto de las tarjetas no cambio.
-      const i = responsables.value.findIndex((x) => x.id === responsable.id);
+      const i = responsables.value.findIndex((x) => x.id === responsableId);
       if (i >= 0 && d.responsable) responsables.value[i] = d.responsable;
-      toast(`Foto de ${responsable.nombre} guardada`, 'ok');
+      toast(`Foto guardada`, 'ok');
     } else {
       toast(d.mensaje || 'No se pudo guardar la foto', 'error');
     }
@@ -71,6 +85,8 @@ async function subir(responsable, evento) {
     toast(e.message, 'error');
   } finally {
     ocupado.value = null;
+    responsableParaFoto.value = null;
+    archivoSeleccionado.value = null;
   }
 }
 
@@ -125,7 +141,7 @@ watch(() => props.inscripcionId, cargar, { immediate: true });
         <div class="datos">
           <strong>{{ r.nombre }}</strong>
           <span class="muted">
-            {{ r.esTitular ? 'Titular' : 'Acompañante' }}{{ r.ci ? ` · C.I. ${r.ci}` : '' }}
+            {{ r.esTitular ? 'Responsable 1' : 'Responsable 2' }}{{ r.ci ? ` · C.I. ${r.ci}` : '' }}
           </span>
         </div>
 
@@ -133,7 +149,7 @@ watch(() => props.inscripcionId, cargar, { immediate: true });
           <!-- Sin `capture`: a veces la foto ya está en la galería (la mandó el cliente por
                WhatsApp) y forzar la cámara obligaría a fotografiar una pantalla. -->
           <input :ref="(el) => (entradas[r.id] = el)" type="file" accept="image/*"
-                 class="oculto" @change="(e) => subir(r, e)" />
+                 class="oculto" @change="(e) => onArchivoElegido(r, e)" />
           <button class="btn btn-sm" :disabled="ocupado === r.id"
                   @click="entradas[r.id]?.click()">
             {{ ocupado === r.id ? 'Guardando…' : (r.tieneFoto ? 'Cambiar' : '📷 Agregar foto') }}
@@ -144,6 +160,17 @@ watch(() => props.inscripcionId, cargar, { immediate: true });
       </li>
     </ul>
   </div>
+
+  <!-- Vista previa de la foto antes de subir -->
+  <ArchivoPreview
+    v-if="archivoSeleccionado"
+    :archivo="archivoSeleccionado"
+    :texto-confirmar="'Subir foto'"
+    :texto-cancelar="'Cancelar'"
+    :previsualizar-imagen="true"
+    @confirmar="confirmarSubidaFoto"
+    @cancelar="archivoSeleccionado = null"
+  />
 </template>
 
 <style scoped>

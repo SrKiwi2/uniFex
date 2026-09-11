@@ -115,7 +115,7 @@ class RegistroVentaTest {
     private NuevaVenta venta(List<Long> puestos) {
         return new NuevaVenta(
                 NOMBRE_PRUEBA, "123456789", "Descripcion", "Objeto",
-                "Representante Legal", "99887766",
+                "Representante Legal", "99887766", "71234567",
                 jdbc.queryForObject("SELECT id FROM tipo_entidad ORDER BY id LIMIT 1", Long.class),
                 LocalDate.now(), LocalDate.now().plusDays(5),
                 List.of(new DatosPersona("TITULAR", "Perez", "Lopez", "111", "t@x.com", "700"),
@@ -326,7 +326,8 @@ class RegistroVentaTest {
         NuevaVenta base = venta(libres.stream().map(Puesto::getId).toList());
         NuevaVenta conTres = new NuevaVenta(
                 base.entidadNombre(), base.nit(), base.descripcion(), base.objeto(),
-                base.representanteLegal(), base.ciRepresentante(), base.tipoEntidadId(),
+                base.representanteLegal(), base.ciRepresentante(), base.celularRepresentante(),
+                base.tipoEntidadId(),
                 base.fechaInicio(), base.fechaFin(),
                 List.of(new DatosPersona("A", "A", "A", "1", null, null),
                         new DatosPersona("B", "B", "B", "2", null, null),
