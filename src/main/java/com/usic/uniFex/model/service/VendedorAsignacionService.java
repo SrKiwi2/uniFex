@@ -1,6 +1,7 @@
 package com.usic.uniFex.model.service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -10,6 +11,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.usic.uniFex.model.dao.IUsuarioDao;
 import com.usic.uniFex.model.dao.IVendedorAsignacionDao;
@@ -39,6 +42,7 @@ public class VendedorAsignacionService {
     private static final Logger logger = LoggerFactory.getLogger(VendedorAsignacionService.class);
 
     private final IVendedorAsignacionDao dao;
+    private final PuestoEventPublisher publisher;
     private final IUsuarioDao usuarioDao;
     private final NotificacionService notificaciones;
 
@@ -49,6 +53,7 @@ public class VendedorAsignacionService {
     @Transactional
     public void quitarPuesto(Long vendedorId, Long puestoId) {
         dao.quitarPuesto(vendedorId, puestoId);
+        difundirCambios(List.of(puestoId));
     }
 
     @Transactional(readOnly = true)
@@ -135,6 +140,8 @@ public class VendedorAsignacionService {
         if (!porCategoria.isEmpty()) {
             avisarAlVendedor(vendedorId, redactar(porCategoria));
         }
+        // Que los mapas abiertos —web y APK— se enteren sin recargar nada.
+        difundirCambios(Stream.concat(sumadas.stream(), quitadas.stream()).distinct().toList());
         return new ResultadoAsignacion(sumadas.size(), quitadas.size(), noDisponibles, porCategoria);
     }
 
@@ -243,7 +250,9 @@ public class VendedorAsignacionService {
      */
     @Transactional
     public void liberarAsignacionesDe(Long vendedorId) {
+        List<Long> sueltas = List.copyOf(getPuestoIdsDeVendedor(vendedorId));
         dao.borrarAsignacionesDe(vendedorId);
+        difundirCambios(sueltas);
     }
 
     // ===== VALIDACIONES =====
@@ -281,6 +290,43 @@ public class VendedorAsignacionService {
                         nombreDe(f[2], f[3], f[4], f[6]),
                         limpio(f[5])))
                 .toList();
+    }
+
+    /**
+     * Difunde a todos los mapas abiertos como queda la asignacion de unas casetas.
+     *
+     * Dos decisiones que importan:
+     *
+     * 1. Se RELEE el estado real de esas casetas en vez de deducirlo de lo que se acaba de
+     *    hacer. La tabla permite que una caseta este habilitada a mas de un vendedor (el
+     *    UNIQUE es sobre el par), asi que "se la quite a A" no significa "se quedo sin
+     *    dueño": podria seguir siendo de B. Deducirlo pintaria gris una caseta vendible.
+     *
+     * 2. Se publica DESPUES del commit. Publicar dentro de la transaccion y que esta falle
+     *    despues dejaria a los moviles mostrando una asignacion que nunca existio. Es la
+     *    misma regla que sigue el estado de las casetas.
+     */
+    private void difundirCambios(List<Long> puestoIds) {
+        if (puestoIds == null || puestoIds.isEmpty()) return;
+
+        Map<Long, AsignacionPuestoDTO> vigentes = asignacionesConVendedor().stream()
+                .filter(a -> puestoIds.contains(a.puestoId()))
+                .collect(Collectors.toMap(AsignacionPuestoDTO::puestoId, a -> a, (x, y) -> x));
+
+        List<AsignacionPuestoDTO> cambios = puestoIds.stream()
+                .map(id -> vigentes.getOrDefault(id, new AsignacionPuestoDTO(id, null, null, null)))
+                .toList();
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    publisher.publicarAsignaciones(cambios);
+                }
+            });
+        } else {
+            publisher.publicarAsignaciones(cambios);
+        }
     }
 
     /** Como {@link #texto}, pero recorta y convierte el vacio en null. */

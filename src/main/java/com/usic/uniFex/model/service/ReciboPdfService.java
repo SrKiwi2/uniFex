@@ -25,7 +25,6 @@ import com.itextpdf.text.Paragraph;
 import com.itextpdf.text.Phrase;
 import com.itextpdf.text.Rectangle;
 import com.itextpdf.text.pdf.BarcodeQRCode;
-import com.itextpdf.text.pdf.ColumnText;
 import com.itextpdf.text.pdf.PdfContentByte;
 import com.itextpdf.text.pdf.PdfPCell;
 import com.itextpdf.text.pdf.PdfPTable;
@@ -207,7 +206,7 @@ public class ReciboPdfService {
         // ---- Cabecera: quien emite a la izquierda, identificacion a la derecha ----
         PdfPTable cab = tabla(new float[] { 62, 38 });
         Paragraph izq = new Paragraph();
-        izq.add(new Phrase("Universidad Adventista de Bolivia\n", fMarca));
+        izq.add(new Phrase("UNIVERSIDAD AMAZÓNICA DE PANDO\n", fMarca));
         izq.add(new Phrase(nvl(d.ins().getEdicion() != null ? d.ins().getEdicion().getNombre() : "FEXPO UAP") + "\n", fEdicion));
         izq.add(new Phrase("NOTA DE VENTA · documento interno", fSmall));
         izq.setLeading(fMarca.getSize() * 1.15f);

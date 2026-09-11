@@ -23,9 +23,11 @@ import { urlWebSocket } from './config.js';
  * @param onConectado    se llamo al suscribirse con exito
  * @param onNotificacion recibe las notificaciones personales (solicitudes de cancelacion)
  * @param onCerrado      la conexion se cayo (no es un rechazo: stompjs reintentara sola)
+ * @param onAsignaciones lista de cambios de "que caseta lleva quien"
  * @returns el cliente (usar .deactivate() al cerrar sesion)
  */
-export function crearClientePuestos(onEstado, onRechazo, onConectado, onNotificacion, onCerrado) {
+export function crearClientePuestos(onEstado, onRechazo, onConectado, onNotificacion, onCerrado,
+                                    onAsignaciones) {
   const auth = useAuthStore();
 
   const client = new Client({
@@ -44,6 +46,18 @@ export function crearClientePuestos(onEstado, onRechazo, onConectado, onNotifica
           /* ignora mensajes malformados */
         }
       });
+      // Cambios de asignacion: que caseta pasa a llevar quien. Llega el DELTA —solo las
+      // casetas que cambiaron— para que reasignar tres no cueste la lista entera a cada
+      // movil conectado. Una caseta sin vendedor viaja con vendedorId nulo.
+      if (onAsignaciones) {
+        client.subscribe('/topic/asignaciones', (msg) => {
+          try {
+            onAsignaciones(JSON.parse(msg.body));
+          } catch (_) {
+            /* ignora mensajes malformados */
+          }
+        });
+      }
       // El topic personal: cada usuario recibe solo lo suyo. Si aun no hay id
       // (no habia token), no hay nada que escuchar.
       if (auth.id != null && onNotificacion) {

@@ -2,12 +2,19 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
+    <!-- El icono de la pestaña. Se declaran los dos tamaños porque el navegador elige: 16 px
+         para la pestaña y 32 px para la barra de marcadores y la pantalla de inicio. Es el
+         badge cuadrado y no el logotipo apaisado: a 16 px un dibujo con letras no se lee. -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#083D14" />
     <!-- `viewport-fit=cover` no es decorativo: sin el, env(safe-area-inset-*) devuelve 0 y
          TODO el codigo que ya lo usaba (barra inferior, avisos) no hacia nada. Desde que el
          APK apunta a la API 35+, Android dibuja la app de borde a borde sin opcion a
          desactivarlo, asi que los margenes seguros los tiene que respetar la propia pagina. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>UniFex — Casetas</title>
+    <title>FEXPO UAP — Casetas</title>
   </head>
   <body>
     <div id="app"></div>

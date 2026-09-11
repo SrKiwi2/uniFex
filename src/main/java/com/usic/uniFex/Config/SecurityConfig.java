@@ -65,7 +65,13 @@ public class SecurityConfig {
                 "http://localhost:5173",    // SPA en desarrollo
                 "http://localhost:7676"));  // la propia app servida por Spring
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Origen"));
+        // If-None-Match lo manda el cliente para preguntar "¿cambio algo?"; sin declararlo,
+        // el navegador lo borra en silencio y el servidor responde SIEMPRE la lista entera.
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Origen", "If-None-Match"));
+        // Y sin exponer ETag, el cliente no puede LEER la etiqueta que acaba de recibir, asi
+        // que nunca podria preguntar. Las dos cosas fallan calladas: no hay error, solo se
+        // sigue bajando todo. En la feria eso son 250 KB por sincronizacion y por movil.
+        config.setExposedHeaders(List.of("ETag"));
         config.setMaxAge(3600L); // cachea el preflight una hora: menos ida y vuelta en movil
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

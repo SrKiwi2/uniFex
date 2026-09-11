@@ -168,9 +168,15 @@ titulo('Almacen de casetas: copia en disco y resincronizacion');
   let peticiones = 0;
   // Cada carga son DOS peticiones: el listado de casetas y quien responde por cada una.
   const responder = (ruta) => (String(ruta).includes('asignaciones') ? asignado : servidor);
+  // La respuesta simulada lleva cabeceras porque el store lee el ETag de cada una.
+  let etagServidor = '"v1"';
+  let sinCambios = false;   // cuando el servidor decide contestar 304
+  const respuesta = (ruta) => (sinCambios
+    ? { status: 304, ok: false, headers: new Map([['ETag', etagServidor]]), json: async () => { throw new Error('un 304 no trae cuerpo'); } }
+    : { status: 200, ok: true, headers: new Map([['ETag', etagServidor]]), json: async () => JSON.parse(JSON.stringify(responder(ruta))) });
   globalThis.fetch = async (ruta) => {
     peticiones++;
-    return { status: 200, ok: true, json: async () => JSON.parse(JSON.stringify(responder(ruta))) };
+    return respuesta(ruta);
   };
   const caseta = (id, x, y, estado = 'L') =>
     ({ id, codigo: String(id), categoriaId: 1, estado, mapaX: x, mapaY: y, mapaEscala: 1 });
@@ -227,8 +233,7 @@ titulo('Almacen de casetas: copia en disco y resincronizacion');
   const retenidas = [];
   globalThis.fetch = (ruta) => {
     peticiones++;
-    return new Promise((r) => retenidas.push(
-      () => r({ status: 200, ok: true, json: async () => responder(ruta) })));
+    return new Promise((r) => retenidas.push(() => r(respuesta(ruta))));
   };
   const enCurso = t.asegurar();
   paso('arranque en frio: hay mapa ANTES de que conteste el servidor',
@@ -239,6 +244,18 @@ titulo('Almacen de casetas: copia en disco y resincronizacion');
   retenidas.forEach((soltar) => soltar());
   await enCurso;
   paso('al contestar, deja de estar marcado', t.desdeCache === false);
+
+  // Se devuelve el simulador que contesta al momento: el de arriba retiene las respuestas a
+  // proposito y dejaria colgada cualquier carga posterior.
+  globalThis.fetch = async (ruta) => { peticiones++; return respuesta(ruta); };
+
+  const antesDel304 = t.puestos.length;
+  sinCambios = true;
+  await t.recargar();
+  paso('un 304 conserva el mapa (no lo deja en blanco)', t.puestos.length === antesDel304,
+       `${t.puestos.length} de ${antesDel304}`);
+  paso('y aun asi cuenta como sincronizado', t.ultimaSync > 0 && t.desdeCache === false);
+  sinCambios = false;
 
   paso('escucha el volver al frente', oyentes.doc.has('visibilitychange'));
   paso('escucha la vuelta de la red', oyentes.win.has('online'));
@@ -565,7 +582,7 @@ titulo('Casetas asignadas a otro vendedor');
 
   const store = leer('frontend/src/stores/puestos.js');
   paso('el store pide las asignaciones junto con el listado',
-       store.includes("apiFetch('/api/app/puestos/asignaciones')") && store.includes('Promise.all'));
+       /apiFetch\('\/api\/app\/puestos\/asignaciones'/.test(store) && store.includes('Promise.all'));
   paso('y las guarda en la copia en disco (si no, el arranque en frio pinta todo gris)',
        /asignaciones: \[\.\.\.asignaciones\.value\.entries\(\)\]/.test(store));
 
@@ -581,6 +598,104 @@ titulo('Casetas asignadas a otro vendedor');
   paso('la ficha no ofrece vender una caseta ajena', /if \(!props\.vendible\) return null;/.test(ficha));
   paso('pero si da el contacto del companiero',
        ficha.includes('asignacion.vendedor') && ficha.includes('`tel:${telefono}`'));
+}
+
+// ---------------------------------------------------------------- cambios en vivo y datos
+/*
+ * Dos cosas que, mal puestas, no dan ningun error y solo se notan usando la app en la feria:
+ *
+ *   1. Si un cambio de asignacion no se difunde, los mapas abiertos siguen pintando lo
+ *      viejo hasta la siguiente resincronizacion.
+ *   2. Si el ETag no llega al cliente —basta con que CORS no lo exponga— cada
+ *      resincronizacion vuelve a bajar la lista entera. Con la red de la feria, eso es la
+ *      diferencia entre un mapa que responde y uno que se queda pensando.
+ */
+titulo('Cambios en vivo y consumo de datos');
+{
+  const { readFileSync } = await import('node:fs');
+  const RAIZ = resolve(AQUI, '../../../..') + '/';
+  const leer = (p) => readFileSync(RAIZ + p, 'utf8');
+
+  const pub = leer('src/main/java/com/usic/uniFex/model/service/PuestoEventPublisher.java');
+  paso('existe el topic de asignaciones', pub.includes('"/topic/asignaciones"'));
+  paso('un fallo al difundir no tumba la operacion ya guardada',
+       /publicarAsignaciones[\s\S]{0,600}catch \(Exception/.test(pub));
+
+  const svc = leer('src/main/java/com/usic/uniFex/model/service/VendedorAsignacionService.java');
+  for (const [que, metodo] of [['asignar/reasignar', 'reemplazarPuestos'],
+                               ['quitar una caseta', 'quitarPuesto'],
+                               ['dar de baja al vendedor', 'liberarAsignacionesDe']]) {
+    const i = svc.indexOf(`public ${metodo === 'reemplazarPuestos' ? 'ResultadoAsignacion ' : 'void '}${metodo}(`);
+    paso(`${que} difunde el cambio`, i > 0 && svc.slice(i, i + 1400).includes('difundirCambios'));
+  }
+  paso('se difunde DESPUES del commit', svc.includes('TransactionSynchronizationManager.isSynchronizationActive'));
+  paso('y se relee el estado real en vez de deducirlo',
+       /difundirCambios[\s\S]{0,900}asignacionesConVendedor\(\)/.test(svc));
+
+  const sec = leer('src/main/java/com/usic/uniFex/Config/SecurityConfig.java');
+  paso('CORS deja pasar If-None-Match (si no, el cliente nunca puede preguntar)',
+       /setAllowedHeaders\([^)]*"If-None-Match"/.test(sec));
+  paso('y expone ETag (si no, el cliente no puede leer la etiqueta)',
+       /setExposedHeaders\(List\.of\("ETag"\)\)/.test(sec));
+
+  const web = leer('src/main/java/com/usic/uniFex/Config/WebConfig.java');
+  paso('el filtro de ETag cubre las dos lecturas grandes del mapa',
+       web.includes('ShallowEtagHeaderFilter')
+         && web.includes('"/api/app/puestos", "/api/app/puestos/asignaciones"'));
+
+  const store = leer('frontend/src/stores/puestos.js');
+  paso('el cliente pregunta con If-None-Match', store.includes("'If-None-Match': etag"));
+  paso('y no descarga nada cuando recibe 304', /if \(r\.status !== 304\)/.test(store));
+  paso('las etiquetas se olvidan al cerrar sesion', /etagPuestos = null/.test(store));
+  paso('los cambios de asignacion se aplican sin volver a pedir nada',
+       store.includes('function aplicarAsignaciones') && !/aplicarAsignaciones[\s\S]{0,400}apiFetch/.test(store));
+  paso('y la copia en disco se mantiene coherente',
+       /aplicarAsignaciones[\s\S]{0,700}guardarCache\(\)/.test(store));
+  paso('ws.js escucha el topic', leer('frontend/src/ws.js').includes("'/topic/asignaciones'"));
+}
+
+// ---------------------------------------------------------------- identidad
+titulo('Identidad: icono, pestaña y bienvenida');
+{
+  const { readFileSync, existsSync, statSync } = await import('node:fs');
+  const { execFileSync } = await import('node:child_process');
+  const RAIZ = resolve(AQUI, '../../../..') + '/';
+  const hay = (p) => existsSync(RAIZ + p);
+
+  paso('el generador de marca esta en el repo y es ejecutable',
+       hay('frontend/generar-marca.sh') && (statSync(RAIZ + 'frontend/generar-marca.sh').mode & 0o111) !== 0);
+  paso('los dos originales siguen ahi',
+       hay('frontend/imagenes/logoFexpoUapV2.png') && hay('frontend/imagenes/iconoFexpoUapV2Apk.png'));
+
+  const medir = (p) => execFileSync('identify', ['-format', '%wx%h', RAIZ + p]).toString();
+  const RES = 'frontend/android/app/src/main/res/';
+  const faltan = [];
+  for (const [d, icono, frente] of [['mdpi', 48, 108], ['hdpi', 72, 162], ['xhdpi', 96, 216],
+                                    ['xxhdpi', 144, 324], ['xxxhdpi', 192, 432]]) {
+    for (const [archivo, lado] of [['ic_launcher.png', icono], ['ic_launcher_round.png', icono],
+                                   ['ic_launcher_foreground.png', frente]]) {
+      const ruta = `${RES}mipmap-${d}/${archivo}`;
+      if (!hay(ruta) || medir(ruta) !== `${lado}x${lado}`) faltan.push(`${d}/${archivo}`);
+    }
+  }
+  paso('los 15 iconos del lanzador estan en su tamaño', faltan.length === 0, faltan.join(', '));
+  paso('el fondo del icono adaptativo ya no es blanco',
+       !/#FFFFFF/i.test(readFileSync(RAIZ + RES + 'values/ic_launcher_background.xml', 'utf8')));
+
+  const html = readFileSync(RAIZ + 'frontend/index.html', 'utf8');
+  paso('la pestaña del navegador lleva el logo',
+       /rel="icon"[^>]*favicon-32\.png/.test(html) && /rel="icon"[^>]*favicon-16\.png/.test(html));
+  paso('y los archivos existen', hay('frontend/public/favicon-32.png') && hay('frontend/public/favicon-16.png'));
+
+  paso('la bienvenida existe y esta montada',
+       hay('frontend/src/components/Bienvenida.vue')
+         && readFileSync(RAIZ + 'frontend/src/App.vue', 'utf8').includes('<Bienvenida'));
+  const bien = readFileSync(RAIZ + 'frontend/src/components/Bienvenida.vue', 'utf8');
+  paso('se puede saltar tocando', bien.includes('@click="terminar"'));
+  paso('respeta a quien pidio menos movimiento', bien.includes('prefers-reduced-motion'));
+  paso('usa el mismo negro que el splash nativo, para que no se vea la costura',
+       /background:\s*#000/.test(bien));
+  paso('el logo de la bienvenida esta empaquetado', hay('frontend/public/logo-fexpo.png'));
 }
 
 console.log(fallos.length ? `\n${fallos.length} paso(s) fallaron:` : '\nTodo paso.');

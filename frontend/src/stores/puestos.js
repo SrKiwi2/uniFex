@@ -41,6 +41,18 @@ export const usePuestosStore = defineStore('puestos', () => {
   let promesaCarga = null;
   let alRechazar = null;
   let yaConecto = false;
+  /** Ultima lista tal cual la mando el servidor. Es la que se guarda en disco: la de pantalla
+   *  puede llevar geometria local sin guardar del Editor, que no debe persistirse. */
+  let ultimaLista = [];
+  /*
+   * Etiquetas HTTP de las dos lecturas. Se devuelven al servidor en `If-None-Match` y, si nada
+   * cambio, contesta 304 SIN cuerpo: unos cientos de bytes en vez de la lista entera. Como el
+   * cliente resincroniza a menudo —al reconectar, al volver del fondo, al sondear— y casi
+   * siempre no ha cambiado nada, esto es lo que hace que el mapa siga siendo usable con mala
+   * cobertura.
+   */
+  let etagPuestos = null;
+  let etagAsignaciones = null;
   let sondeo = null;
   let oyentesCiclo = false;
 
@@ -77,10 +89,23 @@ export const usePuestosStore = defineStore('puestos', () => {
    */
   const CLAVE_CACHE = 'puestos.cache.v1';
 
-  function guardarCache(lista) {
+  /**
+   * Opciones de una lectura condicionada.
+   *
+   * `cache: 'no-store'` es deliberado: sin el, el navegador puede revalidar por su cuenta y
+   * devolver un 200 desde SU cache, y entonces nunca se veria el 304 ni se sabria si hubo
+   * cambios. Aqui la etiqueta la lleva la app, no el navegador.
+   */
+  const condicional = (etag) => ({
+    cache: 'no-store',
+    ...(etag ? { headers: { 'If-None-Match': etag } } : {}),
+  });
+
+  function guardarCache() {
+    if (!ultimaLista.length) return;
     try {
       localStorage.setItem(CLAVE_CACHE, JSON.stringify({
-        ts: Date.now(), lista, asignaciones: [...asignaciones.value.entries()],
+        ts: Date.now(), lista: ultimaLista, asignaciones: [...asignaciones.value.entries()],
       }));
     } catch {
       // Cuota llena o modo privado. La copia es un lujo: nunca se aborta una carga por esto.
@@ -94,6 +119,7 @@ export const usePuestosStore = defineStore('puestos', () => {
       const guardado = JSON.parse(localStorage.getItem(CLAVE_CACHE) || 'null');
       if (!guardado?.lista?.length) return false;
       puestos.value = guardado.lista;
+      ultimaLista = guardado.lista;
       // Sin las asignaciones, el arranque en frio pintaria de gris hasta las casetas propias.
       if (Array.isArray(guardado.asignaciones)) {
         asignaciones.value = new Map(guardado.asignaciones);
@@ -194,6 +220,28 @@ export const usePuestosStore = defineStore('puestos', () => {
     });
   }
 
+  /**
+   * Aplica los cambios de asignacion que llegan por WebSocket.
+   *
+   * Es la mitad que faltaba: hasta ahora, reasignar casetas desde Vendedores no se veia en un
+   * mapa ya abierto hasta la siguiente resincronizacion. Ahora el cambio entra al instante y
+   * sin pedir nada, porque el mensaje trae la informacion, no un aviso de "vuelve a pedirlo".
+   * Un `vendedorId` nulo significa que la caseta se quedo sin vendedor.
+   */
+  function aplicarAsignaciones(cambios) {
+    if (!Array.isArray(cambios) || !cambios.length) return;
+    const m = new Map(asignaciones.value);
+    for (const a of cambios) {
+      if (a?.puestoId == null) continue;
+      if (a.vendedorId == null) m.delete(a.puestoId);
+      else m.set(a.puestoId, a);
+    }
+    asignaciones.value = m;
+    // La copia en disco tiene que quedar coherente, o el proximo arranque en frio pintaria
+    // con la asignacion vieja hasta que conteste el servidor.
+    guardarCache();
+  }
+
   /** Registra un guardia de cambios sin guardar. Devuelve la funcion para quitarlo. */
   function protegerLocales(fn) {
     guardias.add(fn);
@@ -212,19 +260,28 @@ export const usePuestosStore = defineStore('puestos', () => {
       try {
         // Las dos peticiones van juntas: el mapa necesita las dos para pintar bien —sin las
         // asignaciones, las casetas propias saldrian grises— y en serie serian dos esperas.
+        // Y van CONDICIONADAS: si nada cambio desde la ultima vez, el servidor contesta 304
+        // sin cuerpo y esto no descarga nada.
         const [r, rAsig] = await Promise.all([
-          apiFetch('/api/app/puestos'),
-          apiFetch('/api/app/puestos/asignaciones').catch(() => null),
+          apiFetch('/api/app/puestos', condicional(etagPuestos)),
+          apiFetch('/api/app/puestos/asignaciones', condicional(etagAsignaciones)).catch(() => null),
         ]);
-        const lista = await r.json();
-        if (rAsig?.ok) {
+
+        if (r.status !== 304) {
+          etagPuestos = r.headers.get('ETag') || etagPuestos;
+          const lista = await r.json();
+          ultimaLista = lista;
+          fusionar(lista);
+        }
+        if (rAsig && rAsig.status !== 304 && rAsig.ok) {
+          etagAsignaciones = rAsig.headers.get('ETag') || etagAsignaciones;
           const filas = await rAsig.json().catch(() => []);
           asignaciones.value = new Map(filas.map((a) => [a.puestoId, a]));
         }
-        fusionar(lista);
+
         desdeCache.value = false;
         ultimaSync.value = Date.now();
-        guardarCache(lista);
+        guardarCache();
       } catch (e) {
         error.value = e.message;
         promesaCarga = null; // permitir reintento tras un fallo
@@ -343,6 +400,7 @@ export const usePuestosStore = defineStore('puestos', () => {
         oyentesNotificacion.forEach((fn) => fn(notificacion));
       },
       () => { enVivo.value = false; },
+      aplicarAsignaciones,
     );
   }
 
@@ -375,6 +433,11 @@ export const usePuestosStore = defineStore('puestos', () => {
     desdeCache.value = false;
     ultimaSync.value = 0;
     asignaciones.value = new Map();
+    ultimaLista = [];
+    // Las etiquetas se olvidan al cerrar sesion: la respuesta del siguiente usuario puede ser
+    // otra, y arrastrar la etiqueta vieja pediria un 304 sobre datos que no son los suyos.
+    etagPuestos = null;
+    etagAsignaciones = null;
     // La copia en disco NO se borra: es el mismo mapa para todos los vendedores y es lo que
     // hace que el proximo arranque sea instantaneo. No lleva nada privado que no vuelva a
     // llegar en la primera respuesta.
@@ -382,7 +445,7 @@ export const usePuestosStore = defineStore('puestos', () => {
 
   return {
     puestos, cargando, error, enVivo, desdeCache, ultimaSync, ubicadas, carritoDe, asignaciones,
-    aplicar, protegerLocales, cargar, recargar, conectar, asegurar, desconectar,
+    aplicar, aplicarAsignaciones, protegerLocales, cargar, recargar, conectar, asegurar, desconectar,
     registrarNotificaciones, reintentar, sinAsignaciones,
   };
 });

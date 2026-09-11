@@ -4,7 +4,10 @@ import java.nio.file.Paths;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.filter.ShallowEtagHeaderFilter;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -21,6 +24,31 @@ public class WebConfig implements WebMvcConfigurer{
     public void addInterceptors(InterceptorRegistry registry) {
         // Aplica @ValidarUsuarioAutenticado en los controladores del web.
         registry.addInterceptor(autenticacionInterceptor);
+    }
+
+    /**
+     * ETag en las dos lecturas del mapa, que son las unicas grandes y las que mas se repiten.
+     *
+     * El cliente resincroniza a menudo —al reconectar, al volver del fondo, al sondear— y casi
+     * siempre nada ha cambiado. Con el ETag, esas veces el servidor contesta **304 sin cuerpo**:
+     * unos cientos de bytes en vez de la lista entera. En la feria, con la red que hay, esa es
+     * la diferencia entre un mapa que responde y uno que se queda pensando.
+     *
+     * Se usa el filtro "shallow": el servidor SI construye la respuesta y luego la compara. No
+     * ahorra trabajo de servidor, ahorra RED, que es donde esta el cuello de botella. Y por
+     * construccion nunca miente: la etiqueta es un hash de la respuesta real, asi que no hay
+     * forma de que diga "no cambio nada" cuando si cambio.
+     *
+     * Limitado a esas dos rutas a proposito: envolver toda la API obligaria a almacenar en
+     * memoria cada respuesta para poder hashearla.
+     */
+    @Bean
+    public FilterRegistrationBean<ShallowEtagHeaderFilter> filtroEtagMapa() {
+        FilterRegistrationBean<ShallowEtagHeaderFilter> reg =
+                new FilterRegistrationBean<>(new ShallowEtagHeaderFilter());
+        reg.addUrlPatterns("/api/app/puestos", "/api/app/puestos/asignaciones");
+        reg.setName("etagMapa");
+        return reg;
     }
 
     @Override

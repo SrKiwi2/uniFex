@@ -5,7 +5,10 @@
 -- - Cada vendedor (usuario con rol ADMINISTRATIVO) puede tener asignadas
 --   una o varias categorías.
 -- - Dentro de esas categorías, se le asignan casetas específicas (por ID).
--- - El mapa y el carrito se filtran para mostrar SOLO sus casetas.
+-- - El mapa muestra TODAS las casetas: las que no le tocan salen en gris y su
+--   ficha da el nombre y el telefono del vendedor que si las lleva, para poder
+--   derivar al cliente. Lo que la asignacion decide es quien puede VENDER, y eso
+--   se comprueba en cada escritura, no ocultando filas (ver PuestoApiController).
 --
 -- Es idempotente: volver a ejecutarlo no cambia nada.
 --
