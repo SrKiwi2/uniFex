@@ -137,13 +137,19 @@ nav { display: flex; flex-direction: column; gap: 2px; padding: 0.4rem 0.6rem; f
 
 .area { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 /* El hueco de la barra de estado va en el PADDING de la cabecera, no en un margen por encima:
-   así el fondo de la cabecera pinta también esa franja y la hora y la batería del sistema se
-   leen sobre el color de la app, en vez de sobre lo que hubiera debajo. Era lo que dejaba el
-   botón de tema pegado al borde superior, tapado por los iconos y sin poder pulsarse. */
+   así esa franja queda pintada y no transparente. Era lo que dejaba el botón de tema pegado
+   al borde superior, tapado por los iconos del sistema y sin poder pulsarse. */
 .topbar {
   display: flex; align-items: center; gap: 0.6rem;
   padding: calc(0.7rem + var(--safe-top)) calc(1.2rem + var(--safe-right)) 0.7rem calc(1.2rem + var(--safe-left));
   border-bottom: 1px solid var(--border); background: var(--panel); position: sticky; top: 0; z-index: 10;
+}
+/* La franja de la barra de estado se pinta aparte, con un color que sigue al tema del
+   TELEFONO y no al de la app (ver --franja-estado en style.css). Los iconos del sistema los
+   colorea Android segun ese ajuste, así que es la única manera de que siempre se lean. */
+.topbar::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0;
+  height: var(--safe-top); background: var(--franja-estado);
 }
 .topbar h1 { margin: 0; font-size: 1.15rem; }
 .menu { display: none; }
@@ -153,7 +159,10 @@ nav { display: flex; flex-direction: column; gap: 2px; padding: 0.4rem 0.6rem; f
    como siempre. Con flex:1 a secas se comprimiria y quedaria cortada. */
 .contenido {
   flex: 1 0 auto; max-width: 1200px; width: 100%; margin: 0 auto;
-  padding: 1.4rem calc(1.4rem + var(--safe-right)) calc(1.4rem + var(--tabbar-h)) calc(1.4rem + var(--safe-left));
+  /* El hueco del teclado se suma al final: sin el, los ultimos campos del formulario quedan
+     debajo del teclado y no hay forma de deslizarse hasta ellos. */
+  padding: 1.4rem calc(1.4rem + var(--safe-right))
+           calc(1.4rem + var(--tabbar-h) + var(--kb)) calc(1.4rem + var(--safe-left));
 }
 /* Columna flex para que el plano (con la prop `llenar`) reparta con la barra de leyenda
    el alto disponible, sin tener que adivinar en CSS cuanto mide cada cosa. */
@@ -182,6 +191,9 @@ nav { display: flex; flex-direction: column; gap: 2px; padding: 0.4rem 0.6rem; f
   /* nav{flex-direction:column;...} de arriba es para el cajón lateral, pero por ser el
      mismo tag <nav> dentro del mismo componente también alcanza a esta barra: se
      sobrescribe cada propiedad que importa en vez de confiar en la cascada. */
+  /* Con el teclado abierto la barra inferior se esconde: queda tapada por el teclado y solo
+     resta sitio a un formulario que ya va justo de alto. */
+  .con-teclado .tabbar { display: none; }
   .tabbar {
     display: flex; flex-direction: row; gap: 0; overflow: visible; flex: none;
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 55;

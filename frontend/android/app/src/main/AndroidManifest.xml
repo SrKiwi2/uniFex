@@ -10,8 +10,14 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@style/AppTheme">
 
+        <!-- windowSoftInputMode: sin declararlo, Android elige por su cuenta y en una
+             ventana de borde a borde escoge adjustPan, que DESPLAZA la ventana entera para
+             dejar a la vista el campo enfocado. Eso movia la barra de menu "fija" y peleaba
+             con el arrastre del dedo: el formulario de venta no se podia deslizar. Con
+             adjustResize la ventana se encoge y la pagina scrollea como debe. -->
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
+            android:windowSoftInputMode="adjustResize"
             android:name=".MainActivity"
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"

@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.usic.uniFex.model.dao.IPuestoDao;
+import com.usic.uniFex.model.dto.AsignacionPuestoDTO;
 import com.usic.uniFex.model.dto.PuestoEstadoDTO;
 import com.usic.uniFex.model.dto.PuestoFotoDTO;
 import com.usic.uniFex.model.entity.Puesto;
@@ -57,23 +58,40 @@ public class PuestoApiController {
     private final IPuestoDao puestoDao;
     private final VendedorAsignacionService vendedorAsignacionService;
 
-    /** Estado de todas las casetas no anuladas (opcionalmente filtrado por categoria).
-     * Para vendedores (ADMINISTRATIVO): solo devuelve sus casetas asignadas.
-     * Para admin: devuelve todas (con filtro opcional por categoria). */
+    /**
+     * Estado de TODAS las casetas no anuladas (opcionalmente filtrado por categoria).
+     *
+     * Antes, a un vendedor se le devolvian solo las suyas. Se quito el filtro a proposito: un
+     * cliente se planta delante de una caseta que no le toca a ese vendedor y, con el mapa
+     * recortado, no habia ni como decirle "esa la lleva fulano, este es su telefono" — ni
+     * siquiera se veia. Ahora salen todas; las ajenas se pintan en gris y su ficha da el
+     * contacto del companiero (ver {@link #asignaciones()}).
+     *
+     * Lo que NO cambia es quien puede venderlas: eso se comprueba en cada escritura
+     * ({@link #vetoPorAsignacion}), que es donde de verdad importa.
+     */
     @GetMapping
     public List<PuestoEstadoDTO> listar(@RequestParam(value = "categoriaId", required = false) Long categoriaId) {
-        Long usuarioId = usuarioActual();
-        if (usuarioId == null) return List.of();
-
-        List<Puesto> base = esVendedor()
-                ? vendedorAsignacionService.getPuestosVisiblesParaVendedor(usuarioId)
-                : puestoDao.listarActivos();
-
-        return base.stream()
+        if (usuarioActual() == null) return List.of();
+        return puestoDao.listarActivos().stream()
                 .filter(p -> categoriaId == null
                         || (p.getCategoria() != null && categoriaId.equals(p.getCategoria().getId())))
                 .map(PuestoEstadoDTO::de)
                 .toList();
+    }
+
+    /**
+     * Quien responde por cada caseta, con su telefono.
+     *
+     * Va aparte del listado, y no como un campo mas de PuestoEstadoDTO, por dos razones: ese
+     * DTO se difunde entero por WebSocket en CADA cambio de estado —meterle el nombre y el
+     * telefono del vendedor multiplicaria el trafico de algo que casi nunca cambia—, y las
+     * asignaciones se tocan desde otra pantalla, con su propio ritmo. Mismo patron que
+     * {@link #idsConFoto()}.
+     */
+    @GetMapping("/asignaciones")
+    public List<AsignacionPuestoDTO> asignaciones() {
+        return usuarioActual() == null ? List.of() : vendedorAsignacionService.asignacionesConVendedor();
     }
 
     // ===== Venta: cualquier usuario autenticado =====
@@ -82,6 +100,8 @@ public class PuestoApiController {
     public ResponseEntity<Map<String, Object>> reservar(@PathVariable Long id) {
         Long usuarioId = usuarioActual();
         if (usuarioId == null) return noAutenticado();
+        ResponseEntity<Map<String, Object>> veto = vetoPorAsignacion(usuarioId, id);
+        if (veto != null) return veto;
         boolean ok = reservaService.reservar(id, usuarioId);
         if (ok) publisher.publicar(id);
         return respuesta(ok, ok ? "Caseta reservada" : "La caseta ya no esta disponible");
@@ -148,6 +168,22 @@ public class PuestoApiController {
      * ¿Quien pide es un vendedor? Decide si se le filtran las casetas por asignacion.
      * Administracion no se filtra nunca: vende y edita cualquier caseta del plano.
      */
+    /**
+     * Corta a un vendedor que intente tocar una caseta que no tiene asignada.
+     *
+     * Esta comprobacion NO es nueva en el sistema, pero si en estos dos endpoints: hasta ahora
+     * bastaba con que el listado le ocultara las ajenas, asi que reservar y confirmar iban sin
+     * guardia. Al ensenarle el mapa entero, esa proteccion por omision desaparece y la regla
+     * tiene que estar donde se escribe. El carrito y el registro de la venta ya la tenian.
+     *
+     * @return la respuesta 409 que hay que devolver, o null si puede seguir.
+     */
+    private ResponseEntity<Map<String, Object>> vetoPorAsignacion(Long usuarioId, Long puestoId) {
+        if (!esVendedor() || vendedorAsignacionService.puedeVender(usuarioId, puestoId)) return null;
+        return ResponseEntity.status(409).body(Map.<String, Object>of(
+                "ok", false, "mensaje", "Esta caseta no esta asignada a ti"));
+    }
+
     private boolean esVendedor() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         return auth != null && auth.getAuthorities().stream()
@@ -278,6 +314,8 @@ public class PuestoApiController {
     public ResponseEntity<Map<String, Object>> confirmar(@PathVariable Long id) {
         Long usuarioId = usuarioActual();
         if (usuarioId == null) return noAutenticado();
+        ResponseEntity<Map<String, Object>> veto = vetoPorAsignacion(usuarioId, id);
+        if (veto != null) return veto;
         boolean ok = reservaService.confirmar(id, usuarioId);
         if (ok) publisher.publicar(id);
         return respuesta(ok, ok ? "Venta confirmada" : "No se pudo confirmar (reserva no vigente)");

@@ -13,11 +13,16 @@ import { toasts, cerrar } from '../ui/toast';
 </template>
 
 <style scoped>
+/* El contenedor ocupa una franja de 340 px en movil, encima del formulario. Sin
+   `pointer-events: none` se traga el arrastre que empiece ahi y parece que la pagina no
+   scrollea; los avisos en si vuelven a ser pulsables uno a uno. */
 .host {
   position: fixed; right: 1rem; bottom: 1rem; z-index: 1000;
   display: flex; flex-direction: column; gap: 0.5rem; max-width: min(90vw, 380px);
+  pointer-events: none;
 }
 .toast {
+  pointer-events: auto;
   padding: 0.7rem 0.9rem; border-radius: var(--radio-sm); cursor: pointer;
   background: var(--panel); border: 1px solid var(--border); box-shadow: var(--sombra-md);
   color: var(--text); font-size: 0.9rem; border-left: 4px solid var(--muted);

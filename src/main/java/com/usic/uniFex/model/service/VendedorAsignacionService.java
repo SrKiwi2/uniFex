@@ -1,8 +1,10 @@
 package com.usic.uniFex.model.service;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,6 +15,7 @@ import com.usic.uniFex.model.dao.IUsuarioDao;
 import com.usic.uniFex.model.dao.IVendedorAsignacionDao;
 import com.usic.uniFex.model.entity.Categoria;
 import com.usic.uniFex.model.entity.Puesto;
+import com.usic.uniFex.model.dto.AsignacionPuestoDTO;
 import com.usic.uniFex.model.entity.Usuario;
 
 import lombok.RequiredArgsConstructor;
@@ -261,5 +264,37 @@ public class VendedorAsignacionService {
     @Transactional(readOnly = true)
     public List<Usuario> listarVendedores() {
         return usuarioDao.findByRolNombre("ADMINISTRATIVO");
+    }
+    /**
+     * Todas las asignaciones con el contacto de su vendedor, para el mapa.
+     *
+     * Lo ve cualquier vendedor autenticado, y es deliberado: el mapa ahora ensena TODAS las
+     * casetas —las ajenas en gris— y al tocar una ajena tiene que poder decir a quien derivar
+     * al cliente. Sin el telefono, ensenarlas solo serviria para frustrar.
+     */
+    @Transactional(readOnly = true)
+    public List<AsignacionPuestoDTO> asignacionesConVendedor() {
+        return dao.findAsignacionesConVendedor().stream()
+                .map(f -> new AsignacionPuestoDTO(
+                        numero(f[0]),
+                        numero(f[1]),
+                        nombreDe(f[2], f[3], f[4], f[6]),
+                        limpio(f[5])))
+                .toList();
+    }
+
+    /** Como {@link #texto}, pero recorta y convierte el vacio en null. */
+    private static String limpio(Object o) {
+        String t = o == null ? "" : o.toString().trim();
+        return t.isEmpty() ? null : t;
+    }
+
+    /** Nombre y apellidos; si la persona no tiene nombre, al menos el usuario. */
+    private static String nombreDe(Object nombre, Object paterno, Object materno, Object username) {
+        String completo = Stream.of(nombre, paterno, materno)
+                .map(VendedorAsignacionService::limpio)
+                .filter(Objects::nonNull)
+                .collect(Collectors.joining(" "));
+        return completo.isEmpty() ? limpio(username) : completo;
     }
 }

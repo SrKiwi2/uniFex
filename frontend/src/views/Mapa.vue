@@ -87,6 +87,26 @@ function sesionCaducada() {
   router.push('/login');
 }
 
+/**
+ * Quien responde por una caseta, o null si no la tiene nadie.
+ * Es lo que convierte "esa no te toca" en "esa la lleva fulano, este es su telefono".
+ */
+const asignacionDe = (p) => tienda.asignaciones.get(p.id) || null;
+
+/**
+ * ¿Puede quien mira vender esta caseta?
+ *
+ * Antes esta pregunta no existia en el mapa porque el servidor le mandaba al vendedor SOLO
+ * sus casetas. Ahora llegan todas —las ajenas en gris— asi que hay que distinguirlas aqui.
+ * Administracion vende cualquiera; un vendedor, solo las suyas. El servidor comprueba lo
+ * mismo en cada escritura: esto es la parte que se ve, no la que protege.
+ */
+const puedoVender = (p) => {
+  if (!auth.esVendedor) return true;
+  const a = asignacionDe(p);
+  return a != null && a.vendedorId === auth.id;
+};
+
 /** ¿La reserva en tramite de esta caseta es de quien esta mirando? */
 const esMia = (p) => p.estado === 'T' && p.reservadoPor != null && p.reservadoPor === auth.id;
 
@@ -95,6 +115,10 @@ const esMia = (p) => p.estado === 'T' && p.reservadoPor != null && p.reservadoPo
  * lo necesita en la mano para decirselo al cliente sin cambiar de pantalla.
  */
 function rotulo(p) {
+  if (!puedoVender(p)) {
+    const a = asignacionDe(p);
+    return `${p.categoria} ${p.codigo} · ${a ? `la vende ${a.vendedor}` : 'sin vendedor asignado'}`;
+  }
   const duenio = esMia(p) ? ' (tuya)' : p.estado === 'T' ? ' (de otro vendedor)' : '';
   const precio = p.precio > 0 ? ` · ${p.precio} Bs` : ' · sin precio';
   return `${p.categoria} ${p.codigo} · ${p.tamano || ''} · ${ETIQUETA_ESTADO[p.estado]}${duenio}${precio}`;
@@ -119,6 +143,10 @@ const casetaEnFicha = computed(() => {
 });
 
 async function click(p, evento) {
+  // Cinturon ademas del tirante: la ficha ya no ofrece el boton para una caseta ajena, pero
+  // si alguna vista lo llamara igual, aqui se corta antes de salir a la red.
+  if (!puedoVender(p)) return;
+
   // Solo se ignora un segundo clic sobre LA MISMA caseta. Bloquear el mapa entero
   // mientras viaja una peticion se siente como que la pagina se cuelga, aunque el
   // servidor conteste en 10 ms.
@@ -246,6 +274,8 @@ onUnmounted(() => {
   <div class="barra">
       <div class="legend">
         <span v-for="l in LEYENDA" :key="l.clase" class="chip" :class="l.clase">{{ l.txt }}</span>
+        <!-- Solo tiene sentido para un vendedor: administracion vende todas. -->
+        <span v-if="auth.esVendedor" class="chip chip-ajena">De otro vendedor</span>
       </div>
       <!-- Solo aparece cuando algo va mal, y ofrece la accion en el mismo sitio: pulsar
            vuelve a pedir la lista y reintenta la conexion. -->
@@ -296,6 +326,8 @@ onUnmounted(() => {
     <CasetaDetalle
       :puesto="casetaEnFicha"
       :es-mia="casetaEnFicha ? esMia(casetaEnFicha) : false"
+      :vendible="casetaEnFicha ? puedoVender(casetaEnFicha) : true"
+      :asignacion="casetaEnFicha ? asignacionDe(casetaEnFicha) : null"
       :ocupado="casetaEnFicha ? enPeticion.has(casetaEnFicha.id) : false"
       @cerrar="seleccionada = null"
       @agregar="(p) => click(p)"
@@ -337,10 +369,10 @@ onUnmounted(() => {
         <button
           v-for="p in ubicados"
           :key="p.id"
-          v-memo="[p.estado, p.reservadoPor === auth.id, conFoto.has(p.id), p.mapaX, p.mapaY, p.mapaEscala, p.tamanoMapa, p.color, p.forma, p.codigo]"
+          v-memo="[p.estado, p.reservadoPor === auth.id, conFoto.has(p.id), p.mapaX, p.mapaY, p.mapaEscala, p.tamanoMapa, p.color, p.forma, p.codigo, puedoVender(p)]"
           class="pin"
           :class="[CLASE_ESTADO[p.estado], `forma-${p.forma || 'cuadrado'}`,
-                   { mia: esMia(p), 'con-foto': conFoto.has(p.id) }]"
+                   { mia: esMia(p), 'con-foto': conFoto.has(p.id), ajena: !puedoVender(p) }]"
           :style="{ ...estiloPin(p), '--categoria': p.color || 'transparent' }"
           :title="rotulo(p)"
           @pointerdown.stop
@@ -366,6 +398,7 @@ onUnmounted(() => {
 }
 .legend { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 .chip { padding: 0.2rem 0.55rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600; }
+.chip-ajena { background: var(--bloqueado); color: #fff; }
 .info { font-size: 0.9rem; }
 .numeros.on { border-color: var(--acento); color: var(--acento); font-weight: 700; }
 
@@ -430,14 +463,24 @@ onUnmounted(() => {
      · `0 1px 3px` de sombra difusa = 66 px de desenfoque. Ese era el velo gris.
    Todo lo que se dibuje aqui va en fracciones de `--pin` (el ancho de la caseta, que publica
    estiloPin) o en porcentaje. Nada en px absolutos. */
+/* La caja mide SIEMPRE 100 px y se reduce con transform. No se dimensiona con `width` en
+   porcentaje porque con casetas de 0.005 del ancho eso da 1.95 px de maquetacion, y el
+   navegador lo redondea a pixel entero de forma distinta segun donde caiga cada caseta: unas
+   salian de 1 px y otras de 2. Ese era el "unas mas anchas y otras mas pequeñas".
+
+   `transform-origin: 0 0` + `scale() translate(-50%, -50%)` en ese orden: el translate se
+   aplica primero sobre la caja sin escalar (la centra sobre su punto del plano) y el scale
+   despues, asi que el centro cae exacto en las coordenadas guardadas y el lado final mide
+   justo `--pin`. Dentro de la caja ya se puede medir en px normales: 100 px es la unidad. */
 .pin {
-  position: absolute; aspect-ratio: 1;
-  transform: translate(-50%, -50%);
+  position: absolute; width: 100px; height: 100px;
+  transform-origin: 0 0;
+  transform: scale(calc(var(--pin, 20) / 100)) translate(-50%, -50%);
   border: none;
   padding: 0; cursor: pointer;
-  /* Separador con la caseta vecina y aro de categoria, los dos en fraccion de caseta. */
-  --borde: calc(var(--pin, 20) * 0.06px);
-  --aro: calc(var(--pin, 20) * 0.12px);
+  /* Separador con la caseta vecina y aro de categoria, en px de la caja de 100. */
+  --borde: 6px;
+  --aro: 12px;
   /* Sin sombra difusa: al acercarse se convertia en un velo gris enorme, y el separador
      blanco ya despega la caseta del plano. */
   box-shadow: 0 0 0 var(--borde) rgba(255, 255, 255, 0.75);
@@ -453,6 +496,12 @@ onUnmounted(() => {
     0 0 0 var(--aro) var(--categoria, transparent),
     0 0 0 calc(var(--aro) + var(--borde)) rgba(255, 255, 255, 0.75);
 }
+/* Una caseta que no le toca a este vendedor se pinta gris, pase lo que pase con su estado:
+   lo que necesita saber de un vistazo es que ahi no vende el. El estado real y el contacto
+   del companiero que si la lleva salen en la ficha, al tocarla — que es justo lo que antes
+   no podia hacer, porque esas casetas ni le aparecian en el mapa. */
+.pin.ajena { background: var(--bloqueado); cursor: pointer; }
+
 .pin:hover { z-index: 5; filter: brightness(1.12); }
 .pin.ocupado, .pin.bloqueado { cursor: default; }
 
@@ -532,11 +581,9 @@ onUnmounted(() => {
        al ver la feria entera el número mediría 2 px y sería una mancha. */
 .num-caseta {
   display: none;
-  /* Caja FIJA de 100 px, reducida al tamaño real de la caseta con transform (ver arriba). */
-  position: absolute; left: 50%; top: 50%;
-  width: 100px; height: 100px; margin: -50px 0 0 -50px;
-  transform: scale(calc(var(--pin, 20) / 100));
-  transform-origin: 50% 50%;
+  /* Ya no se escala solo: el pin entero es una caja de 100 px que se reduce con transform,
+     asi que aqui basta con ocuparla entera y usar un tamaño de fuente normal. */
+  position: absolute; inset: 0;
   align-items: center; justify-content: center;
   font-size: 52px; line-height: 1; font-weight: 700;
   font-variant-numeric: tabular-nums;

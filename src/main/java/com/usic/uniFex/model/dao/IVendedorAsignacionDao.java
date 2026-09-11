@@ -51,4 +51,10 @@ public interface IVendedorAsignacionDao {
 
     /** Suelta TODAS las casetas de un usuario. Se usa al darlo de baja. */
     void borrarAsignacionesDe(Long usuarioId);
+
+    /**
+     * Todas las asignaciones vigentes con el contacto del vendedor, para el mapa.
+     * Columnas: idPuesto, idUsuario, nombre, paterno, materno, celular, username.
+     */
+    List<Object[]> findAsignacionesConVendedor();
 }

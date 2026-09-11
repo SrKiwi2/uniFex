@@ -164,10 +164,13 @@ titulo('Almacen de casetas: copia en disco y resincronizacion');
   useAuthStore().token = 'falso';
 
   let servidor = [];
+  let asignado = [];
   let peticiones = 0;
-  globalThis.fetch = async () => {
+  // Cada carga son DOS peticiones: el listado de casetas y quien responde por cada una.
+  const responder = (ruta) => (String(ruta).includes('asignaciones') ? asignado : servidor);
+  globalThis.fetch = async (ruta) => {
     peticiones++;
-    return { status: 200, ok: true, json: async () => JSON.parse(JSON.stringify(servidor)) };
+    return { status: 200, ok: true, json: async () => JSON.parse(JSON.stringify(responder(ruta))) };
   };
   const caseta = (id, x, y, estado = 'L') =>
     ({ id, codigo: String(id), categoriaId: 1, estado, mapaX: x, mapaY: y, mapaEscala: 1 });
@@ -208,22 +211,32 @@ titulo('Almacen de casetas: copia en disco y resincronizacion');
   await t.recargar();
   paso('las casetas eliminadas desaparecen', t.puestos.length === 1);
 
+  asignado = [{ puestoId: 3, vendedorId: 9, vendedor: 'ANA PEREZ', celular: '70000000' }];
+  await t.recargar();
+  paso('el store guarda quien responde por cada caseta',
+       t.asignaciones.get(3)?.vendedor === 'ANA PEREZ', JSON.stringify([...t.asignaciones]));
+
+
   t.desconectar();
   paso('cerrar sesion vacia la lista', t.puestos.length === 0);
   paso('pero no borra la copia en disco', !!disco.get('puestos.cache.v1'));
 
   const antes = peticiones;
-  let resolver;
-  globalThis.fetch = () => {
+  // Se retienen TODAS las respuestas, no solo una: si se resolviera la del listado y no la de
+  // asignaciones, `asegurar()` no terminaria nunca y la prueba se quedaria colgada.
+  const retenidas = [];
+  globalThis.fetch = (ruta) => {
     peticiones++;
-    return new Promise((r) => { resolver = () => r({ status: 200, ok: true, json: async () => servidor }); });
+    return new Promise((r) => retenidas.push(
+      () => r({ status: 200, ok: true, json: async () => responder(ruta) })));
   };
   const enCurso = t.asegurar();
   paso('arranque en frio: hay mapa ANTES de que conteste el servidor',
        t.puestos.length > 0, `${t.puestos.length} casetas`);
   paso('y se marca como no confirmado', t.desdeCache === true);
-  paso('la peticion sale igual', peticiones === antes + 1);
-  resolver();
+  paso('las peticiones salen igual (listado + asignaciones)', peticiones === antes + 2,
+       `${peticiones - antes}`);
+  retenidas.forEach((soltar) => soltar());
   await enCurso;
   paso('al contestar, deja de estar marcado', t.desdeCache === false);
 
@@ -278,8 +291,10 @@ titulo('Nitidez del pin al hacer zoom');
          const bloque = e.slice(e.indexOf('.num-caseta'), e.indexOf('.num-caseta') + 700);
          return !/font-size:\s*[\d.]+em/.test(bloque);
        }));
-  paso('el rotulo usa una caja fija reducida con transform',
-       estilos.every((e) => /\.num-caseta\s*\{[^}]*transform:\s*scale\(calc\(var\(--pin/.test(e)));
+  paso('el PIN es una caja fija de 100px reducida con transform',
+       estilos.every((e) => /\.pin\s*\{[^}]*width:\s*100px[^}]*transform:\s*scale\(calc\(var\(--pin/.test(e)));
+  paso('y el rotulo solo ocupa esa caja, sin escalarse aparte',
+       estilos.every((e) => /\.num-caseta\s*\{[^}]*inset:\s*0/.test(e)));
 
   // La aritmetica: con los tamaños reales de FEXPO el numero tiene que acabar legible.
   const anchoVisor = 390;               // celular tipico, px CSS
@@ -288,7 +303,7 @@ titulo('Nitidez del pin al hacer zoom');
   const CAJA = 100, FUENTE = 52;        // los de .num-caseta
   const zoomTope = mapa.anchoParaTocar([{ tamanoMapa: fraccion, mapaEscala: 1 }]) / anchoVisor;
 
-  const alturaTexto = FUENTE * (pin / CAJA) * zoomTope;
+  const alturaTexto = FUENTE * (pin / CAJA) * zoomTope;   // la caja de 100 se reduce a --pin
   paso('a tope de zoom el numero mide ~23 px en pantalla',
        Math.abs(alturaTexto - 0.52 * 44) < 1, `${alturaTexto.toFixed(1)} px`);
   paso('la fuente de maquetacion es grande (no la toca el minimo de 8 px de Android)',
@@ -296,15 +311,22 @@ titulo('Nitidez del pin al hacer zoom');
   paso('un codigo de 3 cifras entra en la caja del rotulo',
        3 * FUENTE * 0.62 < CAJA, `~${Math.round(3 * FUENTE * 0.62)} px de ${CAJA}`);
 
-  const aro = pin * 0.12 * zoomTope;   // --aro en el CSS
+  const aro = pin * (12 / 100) * zoomTope;   // --aro: 12px sobre la caja de 100
   paso('el aro de categoria se ve a tope de zoom', aro >= 2, `${aro.toFixed(1)} px`);
 
   // estiloPin ya no debe publicar font-size: quien mide es --pin.
   const estilo = mapa.estiloPin({ mapaX: 0.5, mapaY: 0.5, tamanoMapa: fraccion, mapaEscala: 1 });
   paso('estiloPin publica --pin', typeof estilo['--pin'] === 'string' && estilo['--pin'].includes('--mundo'));
   paso('estiloPin ya no publica font-size', estilo.fontSize === undefined);
-  paso('el ancho del pin y --pin salen de la misma fraccion',
-       estilo.width === `${fraccion * 100}%` && estilo['--pin'].includes(String(fraccion)));
+  /*
+   * estiloPin ya NO devuelve `width`. Con un ancho en porcentaje, una caseta de 0.005 salia a
+   * 1.95 px de maquetacion y el navegador redondea eso a pixel entero de forma distinta segun
+   * donde caiga cada una: unas de 1 px y otras de 2, o sea "unas mas anchas y otras mas
+   * pequeñas" estando configuradas iguales. Ahora el tamaño lo da el transform, sin redondeos.
+   */
+  paso('estiloPin ya no dimensiona con width (era lo que deformaba las casetas)',
+       estilo.width === undefined);
+  paso('--pin lleva la fraccion de la caseta', estilo['--pin'].includes(String(fraccion)));
 
   paso('PanZoom publica --mundo sin unidad (hace falta para dividir en calc)',
        panzoom.includes("setProperty('--mundo', String(Math.round(ancho)))"));
@@ -314,32 +336,36 @@ titulo('Nitidez del pin al hacer zoom');
    * caseta cuadrada y `box-shadow: 0 0 0 1px` se convertia en un halo de 22 px. Este barrido
    * es la guarda: en las reglas que se dibujan dentro del mundo no puede quedar ni una.
    */
-  const DENTRO = /(^|[\s,])(\.pin|\.forma-|\.guia|\.caja|\.plano)\b/;
+  // `.pin` y lo que hay dentro quedan FUERA del barrido a proposito: el pin es una caja de
+  // 100 px que se reduce entera con transform, asi que los px de dentro escalan con ella y son
+  // la unidad correcta. Lo que sigue siendo peligroso es lo que se dibuja en el plano SIN esa
+  // caja — la guia de colocacion y el recuadro de seleccion del editor.
+  const DENTRO = /(^|[\s,])(\.forma-|\.guia|\.caja|\.plano)\b/;
   const absolutas = [];
   for (const e of estilos) {
     for (const [, sel, cuerpo] of e.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
       const s = sel.trim().replace(/\s+/g, ' ');
       // `.num-caseta` es la excepcion declarada: caja fija de 100 px reducida con transform.
-      if (!DENTRO.test(s) || /\.num-caseta/.test(s)) continue;
+      if (!DENTRO.test(s) || /\.pin|\.num-caseta/.test(s)) continue;
       for (const decl of cuerpo.split(';')) {
         const limpio = decl.replace(/calc\([^)]*var\(--(pin|mundo)[^)]*\)[^;]*/g, '');
         if (/[\d.]+px/.test(limpio)) absolutas.push(`${s} -> ${decl.trim()}`);
       }
     }
   }
-  paso('ninguna medida absoluta en lo que se dibuja dentro del mundo',
+  paso('la guia y el recuadro del editor no usan medidas absolutas',
        absolutas.length === 0, absolutas.slice(0, 3).join(' | '));
 
   paso('la caseta cuadrada redondea en porcentaje, no en px',
        estilos.every((e) => /\.forma-cuadrado\s*\{\s*border-radius:\s*[\d.]+%/.test(e)));
   paso('el pin no usa `border` (con box-sizing se comeria la caseta entera)',
        estilos.every((e) => !/\.pin[^{]*\{[^}]*border:\s*[\d.]+px/.test(e)));
-  paso('el separador y el aro salen de --pin',
-       estilos.every((e) => /--borde:\s*calc\(var\(--pin/.test(e) && /--aro:\s*calc\(var\(--pin/.test(e)));
+  paso('el separador y el aro se miden en la caja de 100px del pin',
+       estilos.every((e) => /--borde:\s*6px/.test(e) && /--aro:\s*12px/.test(e)));
 
   // Como se ve al final, con los tamaños reales de FEXPO.
-  const separador = pin * 0.06 * zoomTope;
-  const radio = pin * 0.10 * zoomTope;
+  const separador = pin * (6 / 100) * zoomTope;   // --borde: 6px sobre la caja de 100
+  const radio = pin * 0.10 * zoomTope;            // border-radius: 10%
   paso('el separador blanco se ve, sin comerse la caseta', separador >= 1.5 && separador <= 5,
        `${separador.toFixed(1)} px`);
   paso('la esquina redondeada es sutil: la caseta se lee cuadrada', radio < 44 / 4,
@@ -462,6 +488,99 @@ titulo('Márgenes seguros del dispositivo (APK de borde a borde)');
     .filter((p) => leer(p).includes('env(safe-area-inset'));
   paso('ningún componente usa env() suelto: todos pasan por las variables',
        sueltos.length === 0, sueltos.join(', '));
+  /*
+   * El teclado: desde Android 15 una ventana de borde a borde ya no se redimensiona sola al
+   * abrirlo (adjustResize quedo obsoleto), asi que los ultimos campos de un formulario quedan
+   * debajo del teclado sin forma de llegar a ellos.
+   */
+  const manifiesto = leer('frontend/android/app/src/main/AndroidManifest.xml');
+  paso('el manifiesto pide adjustResize (sin el, Android DESPLAZA la ventana y mueve el menú)',
+       /windowSoftInputMode="adjustResize"/.test(manifiesto));
+
+  paso('la pagina puede crecer (min-height, no height fijo)',
+       /html, body, #app \{ min-height: 100%; \}/.test(css));
+  paso('el alto del teclado se publica en --kb',
+       leer('frontend/src/ui/teclado.js').includes("setProperty('--kb'"));
+  paso('y se observa al arrancar', main.includes('observarTeclado()'));
+  paso('el contenido reserva ese hueco al final',
+       /\.contenido\s*\{[^}]*var\(--kb\)/.test(shell));
+  paso('con el teclado abierto, la barra inferior deja de ocupar sitio',
+       /\.con-teclado\s*\{\s*--tabbar-h:\s*0px/.test(css));
+
+  const toast = leer('frontend/src/components/ToastHost.vue');
+  paso('los avisos flotantes no se tragan el arrastre',
+       /\.host\s*\{[^}]*pointer-events:\s*none/.test(toast) &&
+       /\.toast\s*\{[^}]*pointer-events:\s*auto/.test(toast));
+
+  /*
+   * La franja de la barra de estado sigue al tema del TELEFONO, no al de la app: los iconos
+   * del sistema los colorea Android segun ese ajuste y no hay forma de cambiarlos desde la
+   * pagina, asi que pintarla con el color de la app dejaba iconos blancos sobre blanco.
+   */
+  paso('la franja de estado tiene color propio', css.includes('--franja-estado'));
+  paso('y sigue al sistema, no al tema de la app',
+       /@media \(prefers-color-scheme: dark\) \{\s*:root \{ --franja-estado/.test(css));
+  paso('la cabecera la pinta aparte',
+       /\.topbar::before\s*\{[^}]*var\(--franja-estado\)/.test(shell));
+
+}
+
+// ---------------------------------------------------------------- casetas de otro vendedor
+/*
+ * El mapa ensena TODAS las casetas y pinta en gris las que este vendedor no lleva. Eso mueve
+ * una responsabilidad de sitio: antes, "no puedes vender esa" lo garantizaba el LISTADO, que
+ * simplemente no se la mandaba. Ahora se la manda, asi que la regla tiene que vivir en cada
+ * ESCRITURA. Si alguien vuelve a filtrar el listado o quita un veto, esto lo delata.
+ */
+titulo('Casetas asignadas a otro vendedor');
+{
+  const { readFileSync } = await import('node:fs');
+  const RAIZ = resolve(AQUI, '../../../..') + '/';
+  const leer = (p) => readFileSync(RAIZ + p, 'utf8');
+
+  const ctrl = leer('src/main/java/com/usic/uniFex/controller/puesto/PuestoApiController.java');
+  const listar = ctrl.slice(ctrl.indexOf('public List<PuestoEstadoDTO> listar('),
+                            ctrl.indexOf('@GetMapping("/asignaciones")'));
+  paso('el listado ya NO filtra por vendedor', !/getPuestosVisiblesParaVendedor/.test(listar));
+  paso('existe el endpoint de asignaciones', ctrl.includes('@GetMapping("/asignaciones")'));
+
+  // Los tres caminos por los que un vendedor puede comprometer una caseta.
+  const tramo = (nombre) => {
+    const i = ctrl.indexOf(`@PostMapping("/{id}/${nombre}")`);
+    return i < 0 ? '' : ctrl.slice(i, i + 700);
+  };
+  paso('reservar comprueba la asignacion', /vetoPorAsignacion/.test(tramo('reservar')));
+  paso('confirmar comprueba la asignacion', /vetoPorAsignacion/.test(tramo('confirmar')));
+  paso('el carrito ya la comprobaba', ctrl.includes('casetasNoPermitidas'));
+  paso('y el registro de la venta tambien',
+       leer('src/main/java/com/usic/uniFex/controller/inscripcion/InscripcionApiController.java')
+         .includes('casetasNoPermitidas'));
+  paso('el veto solo aplica a vendedores (administracion vende todas)',
+       /if \(!esVendedor\(\) \|\| vendedorAsignacionService\.puedeVender/.test(ctrl));
+
+  const dto = leer('src/main/java/com/usic/uniFex/model/dto/AsignacionPuestoDTO.java');
+  paso('la asignacion solo expone caseta, vendedor y telefono',
+       ['puestoId', 'vendedorId', 'vendedor', 'celular'].every((c) => dto.includes(c))
+         && !/username|rol|\bci\b|password/.test(dto.replace(/\/\*[\s\S]*?\*\//g, '')));
+
+  const store = leer('frontend/src/stores/puestos.js');
+  paso('el store pide las asignaciones junto con el listado',
+       store.includes("apiFetch('/api/app/puestos/asignaciones')") && store.includes('Promise.all'));
+  paso('y las guarda en la copia en disco (si no, el arranque en frio pinta todo gris)',
+       /asignaciones: \[\.\.\.asignaciones\.value\.entries\(\)\]/.test(store));
+
+  const mapa = leer('frontend/src/views/Mapa.vue');
+  paso('el mapa distingue lo que puede vender', mapa.includes('const puedoVender ='));
+  paso('pinta en gris lo ajeno', /\.pin\.ajena\s*\{[^}]*var\(--bloqueado\)/.test(mapa));
+  paso('y repinta cuando llegan las asignaciones (v-memo)',
+       /v-memo="\[[^"]*puedoVender\(p\)/.test(mapa));
+  paso('tocar una caseta ajena nunca sale a la red',
+       /async function click\(p, evento\) \{\s*\/\/[\s\S]{0,220}if \(!puedoVender\(p\)\) return;/.test(mapa));
+
+  const ficha = leer('frontend/src/components/CasetaDetalle.vue');
+  paso('la ficha no ofrece vender una caseta ajena', /if \(!props\.vendible\) return null;/.test(ficha));
+  paso('pero si da el contacto del companiero',
+       ficha.includes('asignacion.vendedor') && ficha.includes('`tel:${telefono}`'));
 }
 
 console.log(fallos.length ? `\n${fallos.length} paso(s) fallaron:` : '\nTodo paso.');

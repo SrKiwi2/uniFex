@@ -26,6 +26,14 @@ export const usePuestosStore = defineStore('puestos', () => {
   const enVivo = ref(false);
   /** true mientras lo que se ve sale de la copia en disco y aun no lo confirmo el servidor. */
   const desdeCache = ref(false);
+  /**
+   * Quien responde por cada caseta: puestoId -> { vendedorId, vendedor, celular }.
+   *
+   * Va aparte de la lista de casetas porque cambia con OTRO ritmo —se toca desde la pantalla
+   * de Vendedores, no con cada venta— y porque meterlo en PuestoEstadoDTO cargaria el nombre
+   * y el telefono del vendedor en cada mensaje de WebSocket. Mismo criterio que las fotos.
+   */
+  const asignaciones = ref(new Map());
   /** Momento de la ultima lista completa recibida del servidor (ms). 0 = ninguna todavia. */
   const ultimaSync = ref(0);
 
@@ -71,7 +79,9 @@ export const usePuestosStore = defineStore('puestos', () => {
 
   function guardarCache(lista) {
     try {
-      localStorage.setItem(CLAVE_CACHE, JSON.stringify({ ts: Date.now(), lista }));
+      localStorage.setItem(CLAVE_CACHE, JSON.stringify({
+        ts: Date.now(), lista, asignaciones: [...asignaciones.value.entries()],
+      }));
     } catch {
       // Cuota llena o modo privado. La copia es un lujo: nunca se aborta una carga por esto.
     }
@@ -84,6 +94,10 @@ export const usePuestosStore = defineStore('puestos', () => {
       const guardado = JSON.parse(localStorage.getItem(CLAVE_CACHE) || 'null');
       if (!guardado?.lista?.length) return false;
       puestos.value = guardado.lista;
+      // Sin las asignaciones, el arranque en frio pintaria de gris hasta las casetas propias.
+      if (Array.isArray(guardado.asignaciones)) {
+        asignaciones.value = new Map(guardado.asignaciones);
+      }
       desdeCache.value = true;
       return true;
     } catch {
@@ -196,8 +210,17 @@ export const usePuestosStore = defineStore('puestos', () => {
     error.value = '';
     promesaCarga = (async () => {
       try {
-        const r = await apiFetch('/api/app/puestos');
+        // Las dos peticiones van juntas: el mapa necesita las dos para pintar bien —sin las
+        // asignaciones, las casetas propias saldrian grises— y en serie serian dos esperas.
+        const [r, rAsig] = await Promise.all([
+          apiFetch('/api/app/puestos'),
+          apiFetch('/api/app/puestos/asignaciones').catch(() => null),
+        ]);
         const lista = await r.json();
+        if (rAsig?.ok) {
+          const filas = await rAsig.json().catch(() => []);
+          asignaciones.value = new Map(filas.map((a) => [a.puestoId, a]));
+        }
         fusionar(lista);
         desdeCache.value = false;
         ultimaSync.value = Date.now();
@@ -351,13 +374,14 @@ export const usePuestosStore = defineStore('puestos', () => {
     error.value = '';
     desdeCache.value = false;
     ultimaSync.value = 0;
+    asignaciones.value = new Map();
     // La copia en disco NO se borra: es el mismo mapa para todos los vendedores y es lo que
     // hace que el proximo arranque sea instantaneo. No lleva nada privado que no vuelva a
     // llegar en la primera respuesta.
   }
 
   return {
-    puestos, cargando, error, enVivo, desdeCache, ultimaSync, ubicadas, carritoDe,
+    puestos, cargando, error, enVivo, desdeCache, ultimaSync, ubicadas, carritoDe, asignaciones,
     aplicar, protegerLocales, cargar, recargar, conectar, asegurar, desconectar,
     registrarNotificaciones, reintentar, sinAsignaciones,
   };

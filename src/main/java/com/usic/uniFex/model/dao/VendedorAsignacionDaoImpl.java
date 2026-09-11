@@ -178,6 +178,22 @@ public class VendedorAsignacionDaoImpl implements IVendedorAsignacionDao {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
+    public List<Object[]> findAsignacionesConVendedor() {
+        // Una sola consulta para las ~530 casetas: el mapa la pide UNA vez, no una por caseta.
+        // Se excluyen los usuarios dados de baja: su telefono ya no sirve de contacto, y dejar
+        // la caseta sin duenio visible es mas honesto que mandar al cliente a quien no esta.
+        Query q = em.createNativeQuery("""
+                SELECT vp.id_puesto, u.id, pe.nombre, pe.paterno, pe.materno, pe.celular, u.username
+                FROM vendedor_puesto vp
+                INNER JOIN usuario u ON u.id = vp.id_usuario
+                LEFT JOIN persona pe ON pe.id = u.persona_id
+                WHERE (u."_estado" IS NULL OR u."_estado" <> 'ELIMINADO')
+                """);
+        return q.getResultList();
+    }
+
+    @Override
     public boolean vendedorTienePuesto(Long usuarioId, Long puestoId) {
         // Dice lo mismo que findPuestosVisiblesParaVendedor. Si difirieran, un vendedor podria
         // vender una caseta que su mapa no le muestra, o al reves.

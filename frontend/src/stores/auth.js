@@ -24,6 +24,12 @@ export const useAuthStore = defineStore('auth', {
     autenticado: (s) => !!s.token,
     /** Solo para mostrar u ocultar el editor; el backend vuelve a comprobarlo con 403. */
     puedeEditarPlano: (s) => ROLES_EDITAN_PLANO.includes(normalizar(s.rol)),
+    /**
+     * Los 35 usuarios ADMINISTRATIVO son los vendedores, y son los unicos a quienes se les
+     * limita el mapa a sus casetas asignadas. Administracion vende cualquiera.
+     * Igual que arriba: aqui solo se pinta, el permiso real lo comprueba el servidor.
+     */
+    esVendedor: (s) => normalizar(s.rol) === 'ADMINISTRATIVO',
   },
   actions: {
     async login(usuario, contrasena) {

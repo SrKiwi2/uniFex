@@ -44,7 +44,14 @@ export function tamanoDe(p) {
  * PanZoom publica con el ancho de diseño del plano. Con el, el CSS mide el numero y el grosor
  * del aro en fracciones de caseta, y del zoom se encarga el transform del mundo.
  *
- * Aqui han caido ya dos intentos, los dos por fallar EN SILENCIO:
+ * El pin NO se dimensiona con `width`: su caja mide siempre 100 px y se reduce con
+ * `transform: scale()` (ver `.pin` en el CSS). Con `width` en porcentaje, una caseta de
+ * 0.005 del ancho salia a 1.95 px de maquetacion y el navegador redondea eso a pixel entero
+ * de forma distinta segun donde caiga cada una: unas quedaban de 1 px y otras de 2, o sea
+ * "unas mas anchas y otras mas pequeñas" aunque estuvieran configuradas iguales. Una caja de
+ * 100 px no tiene ese problema, y la escala se aplica sin redondeos.
+ *
+ * Aqui han caido ya dos intentos mas, los dos por fallar EN SILENCIO:
  *   - `cqw` (container queries): exige un WebView reciente; en uno viejo la declaracion se
  *     descarta y el numero se queda al tamaño heredado.
  *   - un `font-size` diminuto en el pin (con el rotulo en `em`): con casetas de 0.005 del
@@ -54,12 +61,10 @@ export function tamanoDe(p) {
  *     numeraciones". El rotulo ya no usa `em` ni fuentes pequeñas — ver `.num-caseta`.
  */
 export function estiloPin(p) {
-  const fraccion = tamanoDe(p);
   return {
     left: `${p.mapaX * 100}%`,
     top: `${p.mapaY * 100}%`,
-    width: `${fraccion * 100}%`,
-    '--pin': `calc(var(--mundo, 1200) * ${fraccion})`,
+    '--pin': `calc(var(--mundo, 1200) * ${tamanoDe(p)})`,
   };
 }
 

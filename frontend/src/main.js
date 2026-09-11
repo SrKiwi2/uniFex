@@ -3,6 +3,7 @@ import { createPinia } from 'pinia';
 import App from './App.vue';
 import router from './router';
 import { EN_APK } from './config.js';
+import { observarTeclado } from './ui/teclado.js';
 import './style.css';
 
 /*
@@ -14,5 +15,8 @@ import './style.css';
  * ese suelo sobraria (no hay barra de estado), de ahi que se marque solo el APK.
  */
 if (EN_APK) document.documentElement.classList.add('apk');
+
+// Publica el alto del teclado en `--kb`, para que el contenido pueda apartarse de el.
+observarTeclado();
 
 createApp(App).use(createPinia()).use(router).mount('#app');

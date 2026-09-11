@@ -1249,10 +1249,21 @@ aside li button.sel { background: #eff6ff; border-color: #bfdbfe; }
      · `0 1px 3px` de sombra difusa = 66 px de desenfoque. Ese era el velo gris.
    Todo lo que se dibuje aqui va en fracciones de `--pin` (el ancho de la caseta, que publica
    estiloPin) o en porcentaje. Nada en px absolutos. */
+/* La caja mide SIEMPRE 100 px y se reduce con transform. No se dimensiona con `width` en
+   porcentaje porque con casetas de 0.005 del ancho eso da 1.95 px de maquetacion, y el
+   navegador lo redondea a pixel entero de forma distinta segun donde caiga cada caseta: unas
+   salian de 1 px y otras de 2. Ese era el "unas mas anchas y otras mas pequeñas".
+
+   `transform-origin: 0 0` + `scale() translate(-50%, -50%)` en ese orden: el translate se
+   aplica primero sobre la caja sin escalar (la centra sobre su punto del plano) y el scale
+   despues, asi que el centro cae exacto en las coordenadas guardadas y el lado final mide
+   justo `--pin`. Dentro de la caja ya se puede medir en px normales: 100 px es la unidad. */
 .pin {
-  position: absolute; aspect-ratio: 1; transform: translate(-50%, -50%);
-  --borde: calc(var(--pin, 20) * 0.06px);
-  --aro: calc(var(--pin, 20) * 0.12px);
+  position: absolute; width: 100px; height: 100px;
+  transform-origin: 0 0;
+  transform: scale(calc(var(--pin, 20) / 100)) translate(-50%, -50%);
+  --borde: 6px;
+  --aro: 12px;
   /* El separador va en box-shadow y no en `border`: con `box-sizing: border-box`, 1 px de
      borde sobre una caseta de 2 px se come la caseta entera y solo queda el marco. */
   border: none;
@@ -1292,11 +1303,9 @@ aside li button.sel { background: #eff6ff; border-color: #bfdbfe; }
        al ver la feria entera el número mediría 2 px y sería una mancha. */
 .num-caseta {
   display: none;
-  /* Caja FIJA de 100 px, reducida al tamaño real de la caseta con transform (ver arriba). */
-  position: absolute; left: 50%; top: 50%;
-  width: 100px; height: 100px; margin: -50px 0 0 -50px;
-  transform: scale(calc(var(--pin, 20) / 100));
-  transform-origin: 50% 50%;
+  /* Ya no se escala solo: el pin entero es una caja de 100 px que se reduce con transform,
+     asi que aqui basta con ocuparla entera y usar un tamaño de fuente normal. */
+  position: absolute; inset: 0;
   align-items: center; justify-content: center;
   font-size: 52px; line-height: 1; font-weight: 700;
   font-variant-numeric: tabular-nums;

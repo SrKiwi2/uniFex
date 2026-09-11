@@ -17,6 +17,10 @@ const props = defineProps({
   puesto: { type: Object, default: null },
   esMia: { type: Boolean, default: false },
   ocupado: { type: Boolean, default: false },
+  /** false cuando la caseta esta asignada a otro vendedor: se informa, no se vende. */
+  vendible: { type: Boolean, default: true },
+  /** { vendedorId, vendedor, celular } del vendedor que la lleva, o null si no la lleva nadie. */
+  asignacion: { type: Object, default: null },
 });
 const emit = defineEmits(['cerrar', 'agregar', 'quitar']);
 
@@ -26,6 +30,9 @@ const indice = ref(0);
 
 const accion = computed(() => {
   if (!props.puesto) return null;
+  // Una caseta de otro vendedor no se vende desde aqui, pero SI se consulta: la ficha
+  // completa es la razon de que ahora aparezca en el mapa en vez de estar escondida.
+  if (!props.vendible) return null;
   if (props.puesto.estado === 'L') return 'agregar';
   if (props.esMia) return 'quitar';
   return null; // de otro vendedor, vendida o bloqueada: no se toca
@@ -33,6 +40,9 @@ const accion = computed(() => {
 
 const motivoSinAccion = computed(() => {
   if (!props.puesto || accion.value) return '';
+  // Sin motivo: cuando no es vendible, lo que se muestra es el contacto del companiero,
+  // que dice mucho mas que un "no puedes".
+  if (!props.vendible) return '';
   if (props.puesto.estado === 'T') return 'La tiene reservada otro vendedor.';
   if (props.puesto.estado === 'O') return 'Ya está vendida.';
   if (props.puesto.estado === 'X') return 'Está bloqueada por reparación.';
@@ -57,6 +67,22 @@ watch(() => props.puesto?.id, async (id) => {
 }, { immediate: true });
 
 const precio = computed(() => Number(props.puesto?.precio || 0));
+
+/** Deja el celular listo para `tel:`: sin espacios ni guiones. */
+const telefono = computed(() => (props.asignacion?.celular || '').replace(/[^\d+]/g, ''));
+
+const copiado = ref(false);
+async function copiarContacto() {
+  const a = props.asignacion;
+  if (!a) return;
+  try {
+    await navigator.clipboard.writeText(`${a.vendedor}${a.celular ? ' — ' + a.celular : ''}`);
+    copiado.value = true;
+    setTimeout(() => { copiado.value = false; }, 2000);
+  } catch {
+    // Sin permiso de portapapeles queda el enlace de llamada, que es lo que mas se usa.
+  }
+}
 </script>
 
 <template>
@@ -97,6 +123,25 @@ const precio = computed(() => Number(props.puesto?.precio || 0));
             <div><dt>Medida</dt><dd>{{ puesto.tamano || '—' }}</dd></div>
             <div v-if="puesto.referencia" class="ancho"><dt>Ubicación</dt><dd>{{ puesto.referencia }}</dd></div>
           </dl>
+
+          <!-- Caseta de otro vendedor: en vez de un "no puedes", el contacto de quien si la
+               lleva. Es el motivo de que estas casetas hayan vuelto al mapa: el cliente esta
+               parado delante de una y el vendedor tiene que poder decirle a quien llamar. -->
+          <div v-if="!vendible" class="ajena">
+            <template v-if="asignacion">
+              <p class="quien">La vende <strong>{{ asignacion.vendedor }}</strong></p>
+              <div v-if="asignacion.celular" class="contacto">
+                <a class="btn btn-primario grande" :href="`tel:${telefono}`">
+                  📞 {{ asignacion.celular }}
+                </a>
+                <button class="btn" @click="copiarContacto">
+                  {{ copiado ? '✓ Copiado' : 'Copiar contacto' }}
+                </button>
+              </div>
+              <p v-else class="motivo">Este vendedor no tiene celular registrado.</p>
+            </template>
+            <p v-else class="motivo">Esta caseta todavía no tiene vendedor asignado.</p>
+          </div>
 
           <footer>
             <p v-if="motivoSinAccion" class="motivo">{{ motivoSinAccion }}</p>
@@ -158,6 +203,16 @@ header h2 { margin: 0 0 0.35rem; font-size: 1.35rem; }
 .datos dd { margin: 0.15rem 0 0; font-size: 1.1rem; }
 /* El precio es el dato que se dice en voz alta: se lee de lejos y sin buscarlo. */
 .datos .precio { font-weight: 800; font-size: 1.45rem; font-variant-numeric: tabular-nums; }
+
+.ajena {
+  display: flex; flex-direction: column; gap: 0.6rem;
+  padding: 0.9rem 1rem; border-radius: var(--radio-sm);
+  background: var(--panel-2); border: 1px solid var(--border);
+}
+.ajena .quien { margin: 0; font-size: 1.05rem; }
+.ajena .contacto { display: flex; flex-direction: column; gap: 0.5rem; }
+/* El botón de llamar es el que se pulsa delante del cliente: mismo tamaño que el de vender. */
+.ajena .contacto .btn { min-height: 52px; font-size: 1.05rem; }
 
 footer { display: flex; flex-direction: column; gap: 0.5rem; }
 .motivo { margin: 0; font-size: 0.92rem; color: var(--muted); text-align: center; }
