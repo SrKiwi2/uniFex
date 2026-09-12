@@ -1,8 +1,35 @@
 <script setup>
-import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue';
 import { url as urlApi } from '../config.js';
-import { alerta } from '../ui/alerta.js';
+import { aviso } from '../ui/alerta.js';
+import { vFiltro, CELULAR_VALIDO } from '../ui/filtroEntrada.js';
 import { escucharNoches } from '../nochesEnVivo.js';
+import { IDIOMAS, TEXTOS } from '../i18n/feriaPublica.js';
+
+// Idioma de la vista: español o portugués (selector ES | PT arriba a la derecha). Se recuerda
+// en este navegador; la primera vez se toma el del propio navegador, así un teléfono de Brasil
+// abre directamente en portugués.
+const CLAVE_IDIOMA = 'feria.idioma';
+function idiomaInicial() {
+  try {
+    const guardado = localStorage.getItem(CLAVE_IDIOMA);
+    if (TEXTOS[guardado]) return guardado;
+  } catch { /* sin almacenamiento: se decide por el navegador */ }
+  return (navigator.language || '').toLowerCase().startsWith('pt') ? 'pt' : 'es';
+}
+const idioma = ref(idiomaInicial());
+const t = computed(() => TEXTOS[idioma.value]);
+const locale = computed(() => IDIOMAS.find((i) => i.codigo === idioma.value).locale);
+
+function cambiarIdioma(codigo) {
+  idioma.value = codigo;
+  try { localStorage.setItem(CLAVE_IDIOMA, codigo); } catch { /* solo se pierde el recuerdo */ }
+}
+
+// <html lang>: lo usan los lectores de pantalla (pronunciación) y el traductor del navegador,
+// que así no ofrece "traducir del español" una página que ya está en portugués.
+const langAnterior = document.documentElement.lang;
+watch(locale, (l) => { document.documentElement.lang = l; }, { immediate: true });
 
 const loading = ref(true);
 const error = ref(null);
@@ -27,16 +54,23 @@ function imgPublica(nombre) {
 // para esa noche (ver panel "Noches de FEXPO").
 const COLORES_NOCHE = ['#e31e24', '#3c1884', '#0048c0'];
 
-// "Viernes 18 de septiembre" a partir de un ISO "2026-09-18" (lo que manda el backend, ver
-// NocheFexpoDTO). Intl da el día de la semana en minúscula ("viernes"); se capitaliza a mano
-// porque así se ve en el resto de la página.
+// "Viernes 18 de septiembre" / "Sexta-feira, 18 de setembro" a partir de un ISO "2026-09-18"
+// (lo que manda el backend, ver NocheFexpoDTO), en el idioma elegido. Intl da el día de la
+// semana en minúscula; se capitaliza a mano porque así se ve en el resto de la página.
 function formatearFechaNoche(iso) {
   if (!iso) return '';
   // new Date('2026-09-18') se interpreta en UTC medianoche: sin el mediodía fijo, en husos
   // horarios al oeste de UTC (como Bolivia) el dia local cae un dia antes.
   const d = new Date(`${iso}T12:00:00`);
-  const texto = d.toLocaleDateString('es-BO', { weekday: 'long', day: 'numeric', month: 'long' });
+  const texto = d.toLocaleDateString(locale.value, { weekday: 'long', day: 'numeric', month: 'long' });
   return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
+// Mes abreviado del recuadro de la fecha ("sept" / "set"). Antes estaba escrito a mano como
+// "set", que solo acertaba con noches de septiembre.
+function mesCorto(iso) {
+  if (!iso) return '';
+  return new Date(`${iso}T12:00:00`).toLocaleDateString(locale.value, { month: 'short' }).replace('.', '');
 }
 
 function diaDelMes(iso) {
@@ -61,72 +95,26 @@ const nochesFexpo = computed(() => {
   return noches.map((n, i) => ({
     ...n,
     dia: diaDelMes(n.fecha),
+    mes: mesCorto(n.fecha),
     fechaTexto: formatearFechaNoche(n.fecha),
     color: n.color || COLORES_NOCHE[i % COLORES_NOCHE.length],
     urlMedio: n.urlMedio ? urlApi(n.urlMedio) : null,
   }));
 });
 
-// Vitrina de zonas para el público visitante, curada a mano (no viene del backend).
+// Vitrina de zonas para el público visitante, curada a mano (no viene del backend). Los
+// textos de cada zona, en los dos idiomas, están en i18n/feriaPublica.js bajo stands.lista[id].
 // `invertido` alterna imagen/texto tipo revista; se anima al entrar en pantalla (ver
 // onMounted).
 const standsDestacados = [
-  {
-    imagen: imgPublica('STAND-MIPES.png'),
-    alt: 'Stand MYPES en la FEXPO UAP, con emprendedores atendiendo su puesto',
-    titulo: 'Stand MYPES',
-    descripcion: 'Las MYPES reúnen a las micro y pequeñas empresas de la región: emprendedores pandinos que muestran y venden sus productos artesanales, gastronomía y creaciones locales. Es la zona ideal para conocer el talento local, probar sabores de la tierra y llevarte algo hecho en Pando.',
-    invertido: false
-  },
-  {
-    imagen: imgPublica('STAND-EMPRESAS.png'),
-    alt: 'Stand Empresas en la FEXPO UAP, con marcas y cooperativas atendiendo al público',
-    titulo: 'Stand Empresas',
-    descripcion: 'El Stand Empresas reúne a empresas, bancos y cooperativas que apuestan por el desarrollo de Pando. Aquí presentan sus servicios y propuestas directamente a la comunidad, cara a cara con quienes visitan la feria.',
-    invertido: true
-  },
-  {
-    imagen: imgPublica('STAND-PROFESIOGRAFICA.png'),
-    alt: 'Stand Profesiográfico en la FEXPO UAP, con actividades de las carreras de la universidad',
-    titulo: 'Stand Profesiográfico',
-    descripcion: 'El Stand Profesiográfico invita a conocer, explorar y elegir tu futuro: cada facultad de la Universidad Amazónica de Pando muestra sus carreras con proyectos, laboratorios y actividades en vivo, para que quienes visitan la feria descubran su vocación y decidan qué estudiar.',
-    invertido: false
-  },
-  {
-    imagen: imgPublica('STAND-ARTESANIAS.png'),
-    alt: 'Stand Artesanías en la FEXPO UAP, con tallados en madera y tejidos hechos a mano',
-    titulo: 'Stand Artesanías',
-    descripcion: 'El Stand Artesanías reúne el trabajo hecho a mano de artesanos y artesanas de Pando: tallados en madera, tejidos, bisutería y piezas únicas que llevan la tradición local. Apoya el talento de la región y llévate contigo algo hecho con las manos de quienes lo crearon.',
-    invertido: true
-  },
-  {
-    imagen: imgPublica('AGROPECUARIA.png'),
-    alt: 'Stand Agropecuario en la FEXPO UAP, con ganadería y producción del campo pandino',
-    titulo: 'Stand Agropecuario',
-    descripcion: 'El Stand Agropecuario muestra el trabajo del campo pandino: ganadería, producción sostenible y proyectos agrícolas de la región. Apoya a los productores locales y descubre de cerca cómo se cultiva y se cría lo que llega a tu mesa.',
-    invertido: false
-  },
-  {
-    imagen: imgPublica('STAND-VIVERO.png'),
-    alt: 'Stand Planta Viveros en la FEXPO UAP, con plantines y proyectos de conservación de fauna',
-    titulo: 'Stand Planta Viveros',
-    descripcion: 'El Stand Planta Viveros impulsa el cuidado del medio ambiente: viveros de plantas nativas, estudios de fauna y proyectos de conservación que protegen los bosques y la biodiversidad de Pando. Súmate a sembrar un futuro más verde y sostenible para la región.',
-    invertido: true
-  },
-  {
-    imagen: imgPublica('STAND-VEHICULAR.png'),
-    alt: 'Stand Vehicular en la FEXPO UAP, con camionetas, autos y motos en exhibición',
-    titulo: 'Stand Vehicular',
-    descripcion: 'El Stand Vehicular reúne a las principales marcas y concesionarias de la región, con camionetas, autos y motos de último modelo en exhibición. Ven a descubrir las novedades del mercado automotor y conocer de cerca lo último en tecnología vehicular.',
-    invertido: false
-  },
-  {
-    imagen: imgPublica('STAND-COMIDA.png'),
-    alt: 'Stand Comida en la FEXPO UAP, con anticuchos, salchipapas y hamburguesas recién preparados',
-    titulo: 'Stand Comida',
-    descripcion: 'El Stand Comida invita a la familia a disfrutar de una gran variedad de platos, desde anticuchos y salchipapas típicos hasta hamburguesas y opciones para todos los gustos. Ven con hambre y descubre los sabores que se preparan al momento, listos para compartir.',
-    invertido: true
-  }
+  { id: 'mypes', imagen: imgPublica('STAND-MIPES.png'), invertido: false },
+  { id: 'empresas', imagen: imgPublica('STAND-EMPRESAS.png'), invertido: true },
+  { id: 'profesiografico', imagen: imgPublica('STAND-PROFESIOGRAFICA.png'), invertido: false },
+  { id: 'artesanias', imagen: imgPublica('STAND-ARTESANIAS.png'), invertido: true },
+  { id: 'agropecuario', imagen: imgPublica('AGROPECUARIA.png'), invertido: false },
+  { id: 'vivero', imagen: imgPublica('STAND-VIVERO.png'), invertido: true },
+  { id: 'vehicular', imagen: imgPublica('STAND-VEHICULAR.png'), invertido: false },
+  { id: 'comida', imagen: imgPublica('STAND-COMIDA.png'), invertido: true },
 ];
 
 // Formulario "Quiero exponer": registro público de interesados (sin login).
@@ -141,12 +129,15 @@ const categoriasParaExponer = computed(() => datos.value?.categorias || []);
 
 const erroresExponer = computed(() => {
   const f = formExponer.value;
+  const e = t.value.exponer.errores;
   return {
-    nombreCompleto: f.nombreCompleto.trim() ? '' : 'Escribe tu nombre completo',
-    celular: f.celular.trim() ? '' : 'Escribe un número de celular',
-    empresa: f.empresa.trim() ? '' : 'Escribe el nombre de tu empresa o emprendimiento',
-    rubro: f.rubro.trim() ? '' : 'Escribe tu rubro',
-    categoriaId: f.categoriaId ? '' : 'Elige una categoría'
+    nombreCompleto: f.nombreCompleto.trim() ? '' : e.nombre,
+    celular: !f.celular.trim()
+      ? e.celularVacio
+      : CELULAR_VALIDO.test(f.celular.trim()) ? '' : e.celularInvalido,
+    empresa: f.empresa.trim() ? '' : e.empresa,
+    rubro: f.rubro.trim() ? '' : e.rubro,
+    categoriaId: f.categoriaId ? '' : e.categoria
   };
 });
 
@@ -173,13 +164,23 @@ async function enviarFormExponer() {
         categoriaId: Number(formExponer.value.categoriaId)
       })
     });
-    if (!res.ok) throw new Error('Respuesta no exitosa del servidor');
+    if (!res.ok) {
+      // 400 = el servidor rechazó un campo y dice cuál: ese mensaje se muestra tal cual.
+      const d = await res.json().catch(() => null);
+      throw Object.assign(new Error(res.status === 400 && d?.mensaje ? d.mensaje : ''), { delServidor: true });
+    }
 
     formExponer.value = { nombreCompleto: '', celular: '', empresa: '', rubro: '', categoriaId: '' };
     tocadoExponer.value = { nombreCompleto: false, celular: false, empresa: false, rubro: false, categoriaId: false };
-    await alerta('¡Registro enviado! Nos pondremos en contacto contigo muy pronto.', 'ok');
-  } catch {
-    await alerta('No pudimos enviar tu registro. Intenta de nuevo en unos minutos.', 'error');
+    // 4 s y no 2: quien visita la página tiene que alcanzar a leer el mensaje entero.
+    await aviso(t.value.exponer.okMensaje, 'ok', 4000, t.value.exponer.okTitulo);
+  } catch (e) {
+    // Un error de red ("Failed to fetch") no le dice nada al visitante: ahí va el mensaje
+    // genérico. Si el servidor rechazó un campo, su explicación viene en español: en portugués
+    // se cambia por un aviso equivalente (errorDatos).
+    const tx = t.value.exponer;
+    const delServidor = e?.delServidor && e.message ? (tx.errorDatos || e.message) : '';
+    await aviso(delServidor || tx.errorMensaje, 'error', 4000, tx.errorTitulo);
   } finally {
     enviandoExponer.value = false;
   }
@@ -211,10 +212,11 @@ async function cargarDatos() {
   error.value = null;
   try {
     const res = await fetch(urlApi('/api/publico/feria'));
-    if (!res.ok) throw new Error('Error al cargar la información de la feria');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     datos.value = await res.json();
-  } catch (e) {
-    error.value = e.message;
+  } catch {
+    // Solo se marca que falló: el texto lo pone la plantilla, en el idioma elegido.
+    error.value = true;
   } finally {
     loading.value = false;
   }
@@ -289,6 +291,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.documentElement.classList.remove('fx-scroll-suave', 'fx-revela-js');
+  document.documentElement.lang = langAnterior;
   clearInterval(intervaloReloj);
   dejarDeEscucharNoches?.();
   observadorStands?.disconnect();
@@ -327,22 +330,35 @@ const cuentaRegresiva = computed(() => {
           <span>FEXPO UAP <em class="nav-anio">{{ anioFeria }}</em></span>
         </a>
 
-        <nav class="nav-links" :class="{ abierto: menuAbierto }" aria-label="Secciones de la feria">
-          <a href="#inicio" @click="cerrarMenu">Inicio</a>
-          <a href="#artistas" @click="cerrarMenu">Artistas</a>
-          <a href="#stands-destacados" @click="cerrarMenu">Stands</a>
-          <a href="#stand" class="nav-cta" @click="cerrarMenu">Obtén tu stand</a>
+        <nav class="nav-links" :class="{ abierto: menuAbierto }" :aria-label="t.nav.secciones">
+          <a href="#inicio" @click="cerrarMenu">{{ t.nav.inicio }}</a>
+          <a href="#artistas" @click="cerrarMenu">{{ t.nav.artistas }}</a>
+          <a href="#stands-destacados" @click="cerrarMenu">{{ t.nav.stands }}</a>
+          <a href="#stand" class="nav-cta" @click="cerrarMenu">{{ t.nav.obtenStand }}</a>
         </nav>
 
         <div class="nav-acciones">
-          <button class="btn-tema" @click="toggleTema" :aria-label="temaOscuro ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'">
+          <div class="selector-idioma" role="group" :aria-label="t.nav.idioma">
+            <button
+              v-for="i in IDIOMAS"
+              :key="i.codigo"
+              type="button"
+              class="idioma-opcion"
+              :class="{ activo: idioma === i.codigo }"
+              :aria-pressed="idioma === i.codigo"
+              :lang="i.locale"
+              :title="i.nombre"
+              @click="cambiarIdioma(i.codigo)"
+            >{{ i.etiqueta }}</button>
+          </div>
+          <button class="btn-tema" @click="toggleTema" :aria-label="temaOscuro ? t.nav.temaClaro : t.nav.temaOscuro">
             {{ temaOscuro ? '☀️' : '🌙' }}
           </button>
           <button
             class="nav-hamburguesa"
             @click="menuAbierto = !menuAbierto"
             :aria-expanded="menuAbierto"
-            aria-label="Abrir menú de navegación"
+            :aria-label="t.nav.abrirMenu"
           >
             <span></span><span></span><span></span>
           </button>
@@ -365,26 +381,26 @@ const cuentaRegresiva = computed(() => {
 
         <div class="hero-cuenta">
           <template v-if="!cuentaRegresiva.empezo">
-            <span class="cuenta-titulo">Comienza en</span>
+            <span class="cuenta-titulo">{{ t.hero.comienzaEn }}</span>
             <div class="cuenta-grid">
-              <div class="cuenta-item"><strong>{{ pad(cuentaRegresiva.dias) }}</strong><span>días</span></div>
+              <div class="cuenta-item"><strong>{{ pad(cuentaRegresiva.dias) }}</strong><span>{{ t.hero.dias }}</span></div>
               <span class="cuenta-sep">:</span>
-              <div class="cuenta-item"><strong>{{ pad(cuentaRegresiva.horas) }}</strong><span>horas</span></div>
+              <div class="cuenta-item"><strong>{{ pad(cuentaRegresiva.horas) }}</strong><span>{{ t.hero.horas }}</span></div>
               <span class="cuenta-sep">:</span>
-              <div class="cuenta-item"><strong>{{ pad(cuentaRegresiva.minutos) }}</strong><span>min</span></div>
+              <div class="cuenta-item"><strong>{{ pad(cuentaRegresiva.minutos) }}</strong><span>{{ t.hero.min }}</span></div>
               <span class="cuenta-sep">:</span>
-              <div class="cuenta-item"><strong>{{ pad(cuentaRegresiva.segundos) }}</strong><span>seg</span></div>
+              <div class="cuenta-item"><strong>{{ pad(cuentaRegresiva.segundos) }}</strong><span>{{ t.hero.seg }}</span></div>
             </div>
           </template>
-          <span v-else class="cuenta-titulo cuenta-titulo--activa">¡La FEXPO UAP ya comenzó!</span>
-          <span class="hero-lugar">18 de septiembre · Cobija, Pando</span>
+          <span v-else class="cuenta-titulo cuenta-titulo--activa">{{ t.hero.yaComenzo }}</span>
+          <span class="hero-lugar">{{ t.hero.lugar }}</span>
         </div>
 
         <div class="hero-acciones">
           <button class="btn btn-primario btn-grande" @click="abrirPlano">
-            Ver el plano de la feria
+            {{ t.hero.verPlano }}
           </button>
-          <a href="#stand" class="btn btn-hero-fantasma btn-grande">Quiero exponer</a>
+          <a href="#stand" class="btn btn-hero-fantasma btn-grande">{{ t.hero.quieroExponer }}</a>
         </div>
       </div>
       <svg class="hero-canopy" viewBox="0 0 1200 60" preserveAspectRatio="none" aria-hidden="true">
@@ -401,8 +417,8 @@ const cuentaRegresiva = computed(() => {
     <section id="artistas" class="seccion noches" v-if="nochesFexpo.length">
       <div class="noches-fondo" aria-hidden="true"></div>
       <div class="contenedor">
-        <h2 class="titulo-seccion titulo-noches">Noches de FEXPO</h2>
-        <p class="subtitulo-seccion subtitulo-noches">Cada jornada de exposición cierra con música y cultura en vivo. Los artistas se van confirmando poco a poco.</p>
+        <h2 class="titulo-seccion titulo-noches">{{ t.noches.titulo }}</h2>
+        <p class="subtitulo-seccion subtitulo-noches">{{ t.noches.subtitulo }}</p>
         <div class="grid-noches">
           <article
             class="noche-card"
@@ -430,7 +446,7 @@ const cuentaRegresiva = computed(() => {
               />
               <img v-else class="noche-media-principal" :src="n.urlMedio" alt="" />
             </div>
-            <div class="noche-fecha" :style="{ background: n.color }"><strong>{{ n.dia }}</strong><span>set</span></div>
+            <div class="noche-fecha" :style="{ background: n.color }"><strong>{{ n.dia }}</strong><span>{{ n.mes }}</span></div>
             <div class="noche-cuerpo">
               <h3>{{ n.titulo }}</h3>
               <p class="noche-dia-semana">{{ n.fechaTexto }}</p>
@@ -441,7 +457,7 @@ const cuentaRegresiva = computed(() => {
                 </template>
                 <template v-else>
                   <div class="artista-silueta" :style="{ '--color-artista': n.color }" aria-hidden="true"></div>
-                  <span class="artista-etiqueta">Artista por revelar</span>
+                  <span class="artista-etiqueta">{{ t.noches.porRevelar }}</span>
                 </template>
               </div>
             </div>
@@ -455,20 +471,20 @@ const cuentaRegresiva = computed(() => {
          —esa conversación sigue más abajo, en "Zonas para exponer". -->
     <section id="stands-destacados" class="seccion stands">
       <div class="contenedor">
-        <h2 class="titulo-seccion">Ven y disfruta con la familia: los stands te están esperando</h2>
-        <p class="subtitulo-seccion">Recorre las distintas zonas de la feria y descubre lo que cada una tiene para ofrecer.</p>
+        <h2 class="titulo-seccion">{{ t.stands.titulo }}</h2>
+        <p class="subtitulo-seccion">{{ t.stands.subtitulo }}</p>
 
         <article
           v-for="stand in standsDestacados"
-          :key="stand.titulo"
+          :key="stand.id"
           class="stand-destacado"
           :class="{ 'stand-destacado--invertido': stand.invertido }"
         >
-          <img :src="stand.imagen" :alt="stand.alt" class="stand-destacado-img" />
+          <img :src="stand.imagen" :alt="t.stands.lista[stand.id].alt" class="stand-destacado-img" />
           <div class="stand-destacado-texto">
-            <span class="stand-destacado-tag">Zona destacada</span>
-            <h3>{{ stand.titulo }}</h3>
-            <p>{{ stand.descripcion }}</p>
+            <span class="stand-destacado-tag">{{ t.stands.destacada }}</span>
+            <h3>{{ t.stands.lista[stand.id].titulo }}</h3>
+            <p>{{ t.stands.lista[stand.id].descripcion }}</p>
           </div>
         </article>
       </div>
@@ -479,15 +495,18 @@ const cuentaRegresiva = computed(() => {
     <section id="stand" class="seccion exponer">
       <div class="exponer-fondo" aria-hidden="true"></div>
       <div class="contenedor">
-        <h2 class="titulo-seccion titulo-exponer">Quiero exponer en la FEXPO UAP</h2>
-        <p class="subtitulo-seccion subtitulo-exponer">Cuéntanos sobre ti y tu proyecto: la organización te contactará para ayudarte a reservar tu espacio.</p>
+        <h2 class="titulo-seccion titulo-exponer">{{ t.exponer.titulo }}</h2>
+        <p class="subtitulo-seccion subtitulo-exponer">{{ t.exponer.subtitulo }}</p>
 
         <form class="exponer-card" @submit.prevent="enviarFormExponer" novalidate>
           <div class="campo-exponer">
-            <label for="exp-nombre">Nombre completo</label>
+            <label for="exp-nombre">{{ t.exponer.nombre }}</label>
             <input
               id="exp-nombre"
               type="text"
+              v-filtro="'nombre'"
+              autocapitalize="characters"
+              maxlength="200"
               v-model.trim="formExponer.nombreCompleto"
               @blur="tocarCampoExponer('nombreCompleto')"
               :class="{ invalido: tocadoExponer.nombreCompleto && erroresExponer.nombreCompleto }"
@@ -497,24 +516,30 @@ const cuentaRegresiva = computed(() => {
           </div>
 
           <div class="campo-exponer">
-            <label for="exp-celular">Número de celular</label>
+            <label for="exp-celular">{{ t.exponer.celular }}</label>
             <input
               id="exp-celular"
               type="tel"
+              v-filtro="'telefono'"
+              inputmode="tel"
+              maxlength="16"
               v-model.trim="formExponer.celular"
               @blur="tocarCampoExponer('celular')"
               :class="{ invalido: tocadoExponer.celular && erroresExponer.celular }"
               autocomplete="tel"
-              placeholder="Ej. 71234567"
+              :placeholder="t.exponer.ejemploCelular"
             />
             <span class="error-campo" v-if="tocadoExponer.celular && erroresExponer.celular">{{ erroresExponer.celular }}</span>
           </div>
 
           <div class="campo-exponer">
-            <label for="exp-empresa">Empresa o emprendimiento</label>
+            <label for="exp-empresa">{{ t.exponer.empresa }}</label>
             <input
               id="exp-empresa"
               type="text"
+              v-filtro="'letras'"
+              autocapitalize="characters"
+              maxlength="200"
               v-model.trim="formExponer.empresa"
               @blur="tocarCampoExponer('empresa')"
               :class="{ invalido: tocadoExponer.empresa && erroresExponer.empresa }"
@@ -523,34 +548,37 @@ const cuentaRegresiva = computed(() => {
           </div>
 
           <div class="campo-exponer">
-            <label for="exp-rubro">Rubro</label>
+            <label for="exp-rubro">{{ t.exponer.rubro }}</label>
             <input
               id="exp-rubro"
               type="text"
+              v-filtro="'letras'"
+              autocapitalize="characters"
+              maxlength="200"
               v-model.trim="formExponer.rubro"
               @blur="tocarCampoExponer('rubro')"
               :class="{ invalido: tocadoExponer.rubro && erroresExponer.rubro }"
-              placeholder="Ej. gastronomía, artesanía, tecnología…"
+              :placeholder="t.exponer.ejemploRubro"
             />
             <span class="error-campo" v-if="tocadoExponer.rubro && erroresExponer.rubro">{{ erroresExponer.rubro }}</span>
           </div>
 
           <div class="campo-exponer">
-            <label for="exp-categoria">Categoría de stand</label>
+            <label for="exp-categoria">{{ t.exponer.categoria }}</label>
             <select
               id="exp-categoria"
               v-model="formExponer.categoriaId"
               @blur="tocarCampoExponer('categoriaId')"
               :class="{ invalido: tocadoExponer.categoriaId && erroresExponer.categoriaId }"
             >
-              <option value="" disabled>Elige una categoría</option>
+              <option value="" disabled>{{ t.exponer.eligeCategoria }}</option>
               <option v-for="cat in categoriasParaExponer" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
             </select>
             <span class="error-campo" v-if="tocadoExponer.categoriaId && erroresExponer.categoriaId">{{ erroresExponer.categoriaId }}</span>
           </div>
 
           <button type="submit" class="btn btn-primario btn-grande exponer-enviar" :disabled="enviandoExponer">
-            {{ enviandoExponer ? 'Enviando…' : 'Enviar mi registro' }}
+            {{ enviandoExponer ? t.exponer.enviando : t.exponer.enviar }}
           </button>
         </form>
       </div>
@@ -561,32 +589,32 @@ const cuentaRegresiva = computed(() => {
       <div class="contenedor footer-grid">
         <div class="footer-marca">
           <img :src="imgPublica('logo-fexpo-v2.png')" alt="FEXPO UAP" class="footer-logo" width="1254" height="1254" loading="lazy" />
-          <p>La feria de ciencia y tecnología de la Universidad Amazónica de Pando.</p>
+          <p>{{ t.pie.descripcion }}</p>
         </div>
-        <nav class="footer-nav" aria-label="Secciones de la feria">
-          <span class="footer-titulo">Navegación</span>
-          <a href="#inicio">Inicio</a>
-          <a href="#artistas">Artistas</a>
-          <a href="#stands-destacados">Stands</a>
-          <a href="#stand">Obtén tu stand</a>
+        <nav class="footer-nav" :aria-label="t.nav.secciones">
+          <span class="footer-titulo">{{ t.pie.navegacion }}</span>
+          <a href="#inicio">{{ t.nav.inicio }}</a>
+          <a href="#artistas">{{ t.nav.artistas }}</a>
+          <a href="#stands-destacados">{{ t.nav.stands }}</a>
+          <a href="#stand">{{ t.nav.obtenStand }}</a>
         </nav>
       </div>
       <div class="contenedor footer-legal">
-        <p>© {{ anioFeria }} FEXPO UAP — Universidad Amazónica de Pando</p>
-        <p class="footer-version">Equipo de Sistemas UAP</p>
+        <p>{{ t.pie.derechos(anioFeria) }}</p>
+        <p class="footer-version">{{ t.pie.equipo }}</p>
       </div>
     </footer>
 
     <!-- Modal Plano -->
-    <div v-if="mostrarPlano" class="modal-overlay" @click.self="cerrarPlano" role="dialog" aria-modal="true" aria-label="Plano de la feria">
+    <div v-if="mostrarPlano" class="modal-overlay" @click.self="cerrarPlano" role="dialog" aria-modal="true" :aria-label="t.plano.dialogo">
       <div class="modal-plano">
-        <button class="modal-cerrar" @click="cerrarPlano" aria-label="Cerrar plano">✕</button>
+        <button class="modal-cerrar" @click="cerrarPlano" :aria-label="t.plano.cerrarAria">✕</button>
         <div class="plano-visor">
-          <img :src="imgPublica('MAPA-WEB-PUBLICO.png')" alt="Mapa de zonas de la FEXPO UAP" class="plano-imagen" />
+          <img :src="imgPublica('MAPA-WEB-PUBLICO.png')" :alt="t.plano.alt" class="plano-imagen" />
         </div>
         <div class="modal-pie">
-          <a :href="imgPublica('MAPA-WEB-PUBLICO.png')" target="_blank" rel="noopener" class="btn btn-fantasma">Abrir en nueva pestaña</a>
-          <button class="btn btn-primario" @click="cerrarPlano">Cerrar</button>
+          <a :href="imgPublica('MAPA-WEB-PUBLICO.png')" target="_blank" rel="noopener" class="btn btn-fantasma">{{ t.plano.abrirPestana }}</a>
+          <button class="btn btn-primario" @click="cerrarPlano">{{ t.plano.cerrar }}</button>
         </div>
       </div>
     </div>
@@ -594,11 +622,11 @@ const cuentaRegresiva = computed(() => {
     <!-- Loading / Error -->
     <div v-if="loading" class="estado-carga" aria-live="polite">
       <div class="spinner"></div>
-      <p>Cargando información de la feria...</p>
+      <p>{{ t.estado.cargando }}</p>
     </div>
     <div v-else-if="error" class="estado-error" role="alert">
-      <p>⚠️ {{ error }}</p>
-      <button class="btn btn-primario" @click="cargarDatos">Reintentar</button>
+      <p>⚠️ {{ t.estado.errorCarga }}</p>
+      <button class="btn btn-primario" @click="cargarDatos">{{ t.estado.reintentar }}</button>
     </div>
   </div>
 </template>
@@ -745,6 +773,33 @@ html.fx-scroll-suave {
   transition: background 0.2s ease;
 }
 .btn-tema:hover { background: rgba(255, 255, 255, 0.16); }
+
+/* Selector de idioma ES | PT: dos botones en una píldora, el activo en lima como el CTA. */
+.selector-idioma {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid rgba(242, 247, 236, 0.4);
+  background: rgba(255, 255, 255, 0.08);
+}
+.idioma-opcion {
+  min-width: 36px;
+  height: 30px;
+  padding: 0 0.55rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #f2f7ec;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.idioma-opcion:hover { background: rgba(255, 255, 255, 0.14); }
+.idioma-opcion.activo { background: var(--fx-lima); color: #10280a; }
+.idioma-opcion:focus-visible { outline: 2px solid var(--fx-lima); outline-offset: 2px; }
 
 @media (max-width: 780px) {
   .nav-links {

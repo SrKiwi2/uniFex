@@ -29,6 +29,7 @@ public enum PantallasSistema {
     EDITOR("editor", "Editor del plano", "Feria"),
     VENDEDORES("vendedores", "Vendedores", "Feria"),
     INSCRIPCIONES("inscripciones", "Inscripciones", "Feria"),
+    INTERESADOS("interesados", "Interesados en exponer", "Feria"),
     REPORTES("reportes", "Reportes", "Feria"),
     NOCHES_FEXPO("noches-fexpo", "Noches de FEXPO", "Feria"),
     CREDENCIALES("credenciales", "Credenciales", "Acreditacion"),

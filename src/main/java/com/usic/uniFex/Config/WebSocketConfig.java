@@ -1,5 +1,6 @@
 package com.usic.uniFex.Config;
 
+import java.security.Principal;
 import java.util.List;
 
 import org.springframework.context.annotation.Configuration;
@@ -13,6 +14,7 @@ import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
@@ -21,6 +23,7 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 
 import com.usic.uniFex.security.JwtService;
 import com.usic.uniFex.security.JwtUser;
+import com.usic.uniFex.security.Roles;
 
 import lombok.RequiredArgsConstructor;
 
@@ -42,6 +45,12 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
      * aqui debe ser informacion que la vista publica ya muestra de todos modos.
      */
     public static final String PREFIJO_PUBLICO = "/topic/publico/";
+
+    /**
+     * Topics que, ademas de sesion, exigen ser de administracion: llevan datos personales
+     * (nombre y celular de los interesados en exponer), que un vendedor no tiene por que ver.
+     */
+    private static final List<String> TOPICS_ADMINISTRACION = List.of("/topic/interesados");
 
     private final JwtService jwtService;
 
@@ -140,12 +149,25 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     /** El usuario lo recuerda Spring desde el CONNECT; null = sesion anonima. */
     private void exigirPermiso(StompHeaderAccessor acc) {
-        if (acc.getUser() != null) return;
         String destino = acc.getDestination();
-        boolean suscripcionPublica = StompCommand.SUBSCRIBE.equals(acc.getCommand())
-                && destino != null && destino.startsWith(PREFIJO_PUBLICO);
-        if (!suscripcionPublica) {
-            throw new MessagingException("Destino no permitido sin autenticacion: " + destino);
+        boolean esSuscripcion = StompCommand.SUBSCRIBE.equals(acc.getCommand());
+        Principal usuario = acc.getUser();
+        if (usuario == null) {
+            boolean suscripcionPublica = esSuscripcion && destino != null && destino.startsWith(PREFIJO_PUBLICO);
+            if (!suscripcionPublica) {
+                throw new MessagingException("Destino no permitido sin autenticacion: " + destino);
+            }
+            return;
         }
+        if (esSuscripcion && destino != null
+                && TOPICS_ADMINISTRACION.stream().anyMatch(destino::startsWith)
+                && !esAdministracion(usuario)) {
+            throw new MessagingException("Solo administracion puede suscribirse a " + destino);
+        }
+    }
+
+    private boolean esAdministracion(Principal usuario) {
+        return usuario instanceof Authentication a && a.getAuthorities().stream()
+                .anyMatch(g -> Roles.AUTORIDADES_ADMINISTRA.contains(g.getAuthority()));
     }
 }

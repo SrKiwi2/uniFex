@@ -36,6 +36,7 @@ const TODOS = [
   { a: '/credenciales', p: 'credenciales', icono: '🪪', txt: 'Credenciales' },
   { a: '/vendedores', p: 'vendedores', icono: '👥', txt: 'Vendedores' },
   { a: '/inscripciones', p: 'inscripciones', icono: '📋', txt: 'Inscripciones' },
+  { a: '/interesados', p: 'interesados', icono: '🙋', txt: 'Interesados' },
   { a: '/reportes', p: 'reportes', icono: '📊', txt: 'Reportes' },
   { a: '/noches-fexpo', p: 'noches-fexpo', icono: '🎤', txt: 'Noches de FEXPO' },
   { a: '/editor', p: 'editor', icono: '✏️', txt: 'Editor del plano' },
