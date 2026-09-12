@@ -59,6 +59,15 @@ export const usePlanoStore = defineStore('plano', () => {
   /** Alto/ancho: es lo que PanZoom necesita para encuadrar sin deformar. */
   const aspecto = computed(() => (plano.value.alto || 1) / (plano.value.ancho || 1));
 
+  /** Invalida el cache local (útil al detectar versión nueva o forzar refresco). */
+  function invalidarCache() {
+    try {
+      localStorage.removeItem(CLAVE_CACHE);
+    } catch {}
+    plano.value = { ...RESPALDO };
+    promesa = null;
+  }
+
   /** Idempotente: la primera llamada baja, las demas comparten la misma peticion. */
   function asegurar() {
     if (promesa) return promesa;
@@ -66,10 +75,21 @@ export const usePlanoStore = defineStore('plano', () => {
       try {
         const r = await apiFetch('/api/app/plano');
         if (r.ok) {
-          plano.value = await r.json();
-          guardarCache(plano.value);
+          const datos = await r.json();
+          // Si el servidor dice que hay plano propio pero el cache local dice que no,
+          // o viceversa, o cambió la versión, forzamos la actualización.
+          if (datos.propio !== plano.value.propio || datos.version !== plano.value.version) {
+            plano.value = datos;
+            guardarCache(datos);
+          }
+        } else {
+          console.warn('[Plano] API respondió error:', r.status);
+          // Si el servidor responde error y tenemos el plano de respaldo en cache,
+          // invalidamos para que no se quede "pegado" el respaldo en futuros intentos.
+          if (!plano.value.propio) invalidarCache();
         }
-      } catch {
+      } catch (e) {
+        console.warn('[Plano] Error al obtener plano del servidor:', e.message);
         // Sin red se sigue con el plano de respaldo: es preferible un mapa viejo a
         // ninguno, sobre todo en la feria, donde el wifi se cae.
       }
@@ -84,5 +104,5 @@ export const usePlanoStore = defineStore('plano', () => {
     guardarCache(nuevo);
   }
 
-  return { plano, src, aspecto, asegurar, aplicar };
+  return { plano, src, aspecto, asegurar, aplicar, invalidarCache };
 });
