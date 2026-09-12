@@ -40,6 +40,7 @@ const TODOS = [
   { a: '/noches-fexpo', p: 'noches-fexpo', icono: '🎤', txt: 'Noches de FEXPO' },
   { a: '/editor', p: 'editor', icono: '✏️', txt: 'Editor del plano' },
   { a: '/personas', p: 'personas', icono: '🪪', txt: 'Personas' },
+  { a: '/personal-apoyo', p: 'personal-apoyo', icono: '👥', txt: 'Personal de apoyo' },
   { a: '/usuarios', p: 'usuarios', icono: '👤', txt: 'Usuarios' },
   { a: '/roles', p: 'roles', icono: '🛡️', txt: 'Roles' },
   { a: '/permisos', p: 'permisos', icono: '🔐', txt: 'Permisos por rol' },

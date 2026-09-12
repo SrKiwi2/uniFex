@@ -37,6 +37,7 @@ public enum PantallasSistema {
     ROLES("roles", "Roles", "Administracion"),
     PERMISOS("permisos", "Permisos por rol", "Administracion"),
     PERSONAS("personas", "Personas", "Administracion"),
+    PERSONAL_APOYO("personal-apoyo", "Personal de apoyo", "Administracion"),
     NOTIFICACIONES("notificaciones", "Notificaciones", "General");
 
     private final String clave;
