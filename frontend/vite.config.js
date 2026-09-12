@@ -7,6 +7,12 @@ import vue from '@vitejs/plugin-vue';
 // El destino se puede cambiar con VITE_BACKEND, para levantar un segundo servidor de
 // desarrollo contra otro backend sin tocar este archivo:
 //   VITE_BACKEND=http://127.0.0.1:7677 npx vite --port 5174
+//
+// OJO, esto NO tiene nada que ver con el APK. Todo lo que hay en `server` existe solo
+// mientras corre `vite dev`; `npm run build` no levanta ningun servidor y lo ignora por
+// completo. A donde apunta el APK lo decide VITE_API_BASE, que es OTRA variable: se lee en
+// src/config.js y Vite la hornea en el bundle al compilar. Comprobado: compilar con
+// VITE_BACKEND puesto a cualquier disparate da un dist byte a byte identico.
 const BACKEND = process.env.VITE_BACKEND || 'http://127.0.0.1:7676';
 
 export default defineConfig({
