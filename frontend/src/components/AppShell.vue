@@ -28,6 +28,7 @@ const enlaces = computed(() => {
       { a: '/vendedores', icono: '👥', txt: 'Vendedores' },
       { a: '/inscripciones', icono: '📋', txt: 'Inscripciones' },
       { a: '/reportes', icono: '📊', txt: 'Reportes' },
+      { a: '/noches-fexpo', icono: '🎤', txt: 'Noches de FEXPO' },
       { a: '/editor', icono: '✏️', txt: 'Editor del plano' },
       { a: '/personas', icono: '🪪', txt: 'Personas' },
       { a: '/usuarios', icono: '👥', txt: 'Usuarios' },

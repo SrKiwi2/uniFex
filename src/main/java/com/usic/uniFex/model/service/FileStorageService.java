@@ -22,9 +22,14 @@ public class FileStorageService {
     private String uploadRoot;
 
     // Extensiones/mime permitidos (ajusta si quieres PDF en comprobante)
-    private static final Set<String> ALLOWED_EXT = Set.of(".png", ".jpg", ".jpeg", ".webp", ".gif", ".pdf");
+    // .mp4/.webm y sus mime: solo los usa el bucket NOCHES (ver NochesFexpoService), pero el
+    // allowlist es unico para todo el servicio -- no hay forma de acotarlo por bucket sin
+    // reescribir la firma de save().
+    private static final Set<String> ALLOWED_EXT =
+            Set.of(".png", ".jpg", ".jpeg", ".webp", ".gif", ".pdf", ".mp4", ".webm");
     private static final Set<String> ALLOWED_MIME = Set.of(
-            "image/png", "image/jpeg", "image/webp", "image/gif", "application/pdf"
+            "image/png", "image/jpeg", "image/webp", "image/gif", "application/pdf",
+            "video/mp4", "video/webm"
     );
 
     public enum Bucket {
@@ -33,7 +38,9 @@ public class FileStorageService {
         /** Fotos de como se ve una caseta en el lugar (las enseña el vendedor al cliente). */
         PUESTOS("puestos"),
         /** Plano de la feria, uno por edicion (ver V13 y PlanoService). */
-        PLANOS("planos");
+        PLANOS("planos"),
+        /** Foto o video de fondo de una noche de la cartelera (ver V26 y NochesFexpoService). */
+        NOCHES("noches");
 
         private final String dir;
         Bucket(String dir) { this.dir = dir; }

@@ -17,7 +17,9 @@ import com.usic.uniFex.model.entity.Categoria;
 import com.usic.uniFex.model.entity.Edicion;
 import com.usic.uniFex.model.entity.Puesto;
 import com.usic.uniFex.model.dto.EdicionDTO;
+import com.usic.uniFex.model.dto.NocheFexpoDTO;
 import com.usic.uniFex.model.dto.PlanoDTO;
+import com.usic.uniFex.model.service.NochesFexpoService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -30,6 +32,7 @@ public class FeriaPublicaController {
     private final ICategoriaDao categoriaDao;
     private final IPuestoDao puestoDao;
     private final com.usic.uniFex.model.service.PlanoService planoService;
+    private final NochesFexpoService nochesFexpoService;
 
     /**
      * Información pública de la feria: edición activa, categorías, estadísticas de casetas y plano.
@@ -146,7 +149,13 @@ public class FeriaPublicaController {
                 .toList();
         cuerpo.put("estadisticasPorCategoria", statsPorCategoria);
 
-        // 6. Plano (info completa para el visor público)
+        // 6. Noches de FEXPO (cartelera de artistas, administrable desde el panel — ver V26)
+        List<NocheFexpoDTO> noches = nochesFexpoService.listarDeEdicionActiva().stream()
+                .map(NocheFexpoDTO::de)
+                .toList();
+        cuerpo.put("noches", noches);
+
+        // 7. Plano (info completa para el visor público)
         PlanoDTO plano = planoService.activo();
         if (plano != null) {
             cuerpo.put("plano", Map.of(

@@ -22,33 +22,41 @@ function imgPublica(nombre) {
 }
 
 // Colores de las noches: los mismos rojo/morado/azul de las insignias de facultad del
-// logo, reutilizados aquí como identificador de cada jornada.
+// logo. Se usan como identificador de cada jornada cuando el admin no eligió un color propio
+// para esa noche (ver panel "Noches de FEXPO").
 const COLORES_NOCHE = ['#e31e24', '#3c1884', '#0048c0'];
 
-// Programación nocturna: la feria aún no tiene un módulo de artistas en el backend, y el
-// cartel real todavía no se revela. Ni el artista ni el tema de la noche tienen nombre
-// propio todavía, así que cada jornada va como "Día N" con un artista en silueta —cuando
-// haya algo confirmado, título y silueta pasan a traer el nombre real y su foto.
-const nochesFexpo = [
-  {
-    dia: 18,
-    fecha: 'Viernes 18 de septiembre',
-    titulo: 'Día 1',
-    descripcion: 'Inauguración oficial de la FEXPO UAP v2 2026 y encendido de la feria.'
-  },
-  {
-    dia: 19,
-    fecha: 'Sábado 19 de septiembre',
-    titulo: 'Día 2',
-    descripcion: 'Música y danzas de la región en el escenario central de la feria.'
-  },
-  {
-    dia: 20,
-    fecha: 'Domingo 20 de septiembre',
-    titulo: 'Día 3',
-    descripcion: 'Premiación a los mejores stands y concierto de clausura.'
-  }
-].map((n, i) => ({ ...n, color: COLORES_NOCHE[i % COLORES_NOCHE.length] }));
+// "Viernes 18 de septiembre" a partir de un ISO "2026-09-18" (lo que manda el backend, ver
+// NocheFexpoDTO). Intl da el día de la semana en minúscula ("viernes"); se capitaliza a mano
+// porque así se ve en el resto de la página.
+function formatearFechaNoche(iso) {
+  if (!iso) return '';
+  // new Date('2026-09-18') se interpreta en UTC medianoche: sin el mediodía fijo, en husos
+  // horarios al oeste de UTC (como Bolivia) el dia local cae un dia antes.
+  const d = new Date(`${iso}T12:00:00`);
+  const texto = d.toLocaleDateString('es-BO', { weekday: 'long', day: 'numeric', month: 'long' });
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
+function diaDelMes(iso) {
+  if (!iso) return '';
+  return new Date(`${iso}T12:00:00`).getDate();
+}
+
+// Programación nocturna: administrable desde el panel "Noches de FEXPO" (ver
+// NochesFexpoApiController). Cuando el admin no puso nombre de artista, se muestra la
+// silueta animada de "por revelar"; cuando no subió foto/video, la tarjeta se queda con el
+// fondo de color plano de siempre.
+const nochesFexpo = computed(() => {
+  const noches = datos.value?.noches || [];
+  return noches.map((n, i) => ({
+    ...n,
+    dia: diaDelMes(n.fecha),
+    fechaTexto: formatearFechaNoche(n.fecha),
+    color: n.color || COLORES_NOCHE[i % COLORES_NOCHE.length],
+    urlMedio: n.urlMedio ? urlApi(n.urlMedio) : null,
+  }));
+});
 
 // Vitrina de zonas para el público visitante, curada a mano (no viene del backend).
 // `invertido` alterna imagen/texto tipo revista; se anima al entrar en pantalla (ver
@@ -370,23 +378,56 @@ const cuentaRegresiva = computed(() => {
       </svg>
     </section>
 
-    <!-- Artistas: primera sección tras el hero. Cartel aún por confirmar: cada noche
-         muestra 3 espacios de artista como silueta, no nombres. -->
-    <section id="artistas" class="seccion noches">
+    <!-- Artistas: primera sección tras el hero. Administrable desde el panel "Noches de
+         FEXPO" (NochesFexpoApiController): cada noche sale de /api/publico/feria. Sin
+         nombre de artista se ve la silueta animada de "por revelar"; sin foto/video de
+         fondo se queda con el color plano de la tarjeta. Si no hay ninguna noche cargada,
+         la sección entera no se muestra (ver v-if en <section>). -->
+    <section id="artistas" class="seccion noches" v-if="nochesFexpo.length">
       <div class="noches-fondo" aria-hidden="true"></div>
       <div class="contenedor">
         <h2 class="titulo-seccion titulo-noches">Noches de FEXPO</h2>
-        <p class="subtitulo-seccion subtitulo-noches">Cada jornada de exposición cierra con música y cultura en vivo, del 18 al 20 de septiembre. Los artistas ya están llegando y se revelarán muy pronto.</p>
+        <p class="subtitulo-seccion subtitulo-noches">Cada jornada de exposición cierra con música y cultura en vivo. Los artistas se van confirmando poco a poco.</p>
         <div class="grid-noches">
-          <article class="noche-card" v-for="n in nochesFexpo" :key="n.dia">
+          <article
+            class="noche-card"
+            :class="{ 'noche-card--media': n.urlMedio }"
+            :style="{ '--color-noche': n.color }"
+            v-for="n in nochesFexpo"
+            :key="n.id"
+          >
+            <div v-if="n.urlMedio" class="noche-media" aria-hidden="true">
+              <!-- Copia borrosa y ampliada de la misma foto: rellena lo que deja libre el
+                   "contain" de abajo. Sin esto, una foto apaisada dentro de una tarjeta
+                   vertical deja dos franjas vacías; así la tarjeta se ve llena y la foto
+                   sigue viéndose ENTERA, sin recortar. En video no se duplica (serían dos
+                   decodificaciones del mismo archivo): ahí rellena el color de la noche. -->
+              <div
+                v-if="n.medioTipo !== 'VIDEO'"
+                class="noche-media-relleno"
+                :style="{ backgroundImage: `url(${n.urlMedio})` }"
+              ></div>
+              <video
+                v-if="n.medioTipo === 'VIDEO'"
+                class="noche-media-principal"
+                :src="n.urlMedio"
+                muted loop autoplay playsinline
+              />
+              <img v-else class="noche-media-principal" :src="n.urlMedio" alt="" />
+            </div>
             <div class="noche-fecha" :style="{ background: n.color }"><strong>{{ n.dia }}</strong><span>set</span></div>
             <div class="noche-cuerpo">
               <h3>{{ n.titulo }}</h3>
-              <p class="noche-dia-semana">{{ n.fecha }}</p>
-              <p class="noche-descripcion">{{ n.descripcion }}</p>
+              <p class="noche-dia-semana">{{ n.fechaTexto }}</p>
+              <p class="noche-descripcion" v-if="n.descripcion">{{ n.descripcion }}</p>
               <div class="noche-artista">
-                <div class="artista-silueta" :style="{ '--color-artista': n.color }" aria-hidden="true"></div>
-                <span class="artista-etiqueta">Artista por revelar</span>
+                <template v-if="n.nombreArtista">
+                  <span class="artista-nombre">🎤 {{ n.nombreArtista }}</span>
+                </template>
+                <template v-else>
+                  <div class="artista-silueta" :style="{ '--color-artista': n.color }" aria-hidden="true"></div>
+                  <span class="artista-etiqueta">Artista por revelar</span>
+                </template>
               </div>
             </div>
           </article>
@@ -975,61 +1016,146 @@ html.fx-scroll-suave {
 .titulo-noches { color: #ffffff; }
 .subtitulo-noches { color: rgba(242, 247, 236, 0.78); }
 
+/* Flex y no grid: con grid de columnas iguales, una sola noche se estiraba a todo el ancho.
+   Así cada tarjeta mantiene su ancho fijo, una sola queda centrada, y cada noche nueva se
+   coloca a su derecha (y baja de fila sola cuando ya no entran). */
 .grid-noches {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 1.25rem;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
+/* Rectángulo pequeño de proporción fija (tipo afiche): el ancho fijo es lo que permite que
+   una sola noche quede centrada en vez de estirarse, y que las siguientes se acomoden a su
+   derecha. El texto se ancla abajo, sobre el degradado. */
 .noche-card {
+  position: relative;
+  overflow: hidden;
+  width: min(272px, 100%);
+  aspect-ratio: 3 / 4;
   display: flex;
-  gap: 1rem;
-  background: rgba(255, 255, 255, 0.07);
+  flex-direction: column;
+  justify-content: flex-end;
+  background:
+    linear-gradient(170deg, color-mix(in srgb, var(--color-noche) 38%, #150b33) 0%, #0c0722 100%);
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 14px;
-  padding: 1.4rem;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  border-radius: 16px;
+  padding: 1.1rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .noche-card:hover {
   transform: translateY(-4px);
-  background: rgba(255, 255, 255, 0.1);
   box-shadow: 0 16px 32px rgba(0, 0, 0, 0.35);
 }
 
+.noche-media {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+/* La foto/video se ve COMPLETA: "contain", nunca "cover" —cover recortaba la cara o los
+   bordes de la imagen. Se escala sola hasta caber entera dentro del rectángulo. */
+.noche-media-principal {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* El relleno borroso va detrás de la imagen completa (ver comentario en la plantilla). */
+.noche-media-relleno {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  /* El scale tapa el borde translúcido que deja el blur al llegar al filo de la caja. */
+  transform: scale(1.2);
+  filter: blur(22px) brightness(0.55) saturate(1.1);
+}
+
+/* Degradado de lectura: transparente arriba (deja ver la foto entera) y opaco abajo, que es
+   donde está el texto. Sin esto, sobre una foto clara el texto blanco no se lee. */
+.noche-card--media::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: linear-gradient(
+    to top,
+    rgba(6, 4, 18, 0.96) 0%,
+    rgba(6, 4, 18, 0.82) 28%,
+    rgba(6, 4, 18, 0.35) 55%,
+    rgba(6, 4, 18, 0.12) 100%
+  );
+}
+
+/* Por encima del medio y su degradado (que son position: absolute con z-index propio):
+   sin esto, el orden normal del flujo no garantiza que el contenido quede arriba de capas
+   posicionadas. Ojo: aquí NO va .noche-fecha — esta regla es más específica que la suya y
+   le pisaría el `position: absolute` con el que flota en la esquina. */
+.noche-card > .noche-cuerpo {
+  position: relative;
+  z-index: 3;
+}
+
+/* La fecha flota arriba a la izquierda para no robarle alto al texto de abajo. */
 .noche-fecha {
+  position: absolute;
+  top: 0.9rem;
+  left: 0.9rem;
+  z-index: 3;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 58px;
-  height: 58px;
+  width: 52px;
+  height: 52px;
   border-radius: 12px;
   color: #ffffff;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
 }
 
-.noche-fecha strong { font-family: 'Anton', sans-serif; font-size: 1.4rem; line-height: 1; }
-.noche-fecha span { font-size: 0.68rem; }
+.noche-fecha strong { font-family: 'Anton', sans-serif; font-size: 1.3rem; line-height: 1; }
+.noche-fecha span { font-size: 0.64rem; }
 
-.noche-cuerpo h3 { margin: 0 0 0.25rem; font-size: 1.15rem; }
-.noche-dia-semana { margin: 0 0 0.6rem; font-size: 0.8rem; color: rgba(242, 247, 236, 0.68); }
-.noche-descripcion { margin: 0 0 0.75rem; font-size: 0.9rem; color: rgba(242, 247, 236, 0.9); }
+.noche-cuerpo h3 { margin: 0 0 0.2rem; font-size: 1.1rem; }
+.noche-dia-semana { margin: 0 0 0.45rem; font-size: 0.76rem; color: rgba(242, 247, 236, 0.72); }
+
+/* Recortada a 3 líneas: una descripción larga estiraría el texto hasta tapar la foto y
+   dejaría las tarjetas descuadradas entre sí. */
+.noche-descripcion {
+  margin: 0 0 0.6rem;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: rgba(242, 247, 236, 0.88);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 
 /* Cartel aún por confirmar: un artista por noche, en silueta. El degradado que la rellena
    se desliza sin parar —un "brillo" que dice "esto se revela pronto" sin texto. */
 .noche-artista {
   display: flex;
   align-items: center;
-  gap: 0.9rem;
-  margin-top: 1.1rem;
+  gap: 0.6rem;
+  margin-top: 0.35rem;
 }
 
 .artista-silueta {
   position: relative;
   flex-shrink: 0;
-  width: 72px;
-  height: 72px;
+  width: 40px;
+  height: 40px;
   overflow: hidden;
   /* Color de respaldo por si el navegador no soporta mask-image: sin esto, sin el
      ::before (que sí queda recortado por la máscara) se vería vacío. */
@@ -1070,9 +1196,20 @@ html.fx-scroll-suave {
 }
 
 .artista-etiqueta {
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: rgba(242, 247, 236, 0.9);
+}
+
+/* Artista confirmado (nombre puesto desde el panel): reemplaza la silueta animada, ya no
+   hace falta decir "por revelar". */
+.artista-nombre {
+  font-family: 'Anton', sans-serif;
+  font-size: 1.05rem;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  color: #ffffff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
 }
 
 
@@ -1290,8 +1427,8 @@ html.fx-scroll-suave {
   }
   .stand-destacado-img { min-height: 200px; }
   .stand-destacado-texto { padding: 1.5rem; }
-  .noche-card { flex-direction: column; }
-  .noche-fecha { flex-direction: row; gap: 0.35rem; width: auto; height: auto; padding: 0.4rem 0.9rem; align-self: flex-start; }
+  /* La tarjeta de noche ya es un rectángulo de ancho fijo que entra en pantalla de teléfono
+     (272px), así que no necesita reordenarse aquí: se deja igual que en escritorio. */
   .plano-visor { min-height: 400px; }
 }
 
