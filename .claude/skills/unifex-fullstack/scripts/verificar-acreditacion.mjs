@@ -63,6 +63,18 @@ const T = await entrar(arg('usuario', 'admin1'), arg('clave', 'VO7xGroB8ag2Qz1B'
 if (!paso('login de administracion', !!T)) process.exit(1);
 
 // --------------------------------------------------------------- venta de prueba
+/*
+ * Barrido de arranque. Cada pasada crea sus ventas de prueba y las cancela al final, pero si
+ * una se corta a la mitad quedan vivas — y entonces la siguiente encuentra DOS entidades con
+ * el mismo nombre y se lia. Antes de empezar se limpia lo que dejaron las pasadas anteriores.
+ */
+for (const c of ((await api(T, '/api/app/credenciales')).cuerpo || [])) {
+  if (/^ZZ /.test(c.entidad || '') && c.inscripcionId) {
+    await api(T, `/api/app/inscripciones/${c.inscripcionId}/cancelar`, { method: 'POST',
+      body: JSON.stringify({ motivo: 'Limpieza de pruebas de acreditacion' }) });
+  }
+}
+
 titulo('Preparar una venta de prueba, AL CONTADO');
 const puestos = (await api(T, '/api/app/puestos')).cuerpo || [];
 const libre = puestos.find((p) => p.estado === 'L');
@@ -228,6 +240,127 @@ try {
     paso('pero ya no le falta nada por completar',
          c?.faltantes.CON_ETIQUETAS.length === 0);
   }
+
+  // ------------------------------------------------------------- el vendedor
+  /*
+   * Un ADMINISTRATIVO acredita a SUS expositores y a nadie mas.
+   *
+   * Es el caso que motiva todo esto: quien tiene delante al expositor, con el recibo en la mano
+   * y la foto por tomar, es el vendedor que le vendio la caseta, no el mostrador. Pero la lista
+   * completa lleva nombres, C.I. y telefonos de los clientes de TODOS los vendedores, asi que
+   * darle la pantalla sin acotarla habria sido peor que no darsela.
+   */
+  titulo('Un ADMINISTRATIVO solo acredita sus propias ventas');
+  const rolVend = (Array.isArray(roles) ? roles : roles.roles || [])
+      .find((x) => (x.nombre || '').toUpperCase() === 'ADMINISTRATIVO');
+  const USER_V = 'zz_vendedor_pruebas';
+  const CLAVE_VEND = 'Prueba.Vendedor.2026';
+  const CI_VEND = '99999960';
+  let vendedorId = null;
+
+  const usuariosV = (await api(T, '/api/app/usuarios')).cuerpo;
+  const yaVend = (Array.isArray(usuariosV) ? usuariosV : usuariosV?.usuarios || [])
+      .find((u) => u.username === USER_V);
+  if (yaVend) {
+    vendedorId = yaVend.id;
+    await api(T, `/api/app/usuarios/${vendedorId}/estado`, { method: 'PATCH',
+      body: JSON.stringify({ activo: true }) });
+    await api(T, `/api/app/usuarios/${vendedorId}/password`, { method: 'PATCH',
+      body: JSON.stringify({ password: CLAVE_VEND }) });
+  } else {
+    const porCi = (await api(T, `/api/app/usuarios/personas/por-ci?ci=${CI_VEND}`)).cuerpo;
+    const cuerpo = { username: USER_V, password: CLAVE_VEND, rolId: rolVend.id };
+    if (porCi?.existe) cuerpo.personaId = porCi.persona?.id;
+    else cuerpo.persona = { nombre: 'ZZVENDEDOR', paterno: 'PRUEBA', materno: '', ci: CI_VEND,
+                            correo: null, celular: '70000060' };
+    const alta = await api(T, '/api/app/usuarios', { method: 'POST', body: JSON.stringify(cuerpo) });
+    vendedorId = alta.cuerpo?.usuario?.id ?? alta.cuerpo?.id;
+  }
+  if (!paso('hay un vendedor de prueba', !!vendedorId, `id ${vendedorId}`)) throw new Error('sin vendedor');
+
+  // Sin caseta habilitada no puede vender, asi que no habria nada que acreditar.
+  const libres = ((await api(T, '/api/app/vendedores/puestos-asignables')).cuerpo || [])
+      .filter((p) => !p.asignadoAId).map((p) => p.id);
+  const suya = ((await api(T, '/api/app/puestos')).cuerpo || [])
+      .find((p) => p.estado === 'L' && libres.includes(p.id));
+  await api(T, `/api/app/vendedores/${vendedorId}/puestos`, { method: 'PUT',
+    body: JSON.stringify({ puestoIds: suya ? [suya.id] : [] }) });
+  if (!paso('con una caseta habilitada para vender', !!suya, suya?.codigo)) throw new Error('sin caseta');
+
+  const VE = await entrar(USER_V, CLAVE_VEND);
+  if (!paso('el vendedor entra', !!VE)) throw new Error('el vendedor no entra');
+
+  await api(VE, '/api/app/puestos/carrito', { method: 'POST', body: JSON.stringify({ ids: [suya.id] }) });
+  const ventaV = await api(VE, '/api/app/inscripciones', { method: 'POST', body: JSON.stringify({
+    entidadNombre: 'ZZ CLIENTE DEL VENDEDOR', nit: '', descripcion: 'PRUEBA', objeto: '',
+    representanteLegal: 'REP VEND', ciRepresentante: '99999961', celularRepresentante: '70000061',
+    tipoEntidadId: 1, fechaInicio: null, fechaFin: null,
+    responsables: [{ nombre: 'CLIENTE', paterno: 'DELVENDEDOR', materno: '', ci: '99999962',
+                     celular: '70000062', correo: null }],
+    entidadBancaria: '', numComprobante: null, pagoContado: true, puestos: [suya.id] }) });
+  const insV = ventaV.cuerpo?.inscripcionId;
+  if (!paso('registra una venta suya', !!insV, JSON.stringify(ventaV.cuerpo).slice(0, 90))) {
+    throw new Error('el vendedor no pudo vender');
+  }
+
+  const listaV = (await api(VE, '/api/app/credenciales')).cuerpo || [];
+  // Se busca por ID DE INSCRIPCION y no por el nombre de la entidad: si una pasada anterior
+  // dejo una venta de prueba a medias, el nombre coincide con dos y se acaba subiendo la foto
+  // de un responsable que pertenece a otra venta. El sintoma era un 400 sin relacion aparente.
+  const suyaCred = listaV.find((x) => x.inscripcionId === insV);
+  paso('ve la credencial de su propia venta', !!suyaCred);
+  paso('y NO ve las ventas de los demas',
+       !listaV.some((x) => x.entidad === 'ZZ PRUEBA ACREDITACION'),
+       `${listaV.length} credencial(es) en su lista`);
+
+  // Lo que justifica darle la pantalla: completar en el momento, sin mandar a nadie a una cola.
+  r = await api(VE, `/api/app/inscripciones/${insV}/comprobante`,
+                { method: 'POST', body: imagen('comprobante.jpg') });
+  paso('adjunta el comprobante de su venta', r.estado === 200 && r.cuerpo?.ok === true,
+       `${r.estado}`);
+  r = await api(VE, `/api/app/inscripciones/${insV}/responsables/${suyaCred.responsableId}/foto`,
+                { method: 'POST', body: imagen('foto.jpg') });
+  paso('y la foto de su responsable', r.estado === 200 && r.cuerpo?.ok !== false, `${r.estado}`);
+
+  const suyaLista = ((await api(VE, '/api/app/credenciales')).cuerpo || [])
+      .find((x) => x.inscripcionId === insV);
+  paso('con eso su credencial queda lista', suyaLista?.listo?.CON_ETIQUETAS === true);
+
+  r = await api(VE, '/api/app/credenciales/pdf', { method: 'POST',
+    body: JSON.stringify({ responsables: [suyaCred.responsableId], plantilla: 'CON_ETIQUETAS' }) });
+  paso('y la imprime', r.estado === 200 && r.pdf > 10000, `${r.estado}, ${Math.round(r.pdf / 1024)} KB`);
+
+  // Esconder no es impedir: los ids los escribe quien llama, asi que el corte tiene que estar
+  // en el servidor. `c` sigue siendo la credencial de la venta que registro admin1.
+  r = await api(VE, '/api/app/credenciales/pdf', { method: 'POST',
+    body: JSON.stringify({ responsables: [c.responsableId], plantilla: 'QR_GRANDE' }) });
+  paso('NO puede imprimir la credencial de una venta ajena, ni pasando el id a mano',
+       r.estado === 403, `${r.estado}`);
+
+  r = await api(VE, `/api/app/credenciales/${c.responsableId}/impresiones`);
+  paso('ni ver quien imprimio una credencial ajena',
+       r.estado === 200 && Array.isArray(r.cuerpo) && r.cuerpo.length === 0,
+       `${r.estado}, ${r.cuerpo?.length} fila(s)`);
+
+  // "Imprimir todas" para un vendedor son todas LAS SUYAS, no la feria entera.
+  const antesAjena = ((await api(T, `/api/app/credenciales/${c.responsableId}/impresiones`)).cuerpo || []).length;
+  r = await api(VE, '/api/app/credenciales/pdf', { method: 'POST',
+    body: JSON.stringify({ plantilla: 'CON_ETIQUETAS' }) });
+  paso('la generacion masiva le sale solo con lo suyo', r.estado === 200, `${r.estado}`);
+  const despuesAjena = ((await api(T, `/api/app/credenciales/${c.responsableId}/impresiones`)).cuerpo || []).length;
+  paso('y no ha tocado ninguna credencial ajena', despuesAjena === antesAjena,
+       `${antesAjena} -> ${despuesAjena}`);
+
+  titulo('Limpieza del vendedor');
+  await api(T, `/api/app/inscripciones/${insV}/cancelar`, { method: 'POST',
+    body: JSON.stringify({ motivo: 'Venta de prueba del vendedor' }) });
+  await api(T, `/api/app/vendedores/${vendedorId}/puestos`, { method: 'PUT',
+    body: JSON.stringify({ puestoIds: [] }) });
+  await api(T, `/api/app/usuarios/${vendedorId}/estado`, { method: 'PATCH',
+    body: JSON.stringify({ activo: false }) });
+  paso('su venta de prueba queda cancelada',
+       !((await api(T, '/api/app/credenciales')).cuerpo || [])
+           .some((x) => x.entidad === 'ZZ CLIENTE DEL VENDEDOR'));
 
   // Desactivar, no borrar: borrado quedaria inalcanzable y la proxima pasada no podria entrar.
   if (usuarioId) await api(T, `/api/app/usuarios/${usuarioId}/estado`, { method: 'PATCH',

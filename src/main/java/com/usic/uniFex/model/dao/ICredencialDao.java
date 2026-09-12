@@ -67,7 +67,50 @@ public interface ICredencialDao extends JpaRepository<Responsable, Long> {
             nativeQuery = true)
     List<CredencialFilaView> listarDeEdicionActiva();
 
+    /**
+     * Lo mismo, pero solo las ventas que registro ese usuario.
+     *
+     * Es lo que ve un ADMINISTRATIVO: sus expositores y nadie mas. La lista completa lleva los
+     * datos de los clientes de TODOS los vendedores, y un vendedor no tiene por que verlos.
+     *
+     * Se filtra por la columna de auditoria de la inscripcion, la misma con la que ya se arman
+     * "Mis ventas" y los pendientes de comprobante, para que las tres pantallas cuenten lo
+     * mismo. Si algun dia una venta puede cambiar de vendedor, este es uno de los sitios a
+     * revisar.
+     *
+     * OJO con el nombre de la columna: en la entidad es {@code _registro_idUsuario}, pero eso
+     * es lo que Java escribe — la estrategia de nombres de Hibernate lo pasa a minusculas con
+     * guiones bajos, y en PostgreSQL la columna se llama {@code _registro_id_usuario}. En una
+     * consulta nativa no hay traduccion: escribir el nombre de la entidad da un error de
+     * columna inexistente en tiempo de ejecucion, no de compilacion.
+     */
+    @Query(value = SELECT
+            + " AND i.id_edicion = (SELECT ed.id FROM edicion ed WHERE ed.activa LIMIT 1) "
+            + " AND i.\"_registro_id_usuario\" = :usuarioId "
+            + GROUP + " ORDER BY e.nombre, r.es_titular DESC, p.nombre",
+            nativeQuery = true)
+    List<CredencialFilaView> listarDeEdicionActivaDe(@Param("usuarioId") Long usuarioId);
+
     /** Una sola credencial, para la vista publica del QR y para imprimir de a una. */
     @Query(value = SELECT + " AND r.id = :responsableId " + GROUP, nativeQuery = true)
     Optional<CredencialFilaView> buscarPorResponsable(@Param("responsableId") Long responsableId);
+
+    /**
+     * ¿Esta credencial sale de una venta registrada por ese usuario?
+     *
+     * Se pregunta a la base en vez de mirar el listado que ya se tiene: quien pide un PDF manda
+     * los ids que quiere, y comprobarlos contra lo que el propio cliente envio no comprueba
+     * nada. Es la puerta que impide que un vendedor imprima las credenciales de otro pasando
+     * ids a mano.
+     */
+    @Query(value = "SELECT COUNT(*) > 0"
+            + "   FROM responsable r"
+            + "   INNER JOIN entidad e     ON e.id = r.id_entidad"
+            + "   INNER JOIN inscripcion i ON i.id_entidad = e.id"
+            + "                           AND (i.\"_estado\" IS NULL OR i.\"_estado\" <> 'X')"
+            + "  WHERE r.id = :responsableId"
+            + "    AND i.\"_registro_id_usuario\" = :usuarioId",
+            nativeQuery = true)
+    boolean esDeUsuario(@Param("responsableId") Long responsableId,
+                        @Param("usuarioId") Long usuarioId);
 }

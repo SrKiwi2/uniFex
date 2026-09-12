@@ -128,8 +128,9 @@ public class CredencialesApiController {
      * justo el trabajo pendiente. Una lista que solo enseñara las aptas escondería eso.
      */
     @GetMapping
-    @PreAuthorize(Roles.VERIFICA_CREDENCIALES)
+    @PreAuthorize(Roles.USA_CREDENCIALES)
     public List<Map<String, Object>> listar() {
+        Long soloMias = alcanceDelUsuario();
         // El historial se trae de una vez y se cruza en memoria: una consulta por credencial
         // serian ~800 viajes a la base para pintar una lista.
         Map<Long, Object[]> impresas = new LinkedHashMap<>();
@@ -137,7 +138,7 @@ public class CredencialesApiController {
             impresas.put(((Number) f[0]).longValue(), f);
         }
 
-        return credencialService.listar().stream().map(c -> {
+        return credencialService.listar(soloMias).stream().map(c -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("responsableId", c.responsableId());
             m.put("codigo", c.codigo());
@@ -190,16 +191,34 @@ public class CredencialesApiController {
     }
 
     @PostMapping("/pdf")
-    @PreAuthorize(Roles.VERIFICA_CREDENCIALES)
+    @PreAuthorize(Roles.USA_CREDENCIALES)
     public ResponseEntity<byte[]> pdf(@RequestBody(required = false) PeticionPdf req) {
         String plantilla = (req == null || req.plantilla() == null || req.plantilla().isBlank())
                 ? "CON_ETIQUETAS" : req.plantilla().trim().toUpperCase();
         boolean forzar = req != null && Boolean.TRUE.equals(req.forzar());
+        Long soloMias = alcanceDelUsuario();
 
         List<Long> ids = req == null ? null : req.responsables();
+        // Un vendedor que pide "todas" recibe todas LAS SUYAS. Sin acotar aqui, el boton de
+        // generacion masiva le imprimiria la feria entera.
         List<CredencialDTO> elegidas = (ids == null || ids.isEmpty())
-                ? credencialService.listarAptas(plantilla)
+                ? credencialService.listarAptas(plantilla, soloMias)
                 : credencialService.porResponsables(ids);
+
+        // Y si manda ids concretos, se comprueban contra la base uno por uno. La lista que el
+        // cliente tiene no sirve de control: los ids los escribe quien llama.
+        if (soloMias != null) {
+            for (CredencialDTO c : elegidas) {
+                if (!credencialService.esDeUsuario(c.responsableId(), soloMias)) {
+                    log.warn("El usuario {} pidio imprimir la credencial {}, que no es de una venta suya",
+                            soloMias, c.responsableId());
+                    return ResponseEntity.status(403)
+                            .contentType(MediaType.TEXT_PLAIN)
+                            .body(("Solo puedes generar las credenciales de las ventas que "
+                                    + "registraste.").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                }
+            }
+        }
 
         // Sin `forzar`, no se imprime lo incompleto: descubrir despues de imprimir 300 que
         // media tanda no sirve es caro. Con `forzar`, se imprime igual y queda constancia.
@@ -242,8 +261,12 @@ public class CredencialesApiController {
 
     /** Quien imprimio esta credencial, cuando, con que plantilla y que faltaba entonces. */
     @GetMapping("/{responsableId}/impresiones")
-    @PreAuthorize(Roles.VERIFICA_CREDENCIALES)
+    @PreAuthorize(Roles.USA_CREDENCIALES)
     public List<Map<String, Object>> impresiones(@PathVariable Long responsableId) {
+        Long soloMias = alcanceDelUsuario();
+        if (soloMias != null && !credencialService.esDeUsuario(responsableId, soloMias)) {
+            return List.of();
+        }
         return impresiones.historial(responsableId).stream().map(f -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("cuando", String.valueOf(f[0]));
@@ -263,6 +286,24 @@ public class CredencialesApiController {
     private Long usuarioActual() {
         Authentication a = SecurityContextHolder.getContext().getAuthentication();
         return (a != null && a.getPrincipal() instanceof JwtUser u) ? u.id() : null;
+    }
+
+    /**
+     * Hasta donde llega este usuario: {@code null} = toda la feria, o su id = solo sus ventas.
+     *
+     * Administracion y VERIFICADOR preparan la acreditacion de todos. Un ADMINISTRATIVO
+     * acredita a los expositores que el vendio, y nada mas: la lista completa lleva nombres,
+     * C.I. y telefonos de los clientes de sus compañeros.
+     */
+    private Long alcanceDelUsuario() {
+        return (esAdministracion() || esVerificador()) ? null : usuarioActual();
+    }
+
+    private boolean esVerificador() {
+        Authentication a = SecurityContextHolder.getContext().getAuthentication();
+        return a != null && a.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch("ROLE_VERIFICADOR"::equals);
     }
 
     private boolean esAdministracion() {
