@@ -22,7 +22,17 @@ async function cargar() {
   cargando.value = true;
   try {
     const r = await apiFetch('/api/app/noches-fexpo');
-    noches.value = await r.json();
+    const d = await r.json().catch(() => null);
+    // Este endpoint devuelve una LISTA. Ante cualquier error (403, o un 500 porque la
+    // migración V26 no se aplicó a esa base) llega un objeto {ok:false,...} en su lugar, y
+    // asignarlo tal cual rompía la vista entera con "no es iterable" —un mensaje que no
+    // dice nada del problema real. Se queda con la lista vacía y se muestra el motivo.
+    if (!r.ok || !Array.isArray(d)) {
+      noches.value = [];
+      toast(d?.mensaje || `No se pudo cargar la lista (error ${r.status}).`, 'error');
+      return;
+    }
+    noches.value = d;
   } catch (e) {
     toast(e.message, 'error');
   } finally {
