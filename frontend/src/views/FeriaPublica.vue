@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue';
 import { url as urlApi } from '../config.js';
 import { alerta } from '../ui/alerta.js';
+import { escucharNoches } from '../nochesEnVivo.js';
 
 const loading = ref(true);
 const error = ref(null);
@@ -47,8 +48,16 @@ function diaDelMes(iso) {
 // NochesFexpoApiController). Cuando el admin no puso nombre de artista, se muestra la
 // silueta animada de "por revelar"; cuando no subió foto/video, la tarjeta se queda con el
 // fondo de color plano de siempre.
+//
+// En vivo por WebSocket (ver nochesEnVivo.js / NochesFexpoEventPublisher): cada alta,
+// edición, foto nueva o baja hecha en el panel llega aquí sola, sin recargar la página.
+// Mientras no haya llegado nada (null) se usa lo que trajo /api/publico/feria; desde entonces
+// manda lo recibido en vivo, que siempre es igual o más reciente.
+const nochesEnVivo = ref(null);
+let dejarDeEscucharNoches = null;
+
 const nochesFexpo = computed(() => {
-  const noches = datos.value?.noches || [];
+  const noches = nochesEnVivo.value ?? datos.value?.noches ?? [];
   return noches.map((n, i) => ({
     ...n,
     dia: diaDelMes(n.fecha),
@@ -247,6 +256,10 @@ onMounted(() => {
   intervaloReloj = setInterval(() => {
     ahora.value = Date.now();
   }, 1000);
+
+  dejarDeEscucharNoches = escucharNoches((lista) => {
+    nochesEnVivo.value = lista;
+  });
 });
 
 // Entrada animada de las tarjetas de stands al hacer scroll. La clase que las oculta
@@ -277,6 +290,7 @@ onMounted(() => {
 onUnmounted(() => {
   document.documentElement.classList.remove('fx-scroll-suave', 'fx-revela-js');
   clearInterval(intervaloReloj);
+  dejarDeEscucharNoches?.();
   observadorStands?.disconnect();
 });
 
@@ -379,7 +393,8 @@ const cuentaRegresiva = computed(() => {
     </section>
 
     <!-- Artistas: primera sección tras el hero. Administrable desde el panel "Noches de
-         FEXPO" (NochesFexpoApiController): cada noche sale de /api/publico/feria. Sin
+         FEXPO" (NochesFexpoApiController): cada noche sale de /api/publico/feria y los
+         cambios llegan en vivo por WebSocket (/topic/publico/noches). Sin
          nombre de artista se ve la silueta animada de "por revelar"; sin foto/video de
          fondo se queda con el color plano de la tarjeta. Si no hay ninguna noche cargada,
          la sección entera no se muestra (ver v-if en <section>). -->

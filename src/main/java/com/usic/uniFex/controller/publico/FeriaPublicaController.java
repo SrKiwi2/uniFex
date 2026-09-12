@@ -170,6 +170,20 @@ public class FeriaPublicaController {
     }
 
     /**
+     * Solo la cartelera de noches. Los cambios llegan en vivo por WebSocket
+     * ({@code /topic/publico/noches}, ver NochesFexpoEventPublisher); este GET es para que el
+     * cliente se ponga al día cada vez que (re)conecta, porque lo que cambió mientras estaba
+     * desconectado no se vuelve a difundir. Aparte del {@code /api/publico/feria} completo,
+     * que recalcula las estadísticas de todas las casetas en cada llamada.
+     */
+    @GetMapping("/noches")
+    public List<NocheFexpoDTO> noches() {
+        return nochesFexpoService.listarDeEdicionActiva().stream()
+                .map(NocheFexpoDTO::de)
+                .toList();
+    }
+
+    /**
      * Solo estadísticas ligeras (para widgets, contadores en tiempo real, etc.)
      */
     @GetMapping("/stats")

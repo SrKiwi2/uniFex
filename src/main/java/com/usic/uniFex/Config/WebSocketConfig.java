@@ -13,6 +13,7 @@ import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
@@ -24,22 +25,52 @@ import com.usic.uniFex.security.JwtUser;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Config de WebSocket (STOMP) para difundir el estado de los puestos en tiempo real.
+ * Config de WebSocket (STOMP) para difundir en tiempo real.
  *
  * - Los clientes se conectan al endpoint {@code /ws} por WebSocket nativo.
- * - El servidor publica los cambios en el topic {@code /topic/puestos}.
+ * - El servidor publica el estado de las casetas en {@code /topic/puestos} (y demas topics
+ *   internos), que exigen JWT, y el contenido de la vista publica bajo
+ *   {@link #PREFIJO_PUBLICO} (hoy, la cartelera de "Noches de FEXPO"), abierto a anonimos.
  */
 @Configuration
 @EnableWebSocketMessageBroker
 @RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
+    /**
+     * Unico prefijo al que puede suscribirse una conexion SIN token. Todo lo que se publique
+     * aqui debe ser informacion que la vista publica ya muestra de todos modos.
+     */
+    public static final String PREFIJO_PUBLICO = "/topic/publico/";
+
     private final JwtService jwtService;
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
-        config.enableSimpleBroker("/topic");
+        // Latido del servidor cada 10 s. Sin el, una conexion que no recibe mensajes —la vista
+        // publica, donde la cartelera cambia muy de vez en cuando— queda muda, y un proxy
+        // delante (nginx corta a los 60 s por defecto) la cierra: el cliente vive reconectando.
+        // El segundo valor es 0 a proposito: el servidor NO exige latidos al cliente, porque el
+        // navegador frena los temporizadores de las pestañas en segundo plano y el broker
+        // cerraria conexiones sanas por "silencio".
+        config.enableSimpleBroker("/topic")
+                .setHeartbeatValue(new long[] { 10_000, 0 })
+                .setTaskScheduler(programadorLatidos());
         config.setApplicationDestinationPrefixes("/app");
+    }
+
+    /**
+     * Hilo propio para los latidos, y NO un @Bean a proposito: un TaskScheduler mas en el
+     * contexto podria cambiar cual usan los @Scheduled (el barrido de reservas). Daemon para
+     * no retener el cierre de la JVM.
+     */
+    private ThreadPoolTaskScheduler programadorLatidos() {
+        ThreadPoolTaskScheduler s = new ThreadPoolTaskScheduler();
+        s.setPoolSize(1);
+        s.setThreadNamePrefix("ws-latido-");
+        s.setDaemon(true);
+        s.initialize();
+        return s;
     }
 
     @Override
@@ -53,15 +84,23 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     }
 
     /**
-     * Autentica el WebSocket en el frame STOMP {@code CONNECT}, no en el handshake HTTP.
+     * Autentica el WebSocket en el frame STOMP {@code CONNECT}, no en el handshake HTTP, y
+     * decide a que puede suscribirse cada conexion.
      *
-     * La razon es del navegador, no de la libreria: la API {@code WebSocket} del navegador
-     * **no permite** anadir cabeceras propias al handshake, asi que un cliente web nunca
-     * podria mandar ahi el {@code Authorization} y validar en el handshake dejaria fuera a
-     * todos los clientes legitimos. El frame CONNECT, en cambio, siempre lleva las cabeceras
-     * que el cliente STOMP le pasa en {@code connectHeaders}.
+     * Por que en el CONNECT: la API {@code WebSocket} del navegador **no permite** anadir
+     * cabeceras propias al handshake, asi que un cliente web nunca podria mandar ahi el
+     * {@code Authorization}. El frame CONNECT, en cambio, siempre lleva las cabeceras que el
+     * cliente STOMP le pasa en {@code connectHeaders}.
      *
-     * Lanzar aqui aborta la conexion: el cliente recibe un frame ERROR y no se suscribe.
+     * Tres casos:
+     * - CONNECT con token valido: sesion autenticada, puede suscribirse a todo.
+     * - CONNECT con token invalido o expirado: se rechaza (frame ERROR), como siempre. Asi la
+     *   SPA sigue enterandose de que tiene que volver a iniciar sesion.
+     * - CONNECT SIN cabecera Authorization: sesion anonima (la vista publica de la feria).
+     *   Solo puede SUSCRIBIRSE a {@link #PREFIJO_PUBLICO}; cualquier otra suscripcion —en
+     *   especial /topic/puestos, el estado de venta en vivo— y cualquier SEND se rechazan.
+     *
+     * Lanzar aqui aborta el frame: el cliente recibe un frame ERROR.
      */
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
@@ -69,25 +108,44 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
             @Override
             public Message<?> preSend(Message<?> mensaje, MessageChannel canal) {
                 StompHeaderAccessor acc = MessageHeaderAccessor.getAccessor(mensaje, StompHeaderAccessor.class);
-                if (acc == null || !StompCommand.CONNECT.equals(acc.getCommand())) {
-                    return mensaje; // solo se autentica el CONNECT; el resto viaja ya autenticado
-                }
-                String cabecera = acc.getFirstNativeHeader("Authorization");
-                if (cabecera == null || !cabecera.startsWith("Bearer ")) {
-                    throw new MessagingException("Falta el token en el CONNECT");
-                }
-                try {
-                    JwtUser usuario = jwtService.validar(cabecera.substring(7));
-                    acc.setUser(new UsernamePasswordAuthenticationToken(
-                            usuario, null,
-                            List.of(new SimpleGrantedAuthority("ROLE_" + usuario.rolNormalizado()))));
-                } catch (MessagingException e) {
-                    throw e;
-                } catch (Exception e) {
-                    throw new MessagingException("Token invalido o expirado");
+                if (acc == null || acc.getCommand() == null) return mensaje;
+                if (StompCommand.CONNECT.equals(acc.getCommand())) {
+                    autenticar(acc);
+                } else if (StompCommand.SUBSCRIBE.equals(acc.getCommand())
+                        || StompCommand.SEND.equals(acc.getCommand())) {
+                    exigirPermiso(acc);
                 }
                 return mensaje;
             }
         });
+    }
+
+    private void autenticar(StompHeaderAccessor acc) {
+        String cabecera = acc.getFirstNativeHeader("Authorization");
+        if (cabecera == null) {
+            return; // anonimo: sin usuario; exigirPermiso() lo limita a PREFIJO_PUBLICO
+        }
+        if (!cabecera.startsWith("Bearer ")) {
+            throw new MessagingException("Cabecera Authorization mal formada en el CONNECT");
+        }
+        try {
+            JwtUser usuario = jwtService.validar(cabecera.substring(7));
+            acc.setUser(new UsernamePasswordAuthenticationToken(
+                    usuario, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_" + usuario.rolNormalizado()))));
+        } catch (Exception e) {
+            throw new MessagingException("Token invalido o expirado");
+        }
+    }
+
+    /** El usuario lo recuerda Spring desde el CONNECT; null = sesion anonima. */
+    private void exigirPermiso(StompHeaderAccessor acc) {
+        if (acc.getUser() != null) return;
+        String destino = acc.getDestination();
+        boolean suscripcionPublica = StompCommand.SUBSCRIBE.equals(acc.getCommand())
+                && destino != null && destino.startsWith(PREFIJO_PUBLICO);
+        if (!suscripcionPublica) {
+            throw new MessagingException("Destino no permitido sin autenticacion: " + destino);
+        }
     }
 }

@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.usic.uniFex.model.dto.NocheFexpoDTO;
+import com.usic.uniFex.model.service.NochesFexpoEventPublisher;
 import com.usic.uniFex.model.service.NochesFexpoService;
 import com.usic.uniFex.model.service.NochesFexpoService.Datos;
 import com.usic.uniFex.model.service.NochesFexpoService.Resultado;
@@ -36,7 +37,8 @@ import lombok.RequiredArgsConstructor;
  * el resto de administracion general ({@link Roles#ADMINISTRA}).
  *
  * La vista publica en si NO usa este controlador: lee de {@code GET /api/publico/feria},
- * sin autenticacion (ver {@code FeriaPublicaController}).
+ * sin autenticacion, y recibe los cambios en vivo por WebSocket en {@code /topic/publico/noches}
+ * (ver {@code FeriaPublicaController} y {@link NochesFexpoEventPublisher}).
  */
 @RestController
 @RequestMapping("/api/app/noches-fexpo")
@@ -45,6 +47,7 @@ import lombok.RequiredArgsConstructor;
 public class NochesFexpoApiController {
 
     private final NochesFexpoService servicio;
+    private final NochesFexpoEventPublisher publisher;
 
     /** Cuerpo de alta/edicion. `fecha` en ISO (yyyy-MM-dd), como manda Vue por defecto. */
     public record NocheRequest(LocalDate fecha, String titulo, String descripcion,
@@ -86,6 +89,10 @@ public class NochesFexpoApiController {
     }
 
     private ResponseEntity<Map<String, Object>> responder(Resultado r) {
+        // Toda escritura exitosa se difunde por WebSocket a la vista publica y a los demas
+        // paneles. Aqui ya estamos fuera de la transaccion del servicio: lo que viaja es lo que
+        // quedo guardado, nunca un cambio que todavia podia revertirse.
+        if (r.ok()) publisher.publicar();
         // LinkedHashMap y no Map.of: `noche` es null cuando falla, y Map.of no admite null.
         Map<String, Object> cuerpo = new LinkedHashMap<>();
         cuerpo.put("ok", r.ok());
