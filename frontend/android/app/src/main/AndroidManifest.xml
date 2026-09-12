@@ -45,4 +45,13 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- La camara es para leer el QR de las credenciales en la puerta (pantalla Escanear).
+         No se usa para tomar ni guardar fotos: el lector trabaja sobre el fotograma en vivo.
+         `required="false"` a proposito, para que la aplicacion siga instalandose en equipos
+         sin camara — el codigo tambien se puede teclear, que es el respaldo cuando el papel
+         viene arrugado o da el sol de frente. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 </manifest>

@@ -41,6 +41,19 @@ const T = (await login('admin1','VO7xGroB8ag2Qz1B')).token;
 const todas = (await api(T,'/api/app/puestos')).cuerpo;
 const rolAdm = (await api(T,'/api/app/roles')).cuerpo.find(r=>r.nombre==='ADMINISTRATIVO');
 
+/*
+ * Barrido de arranque. Estos guiones crean un vendedor con nombre irrepetible y lo borran al
+ * final, pero si uno se corta a la mitad ese usuario se queda VIVO, con una clave que esta
+ * escrita en este mismo archivo. Ejecutandose contra produccion eso es un vendedor de verdad
+ * al que puede entrar cualquiera que lea el repositorio. Asi que antes de empezar se limpia lo
+ * que dejaron las pasadas anteriores.
+ */
+for (const u of ((await api(T, '/api/app/usuarios')).cuerpo || [])) {
+  if (/^vend\d+$/.test(u.username || '')) {
+    await api(T, `/api/app/usuarios/${u.id}`, { method: 'DELETE' });
+  }
+}
+
 const usuario = `vend${marca}`;
 const vid = (await api(T,'/api/app/usuarios',{method:'POST',body:JSON.stringify({
   username:usuario,password:'ClaveVendedor9',rolId:rolAdm.id,personaId:null,
@@ -48,21 +61,38 @@ const vid = (await api(T,'/api/app/usuarios',{method:'POST',body:JSON.stringify(
 const V = (await login(usuario,'ClaveVendedor9')).token;
 ok(!!vid && !!V, 'se crea un vendedor de prueba y entra', usuario);
 
-// A) Sin asignaciones ve TODO (regla de despliegue seguro)
+// A) Habilitada != visible. El vendedor ve TODO el plano desde el primer dia; lo que cambia
+// con las habilitaciones es cuales puede vender. Esta prueba llego a exigir lo contrario
+// —cero casetas sin habilitaciones— de cuando el servidor filtraba el listado; desde que se
+// decidio ensenarle las ajenas en gris, esa expectativa era la que estaba mal.
 let r = await api(V,'/api/app/puestos');
 ok(r.estado === 200, 'un vendedor puede abrir el mapa (antes era HTTP 500)', `HTTP ${r.estado}`);
+ok(Array.isArray(r.cuerpo) && r.cuerpo.length === todas.length,
+   've el plano entero, tenga o no casetas habilitadas', `${r.cuerpo?.length} de ${todas.length}`);
+r = await api(V,'/api/app/mis-puestos');
 ok(Array.isArray(r.cuerpo) && r.cuerpo.length === 0,
-   'sin asignaciones NO ve ninguna caseta (la pantalla se lo explica)', `${r.cuerpo?.length} casetas`);
+   'pero todavia no tiene ninguna suya', `${r.cuerpo?.length} suya(s)`);
 
 // B) Una caseta suelta, SIN su categoria: el caso que antes no funcionaba nunca
 const catalogo = (await api(T,'/api/app/vendedores/puestos-asignables')).cuerpo || [];
 const libres = new Set(catalogo.filter(p => !p.asignadoAId).map(p => p.id));
 const obj = todas.find(p => p.estado === 'L' && libres.has(p.id));
 ok(!!obj, 'hay una caseta libre y sin dueño para la prueba', obj?.codigo);
-await api(T,`/api/app/vendedores/${vid}/puestos`,{method:'POST',body:JSON.stringify({puestoIds:[obj.id]})});
+// PUT, no POST: la seleccion se manda entera y el servidor calcula altas y bajas. Con POST
+// esto daba 405, que la cadena 2 convierte en un 302 al login — y fetch moria con
+// "redirect count exceeded", sin que se viera por ningun lado que la ruta estaba mal.
+r = await api(T,`/api/app/vendedores/${vid}/puestos`,{method:'PUT',body:JSON.stringify({puestoIds:[obj.id]})});
+ok(r.estado === 200 && r.cuerpo?.asignadas === 1, 'se le habilita UNA caseta suelta', `HTTP ${r.estado}`);
+r = await api(V,'/api/app/mis-puestos');
+ok(Array.isArray(r.cuerpo) && r.cuerpo.length === 1 && r.cuerpo[0].id === obj.id,
+   'con UNA caseta habilitada, esa es la unica suya', `${r.cuerpo?.length}: ${r.cuerpo?.[0]?.codigo}`);
 r = await api(V,'/api/app/puestos');
-ok(r.estado === 200 && r.cuerpo.length === 1 && r.cuerpo[0].id === obj.id,
-   'con UNA caseta suelta asignada, ve exactamente esa', `ve ${r.cuerpo?.length}: ${r.cuerpo?.[0]?.codigo}`);
+ok(r.cuerpo?.length === todas.length, 'y el plano lo sigue viendo entero', `${r.cuerpo?.length}`);
+
+// Lo que hace util ver las ajenas: saber a quien derivar al cliente que esta parado delante.
+r = await api(V,'/api/app/puestos/asignaciones');
+const mia = (r.cuerpo || []).find(a => a.puestoId === obj.id);
+ok(!!mia && !!mia.vendedor, 'las asignaciones dicen quien lleva cada caseta', mia?.vendedor);
 
 r = await api(T,`/api/app/vendedores/${vid}/puestos`);
 ok(Array.isArray(r.cuerpo) && r.cuerpo.length === 1,

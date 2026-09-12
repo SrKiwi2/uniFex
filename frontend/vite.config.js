@@ -32,10 +32,21 @@ export default defineConfig({
     proxy: {
       // 127.0.0.1 explicito en vez de 'localhost': evita que Node vuelva a jugar a
       // adivinar entre IPv4 e IPv6 en el salto proxy -> backend.
-      '/api': { target: BACKEND, changeOrigin: true },
-      '/ws': { target: BACKEND, changeOrigin: true, ws: true },
+      //
+      // `xfwd: true` manda X-Forwarded-Host / -Proto / -For, y NO es un adorno.
+      //
+      // Con `changeOrigin: true` el proxy reescribe la cabecera Host a la del destino, asi que
+      // el backend cree estar en 127.0.0.1:7676 y construye ahi sus redirecciones. Cualquier
+      // peticion que caiga en la cadena web —una ruta que no existe, un /files/** que falta—
+      // acaba en un 302 a la pagina de login con la direccion ABSOLUTA del backend dentro.
+      // El navegador sigue esa redireccion, aterriza en OTRO origen, y lo que se ve es un
+      // error de CORS en `http://127.0.0.1:7676/` que no menciona por ningun lado la peticion
+      // que lo provoco. Con estas cabeceras, el ForwardedHeaderFilter que ya tiene el backend
+      // reconstruye la URL original y redirige a localhost:5173, que es el mismo origen.
+      '/api': { target: BACKEND, changeOrigin: true, xfwd: true },
+      '/ws': { target: BACKEND, changeOrigin: true, ws: true, xfwd: true },
       // Comprobantes y demás archivos subidos (servidos por el backend en /files/**).
-      '/files': { target: BACKEND, changeOrigin: true },
+      '/files': { target: BACKEND, changeOrigin: true, xfwd: true },
     },
   },
 });

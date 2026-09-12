@@ -150,10 +150,11 @@ public interface IInscripcionDao extends JpaRepository <Inscripcion, Long> {
     /**
      * Ventas del vendedor que siguen **sin comprobante de pago**.
      *
-     * El estado de pago no es una columna a proposito: se deduce de los datos que ya existen
-     * —pago al contado, o comprobante adjunto—. Añadir un estado nuevo obligaria a enseñarselo
-     * a todas las consultas y a la stored function, y en este proyecto ya hubo totales
-     * descuadrados por filtros de estado que no coincidian.
+     * El comprobante hace falta SIEMPRE, tambien cuando se marco "pago al contado". Antes esta
+     * consulta llevaba {@code and i.pagoContado = false}, asi que una venta al contado nunca
+     * aparecia como pendiente y se quedaba sin respaldo documental: al llegar la acreditacion
+     * no habia con que comprobar que ese expositor habia pagado. Marcar "contado" dice COMO se
+     * pago, no que exista el recibo.
      *
      * El aislamiento es por diseño: se filtra por el usuario que la registro, asi que un
      * vendedor solo ve sus pendientes.
@@ -162,7 +163,6 @@ public interface IInscripcionDao extends JpaRepository <Inscripcion, Long> {
            select i from Inscripcion i
             where i.registroIdUsuario = :usuarioId
               and (i.estado is null or i.estado <> 'X')
-              and i.pagoContado = false
               and (i.imgComprobante is null or i.imgComprobante = '')
             order by i.fechaCompra desc
            """)

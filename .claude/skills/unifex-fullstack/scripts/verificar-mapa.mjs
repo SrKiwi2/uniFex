@@ -742,7 +742,7 @@ titulo('Refs de plantilla que pisan datos');
 
 // ---------------------------------------------------------------- giro de las casetas
 /*
- * El giro (V24) se guarda por caseta y viaja CON la posicion, no por su propia ruta: el editor
+ * El giro (V25/V27) se guarda por caseta y viaja CON la posicion, no por su propia ruta: el editor
  * mueve, escala y gira en el mismo gesto y guarda un solo lote.
  *
  * Lo delicado es el orden del transform. El pin es una caja de 100 px que se reduce con
@@ -757,11 +757,13 @@ titulo('Giro de las casetas en el plano');
   const RAIZ = resolve(AQUI, '../../../..') + '/';
   const leer = (p) => readFileSync(RAIZ + p, 'utf8');
 
+  // La columna la crea la V25 y el rango lo acota la V27: dos scripts porque el trabajo se
+  // hizo por duplicado en dos ramas y al sincronizar se quedo uno de cada cosa.
   paso('existe la migracion del giro',
-       leer('src/main/resources/db/reserva/V24__puesto_rotacion.sql').includes('mapa_rotacion'));
+       leer('src/main/resources/db/reserva/V25__mapa_rotacion.sql').includes('mapa_rotacion'));
   paso('la base acota el giro a 0..359',
        /CHECK \(mapa_rotacion IS NULL OR \(mapa_rotacion >= 0 AND mapa_rotacion <= 359\)\)/
-         .test(leer('src/main/resources/db/reserva/V24__puesto_rotacion.sql')));
+         .test(leer('src/main/resources/db/reserva/V27__puesto_rotacion_rango.sql')));
 
   const dao = leer('src/main/java/com/usic/uniFex/model/dao/IPuestoDao.java');
   paso('el giro se guarda junto a la posicion, en una sola escritura',

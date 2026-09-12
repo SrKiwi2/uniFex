@@ -15,12 +15,27 @@ import { mock } from 'node:test';
 let peticiones = 0;
 let respuesta = [];
 let fallaRed = false;
+/*
+ * El doble tiene que parecerse a una Response de verdad, no solo traer `json()`: el store hace
+ * peticiones CONDICIONADAS (If-None-Match) y mira `status` y `headers.get('ETag')` para no
+ * descargar lo que no cambio. Cuando el doble devolvia solo `json`, las pruebas reventaban con
+ * "Cannot read properties of undefined (reading 'get')" — y el fallo era del doble, no del
+ * store. Si algun dia se prueba el camino del 304, basta con devolver `status: 304` aqui.
+ */
 mock.module('../src/api.js', {
   namedExports: {
-    apiFetch: async () => {
-      peticiones++;
+    apiFetch: async (ruta) => {
+      // Se cuentan las DESCARGAS DE LA LISTA, no las llamadas. Una carga trae ademas las
+      // asignaciones (quien vende cada caseta) en la misma tanda: contar todo daba 2 donde la
+      // invariante dice 1, y la invariante seguia siendo cierta.
+      if (String(ruta).endsWith('/api/app/puestos')) peticiones++;
       if (fallaRed) throw new Error('sin red');
-      return { json: async () => structuredClone(respuesta) };
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ ETag: `"prueba-${peticiones}"` }),
+        json: async () => structuredClone(respuesta),
+      };
     },
   },
 });

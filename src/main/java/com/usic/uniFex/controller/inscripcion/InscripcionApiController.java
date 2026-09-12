@@ -311,10 +311,20 @@ public class InscripcionApiController {
         if (i == null) {
             return ResponseEntity.status(404).body(Map.of("ok", false, "mensaje", "La venta no existe"));
         }
-        if (!usuarioId.equals(i.getRegistroIdUsuario()) && !esAdministracion()) {
+        // El dueño de la venta, administracion, o quien acredita. Lo ultimo hace falta porque
+        // la foto que falta se toma muchas veces DELANTE del verificador, con el expositor ahi
+        // mismo esperando su credencial; mandarlo de vuelta a su vendedor detendria la cola.
+        if (!usuarioId.equals(i.getRegistroIdUsuario()) && !esAdministracion() && !esVerificador()) {
             return ResponseEntity.status(403).body(Map.of("ok", false, "mensaje", "Esta venta no es tuya"));
         }
         return null;
+    }
+
+    private boolean esVerificador() {
+        Authentication a = SecurityContextHolder.getContext().getAuthentication();
+        return a != null && a.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch("ROLE_VERIFICADOR"::equals);
     }
 
     /** Id del usuario del token, o null si no hay sesion valida. */

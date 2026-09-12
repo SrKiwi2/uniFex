@@ -48,4 +48,15 @@ public final class Roles {
      * declarada aparte por si en el futuro un rol de solo-lectura (p.ej. ASESORIA) debe verlos.
      */
     public static final String ADMINISTRA = "hasAnyRole('SUPER_USUARIO','ADMINISTRADOR')";
+
+    /**
+     * Quien prepara y verifica las credenciales: revisa que la inscripcion este completa
+     * (comprobante y fotos) y las imprime.
+     *
+     * Incluye VERIFICADOR, que existe precisamente para esto y NO es administracion: no toca
+     * el plano, ni los usuarios, ni las ventas. Por eso no vale reutilizar ADMINISTRA —
+     * hacerlo le daria de paso los listados globales y los reportes.
+     */
+    public static final String VERIFICA_CREDENCIALES =
+            "hasAnyRole('SUPER_USUARIO','ADMINISTRADOR','VERIFICADOR')";
 }

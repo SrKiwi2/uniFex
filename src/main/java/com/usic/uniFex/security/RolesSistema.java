@@ -33,7 +33,10 @@ public enum RolesSistema {
             "Control de acceso en puerta: verifica credenciales y registra el ingreso de responsables."),
 
     ASESORIA("ASESORIA",
-            "Consulta: ve listados y reportes de la feria, sin modificar nada.");
+            "Consulta: ve listados y reportes de la feria, sin modificar nada."),
+
+    VERIFICADOR("VERIFICADOR",
+            "Verifica que la inscripcion este completa (comprobante y fotos) antes de imprimir credenciales.");
 
     private final String nombre;
     private final String descripcion;

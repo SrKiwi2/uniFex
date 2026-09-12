@@ -1,5 +1,6 @@
 package com.usic.uniFex.Config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -35,6 +36,20 @@ import jakarta.servlet.http.HttpServletResponse;
 @EnableMethodSecurity
 public class SecurityConfig {
 
+    /**
+     * Origenes que pueden llamar al API desde un navegador.
+     *
+     * Es una PROPIEDAD y no una lista fija por una razon practica: al probar el APK hay que
+     * abrir la aplicacion desde el telefono, o sea desde la IP de la maquina en la red local
+     * (`http://192.168.x.x:5173`), y esa direccion cambia de una red a otra. Con la lista
+     * clavada en el codigo, la unica salida era recompilar el backend.
+     *
+     * Se admiten comodines porque se usa {@code setAllowedOriginPatterns}. Un valor exacto
+     * tambien es un patron valido, asi que el comportamiento por defecto no cambia.
+     */
+    @Value("${unifex.cors.origenes}")
+    private String origenesCors;
+
     @Bean
     public org.springframework.web.filter.ForwardedHeaderFilter forwardedHeaderFilter() {
         return new org.springframework.web.filter.ForwardedHeaderFilter();
@@ -59,16 +74,12 @@ public class SecurityConfig {
      */
     private CorsConfigurationSource corsApi() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of(
-                "https://localhost",        // APK Android (Capacitor)
-                "capacitor://localhost",    // iOS, si algun dia se compila
-                "http://localhost:5173",    // SPA en desarrollo
-                // Un SEGUNDO servidor de desarrollo, para probar la SPA contra otro backend
-                // sin parar el primero (VITE_BACKEND=... npx vite --port 5174). Sin esta
-                // linea el navegador recibe 403 en el login y no hay pista de por que: curl
-                // funciona, porque no manda cabecera Origin y el navegador si.
-                "http://localhost:5174",
-                "http://localhost:7676"));  // la propia app servida por Spring
+        // Patrones y no origenes exactos: un valor sin comodines se comporta igual, pero asi
+        // la propiedad puede traer `http://192.168.*.*:5173` para probar el APK desde el
+        // telefono sin recompilar. `*` a secas sigue sin valer, y es lo correcto: con
+        // credenciales el comodin total no es valido, y un API que acepta cualquier origen
+        // invita a que cualquier pagina haga peticiones en nombre del usuario.
+        config.setAllowedOriginPatterns(List.of(origenesCors.split("\\s*,\\s*")));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         // If-None-Match lo manda el cliente para preguntar "¿cambio algo?"; sin declararlo,
         // el navegador lo borra en silencio y el servidor responde SIEMPRE la lista entera.
@@ -141,6 +152,17 @@ public class SecurityConfig {
         http.authorizeHttpRequests(
                 auth -> auth.requestMatchers(
                         "/",
+                        // `/error` tiene que estar permitido, y no es un detalle.
+                        //
+                        // Un 404 dentro de una ruta permitida —un /files/** que ya no esta en
+                        // disco, por ejemplo— no se devuelve tal cual: Spring lo reenvia a
+                        // /error. Si /error exige sesion, ese reenvio se convierte en un 302 a
+                        // la pagina de login, asi que en vez de "ese archivo no existe" llega
+                        // una redireccion. Detras del proxy de desarrollo la redireccion apunta
+                        // al origen del backend y el navegador la corta por CORS, con un mensaje
+                        // que solo habla de la raiz del servidor y no dice nada del archivo que
+                        // faltaba. Es la causa del ERR_TOO_MANY_REDIRECTS de las fotos.
+                        "/error",
                         "/control-responsable",
                         "/buscar-responsable",
                         "/vistaR/**",
