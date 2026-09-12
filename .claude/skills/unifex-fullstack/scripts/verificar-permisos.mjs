@@ -65,6 +65,24 @@ if (verif) {
 const control = matriz.find((r) => r.rol === 'CONTROL');
 if (control) paso('CONTROL ve el escaner', control.pantallas.includes('escaner'), control.pantallas.join(', '));
 
+/*
+ * El vendedor acredita a SUS expositores: necesita la pantalla de credenciales (V27). Lo que
+ * la hace segura no es el permiso sino el recorte del servidor, que le manda solo las ventas
+ * que el registro — eso lo comprueba verificar-acreditacion.mjs. Aqui solo se fija que tenga
+ * la pantalla y que tenerla no le haya abierto de paso las de administracion.
+ */
+const vend = matriz.find((r) => r.rol === 'ADMINISTRATIVO');
+paso('existe el rol ADMINISTRATIVO', !!vend);
+if (vend) {
+  paso('el vendedor ve credenciales, para acreditar a los suyos',
+       vend.pantallas.includes('credenciales'), vend.pantallas.join(', '));
+  paso('y sigue teniendo su mapa y su registro de venta',
+       ['mapa', 'venta', 'mis-ventas'].every((x) => vend.pantallas.includes(x)));
+  paso('pero no el listado global de inscripciones', !vend.pantallas.includes('inscripciones'));
+  paso('ni el editor, ni usuarios, ni permisos',
+       !['editor', 'usuarios', 'permisos'].some((x) => vend.pantallas.includes(x)));
+}
+
 // Una clave inventada no se guarda: la tabla solo admite pantallas del catalogo.
 if (verif) {
   const antes = [...verif.pantallas];

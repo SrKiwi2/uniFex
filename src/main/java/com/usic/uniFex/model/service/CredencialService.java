@@ -16,11 +16,16 @@ import lombok.RequiredArgsConstructor;
 /**
  * Quien tiene derecho a credencial y con que datos se imprime.
  *
- * <h2>Los dos requisitos</h2>
- * Una credencial sale solo si la venta esta <b>pagada</b> y la persona tiene <b>foto</b>.
- * Pagada significa lo que el sistema ya sabe hoy: se marco "pago al contado" o se subio la
- * imagen del comprobante. No hay un tercer estado de "verificado por administracion" — si
- * algun dia hace falta, es una columna mas y este es el unico sitio que hay que tocar.
+ * <h2>Los requisitos</h2>
+ * Hace falta el <b>comprobante</b> siempre, tambien en las ventas al contado: marcar contado
+ * dice como se pago, no que exista el recibo. La <b>foto</b> solo la exige la plantilla que
+ * imprime los datos de la persona. Las dos reglas viven en {@link CredencialDTO}.
+ *
+ * <h2>Quien ve que</h2>
+ * Administracion y quien verifica ven todas. Un ADMINISTRATIVO ve solo las de las ventas que
+ * el registro, porque la lista completa lleva los datos de los clientes de todos los
+ * vendedores. El acotado se hace en la CONSULTA, no filtrando despues en Java: asi los datos
+ * ajenos no llegan a salir de la base.
  *
  * <h2>Una credencial por RESPONSABLE, no por venta</h2>
  * Cada persona que atiende la caseta lleva la suya con su foto y su C.I.: es lo que se mira en
@@ -37,13 +42,47 @@ public class CredencialService {
     /** Todas las credenciales de la edicion activa, aptas y no aptas. */
     @Transactional(readOnly = true)
     public List<CredencialDTO> listar() {
-        return dao.listarDeEdicionActiva().stream().map(this::de).toList();
+        return listar(null);
+    }
+
+    /**
+     * Las credenciales de la edicion activa, acotadas a un vendedor.
+     *
+     * `soloDeUsuario` nulo = todas, que es lo que ve administracion y quien verifica. Con un
+     * id, solo las que salen de las ventas que ESE usuario registro: es lo que ve un
+     * ADMINISTRATIVO, que tiene que poder acreditar a sus expositores sin ver los datos de los
+     * clientes de sus compañeros.
+     */
+    @Transactional(readOnly = true)
+    public List<CredencialDTO> listar(Long soloDeUsuario) {
+        var filas = soloDeUsuario == null
+                ? dao.listarDeEdicionActiva()
+                : dao.listarDeEdicionActivaDe(soloDeUsuario);
+        return filas.stream().map(this::de).toList();
     }
 
     /** Las que se pueden imprimir con esa plantilla: es lo que hace la generacion masiva. */
     @Transactional(readOnly = true)
     public List<CredencialDTO> listarAptas(String plantilla) {
-        return listar().stream().filter(c -> c.apto(plantilla)).toList();
+        return listarAptas(plantilla, null);
+    }
+
+    /** Idem, acotado a las ventas de un vendedor. Nulo = todas. */
+    @Transactional(readOnly = true)
+    public List<CredencialDTO> listarAptas(String plantilla, Long soloDeUsuario) {
+        return listar(soloDeUsuario).stream().filter(c -> c.apto(plantilla)).toList();
+    }
+
+    /**
+     * ¿Esta credencial sale de una venta de ese usuario?
+     *
+     * La comprobacion va contra la base, no contra la lista que el cliente acaba de recibir:
+     * quien pide un PDF manda los ids que quiere.
+     */
+    @Transactional(readOnly = true)
+    public boolean esDeUsuario(Long responsableId, Long usuarioId) {
+        return responsableId != null && usuarioId != null
+                && dao.esDeUsuario(responsableId, usuarioId);
     }
 
     @Transactional(readOnly = true)

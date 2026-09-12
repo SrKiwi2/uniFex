@@ -26,6 +26,42 @@ import { urlWebSocket } from './config.js';
  * @param onAsignaciones lista de cambios de "que caseta lleva quien"
  * @returns el cliente (usar .deactivate() al cerrar sesion)
  */
+/**
+ * Suscripcion suelta a UN topic autenticado, con su propia conexion. Para una vista que
+ * necesita un canal que el cliente general (crearClientePuestos) no escucha, sin tocar ese
+ * cliente ni obligar a toda la app a recibir mensajes que solo usa una pantalla.
+ *
+ * @param topic                 destino STOMP (p. ej. '/topic/interesados')
+ * @param opciones.onMensaje    recibe cada mensaje ya parseado
+ * @param opciones.onConectado  se llama en CADA (re)conexion: es el momento de volver a pedir
+ *                              por HTTP lo que pudo cambiar mientras no habia conexion
+ * @param opciones.onCerrado    la conexion se cayo (stompjs reintentara sola)
+ * @returns funcion para cerrar la conexion (llamarla al desmontar la vista)
+ */
+export function escucharTopic(topic, { onMensaje, onConectado, onCerrado } = {}) {
+  const auth = useAuthStore();
+  const client = new Client({
+    brokerURL: urlWebSocket(),
+    reconnectDelay: 3000,
+    connectHeaders: { Authorization: `Bearer ${auth.token}` },
+    onConnect: () => {
+      client.subscribe(topic, (msg) => {
+        try {
+          onMensaje?.(JSON.parse(msg.body));
+        } catch (_) {
+          /* ignora mensajes malformados */
+        }
+      });
+      onConectado?.();
+    },
+    onWebSocketClose: () => onCerrado?.(),
+    // Token vencido o suscripcion no permitida para este rol: reintentar en bucle no lo arregla.
+    onStompError: () => client.deactivate(),
+  });
+  client.activate();
+  return () => client.deactivate();
+}
+
 export function crearClientePuestos(onEstado, onRechazo, onConectado, onNotificacion, onCerrado,
                                     onAsignaciones) {
   const auth = useAuthStore();

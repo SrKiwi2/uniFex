@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { useAuthStore } from '../stores/auth';
 import { apiFetch } from '../api';
 import { descargarPdf } from '../ui/descargas';
 import { toast } from '../ui/toast';
@@ -27,6 +28,15 @@ import { alerta } from '../ui/alerta';
  *
  * Todo el filtrado y la seleccion pasan en memoria: la lista se baja UNA vez.
  */
+
+/*
+ * El vendedor tambien acredita, pero solo a LO SUYO: el servidor le manda unicamente las
+ * credenciales de las ventas que el registro. Aqui solo se usa para que los textos no mientan
+ * —"no hay inscripciones" no es lo mismo que "no has registrado ninguna venta"— y para
+ * decirlo en pantalla, que ahorra el "¿por que no me sale fulano?".
+ */
+const auth = useAuthStore();
+const soloMias = computed(() => auth.esVendedor);
 
 const cargando = ref(true);
 const credenciales = ref([]);
@@ -216,6 +226,11 @@ onMounted(cargar);
 
     <!-- Ajustes de impresion. Con una vista previa de como queda en la hoja, porque "10 cm"
          no le dice nada a nadie hasta que lo ve sobre una carta. -->
+    <p v-if="soloMias" class="alcance">
+      Aquí salen las credenciales de <strong>tus ventas</strong>. Puedes adjuntar el comprobante
+      y las fotos de tus responsables, y generar sus credenciales.
+    </p>
+
     <section class="ajustes card">
       <div class="grupo">
         <span class="rotulo">Plantilla</span>
@@ -260,8 +275,12 @@ onMounted(cargar);
               @click="imprimir(seleccionadasAptas.map((c) => c.responsableId), seleccionadasAptas.length)">
         Imprimir {{ seleccionadasAptas.length || '' }} marcada{{ seleccionadasAptas.length === 1 ? '' : 's' }}
       </button>
-      <button class="btn btn-primario" :disabled="generando" @click="imprimirTodasListas">
+      <!-- Con cero listas el boton no se esconde: sigue siendo el sitio donde se mira cuantas
+           hay, y esconderlo dejaria la barra sin explicacion. Solo se desactiva. -->
+      <button class="btn btn-primario" :disabled="generando || !listas.length"
+              @click="imprimirTodasListas">
         {{ generando ? 'Generando…'
+           : !listas.length ? 'Ninguna lista todavía'
            : listas.length === 1 ? 'Imprimir la única lista'
            : `Imprimir las ${listas.length} listas` }}
       </button>
@@ -278,6 +297,9 @@ onMounted(cargar);
       </template>
       <template v-else-if="filtro === 'pendientes'">
         No falta nada: todas las credenciales están listas para esta plantilla.
+      </template>
+      <template v-else-if="soloMias">
+        Todavía no has registrado ninguna venta en esta edición.
       </template>
       <template v-else>Todavía no hay inscripciones en esta edición.</template>
     </div>
@@ -438,6 +460,12 @@ onMounted(cargar);
 .donde .casetas { font-weight: 750; font-variant-numeric: tabular-nums; }
 .estado { display: flex; gap: 0.3rem; flex-wrap: wrap; justify-content: flex-start; }
 .badge { padding: 0.12rem 0.5rem; border-radius: 999px; font-size: 0.7rem; font-weight: 700; white-space: nowrap; }
+
+.alcance {
+  margin: 0; padding: 0.6rem 0.8rem; border-radius: var(--radio-sm);
+  background: color-mix(in srgb, var(--acento) 10%, transparent);
+  font-size: 0.88rem; line-height: 1.45;
+}
 
 .oculto { display: none; }
 .acciones { display: flex; gap: 0.3rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
