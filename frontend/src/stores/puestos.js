@@ -329,6 +329,10 @@ export const usePuestosStore = defineStore('puestos', () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       recargar().catch(() => {});
     }, SONDEO_MS);
+    // En el navegador esto no existe y la llamada se evapora; en Node devuelve un objeto con
+    // unref(), y sin el este intervalo mantiene vivo el proceso: `npm test` se quedaba colgado
+    // para siempre despues de pasar las once pruebas, que parece un fallo de la prueba y no lo es.
+    sondeo?.unref?.();
   }
 
   /**

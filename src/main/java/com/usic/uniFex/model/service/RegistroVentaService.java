@@ -147,7 +147,11 @@ public class RegistroVentaService {
                                          Long usuarioId, String origen) {
         Inscripcion i = inscripcionService.findById(inscripcionId);
         if (i == null) return Resultado.error("La venta no existe");
-        if (!usuarioId.equals(i.getRegistroIdUsuario())) {
+        // El dueño de la venta, o quien acredita. Hace falta lo segundo porque el comprobante
+        // aparece muchas veces DELANTE del verificador —el expositor lo lleva en la mano al ir
+        // a recoger su credencial— y obligar a que el vendedor lo suba desde otro sitio
+        // detendria la cola por algo que se resuelve en el momento.
+        if (!usuarioId.equals(i.getRegistroIdUsuario()) && !puedeAcreditar()) {
             return Resultado.error("Esta venta no es tuya");
         }
         if (archivo == null || archivo.isEmpty()) {
@@ -256,6 +260,17 @@ public class RegistroVentaService {
     }
 
     // ------------------------------------------------------------------ piezas
+
+    /** ¿Quien esta pidiendo esto puede acreditar (administracion o verificador)? */
+    private static boolean puedeAcreditar() {
+        org.springframework.security.core.Authentication a =
+                org.springframework.security.core.context.SecurityContextHolder.getContext()
+                        .getAuthentication();
+        if (a == null) return false;
+        return a.getAuthorities().stream().map(g -> g.getAuthority()).anyMatch(
+                r -> "ROLE_SUPER_USUARIO".equals(r) || "ROLE_ADMINISTRADOR".equals(r)
+                        || "ROLE_VERIFICADOR".equals(r));
+    }
 
     private String validar(NuevaVenta req) {
         if (req == null) return "Faltan los datos de la venta";

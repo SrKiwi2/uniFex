@@ -39,9 +39,18 @@ public interface IUsuarioDao extends JpaRepository<Usuario, Long> {
        * {@code exceptoId} nunca es null (quien llama pasa -1 cuando no excluye a nadie): un
        * parametro nulo en una comparacion JPQL obliga a Hibernate a adivinar el tipo y falla
        * en tiempo de ejecucion, no de compilacion.
+       *
+       * <p><b>Cuenta tambien los usuarios dados de baja</b>, y no es un descuido. La baja es
+       * LOGICA: la fila se queda, y {@code usuario_username_key} es un indice unico sobre toda
+       * la tabla. Cuando esto filtraba por estado, crear un usuario con el nombre de uno
+       * borrado pasaba la validacion y reventaba contra el indice: al administrador le llegaba
+       * un 500 con el nombre de una restriccion de PostgreSQL dentro, en vez de "ese nombre ya
+       * esta en uso". El precio es que un nombre no se reaprovecha; para permitirlo habria que
+       * hacer el indice parcial Y filtrar tambien en {@code findByUsername}, que si no
+       * encontraria dos filas al entrar y tiraria el login.
        */
       @Query("select count(u) from Usuario u where upper(u.username) = upper(:username) "
-              + "and (u.estado is null or u.estado <> 'ELIMINADO') and u.id <> :exceptoId")
+              + "and u.id <> :exceptoId")
       long contarPorUsername(@Param("username") String username, @Param("exceptoId") Long exceptoId);
 
       /** Cuantos usuarios vivos cuelgan de esa persona (una persona, un login). */

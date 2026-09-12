@@ -173,6 +173,8 @@ const etiquetaSolicitud = (s) => ({
 // ---------------------------------------------------------------- pendientes
 // Ventas propias sin comprobante. Van arriba y con los dias que llevan asi, porque una
 // venta cobrada a medias es lo unico de esta pantalla sobre lo que hay que ACTUAR.
+// Incluye las de CONTADO: marcar contado dice como se pago, no que exista el recibo, y sin
+// recibo la credencial del expositor no se puede emitir.
 const pendientes = ref([]);
 const subiendo = ref(null);   // id de la inscripcion cuyo comprobante esta subiendo
 const entradaArchivo = ref(null);

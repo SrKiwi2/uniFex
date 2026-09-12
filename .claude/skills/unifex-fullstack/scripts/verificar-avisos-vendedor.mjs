@@ -22,6 +22,20 @@ const api = async (t,ruta,o={}) => { const r=await fetch(B+ruta,{...o,
 console.log('\n== Aviso en vivo al vendedor (lo que recibe el APK) ==\n');
 const T = (await login('admin1','VO7xGroB8ag2Qz1B')).token;
 const rolAdm = (await api(T,'/api/app/roles')).cuerpo.find(x=>x.nombre==='ADMINISTRATIVO');
+
+/*
+ * Barrido de arranque. Estos guiones crean un vendedor con nombre irrepetible y lo borran al
+ * final, pero si uno se corta a la mitad ese usuario se queda VIVO, con una clave que esta
+ * escrita en este mismo archivo. Ejecutandose contra produccion eso es un vendedor de verdad
+ * al que puede entrar cualquiera que lea el repositorio. Asi que antes de empezar se limpia lo
+ * que dejaron las pasadas anteriores.
+ */
+for (const u of ((await api(T, '/api/app/usuarios')).cuerpo || [])) {
+  if (/^vend\d+$/.test(u.username || '')) {
+    await api(T, `/api/app/usuarios/${u.id}`, { method: 'DELETE' });
+  }
+}
+
 const usuario = `vend${marca}`;
 const alta = await api(T,'/api/app/usuarios',{method:'POST',body:JSON.stringify({
   username:usuario,password:'ClaveVendedor9',rolId:rolAdm.id,personaId:null,
@@ -30,10 +44,11 @@ const vid = alta.cuerpo?.usuario?.id;
 const sesion = await login(usuario,'ClaveVendedor9');
 const V = sesion.token;
 
-// Un vendedor recien creado no ve NADA (antes veia las 119).
-let r = await api(V,'/api/app/puestos');
+// Un vendedor recien creado ve TODO el plano —las ajenas en gris— pero ninguna es suya. Lo
+// que hay que mirar aqui es /mis-puestos: /api/app/puestos habla del plano, no de permisos.
+let r = await api(V,'/api/app/mis-puestos');
 ok(r.estado===200 && Array.isArray(r.cuerpo) && r.cuerpo.length===0,
-   'un vendedor sin asignaciones NO ve ninguna caseta', `${r.cuerpo?.length} casetas`);
+   'un vendedor sin habilitaciones no tiene ninguna caseta suya', `${r.cuerpo?.length} suya(s)`);
 
 // El APK escuchando su topic personal.
 const recibidos = [];
@@ -66,9 +81,9 @@ let n = recibidos.at(-1);
 ok(n?.tipo === 'ASIGNACION_CAMBIADA', 'el aviso trae el tipo que dispara la recarga del mapa', n?.tipo);
 ok(/Se te asignaron 2 casetas de /.test(n?.cuerpo || ''), 'y dice cuantas y de que categoria', n?.cuerpo);
 
-// Ahora ya ve exactamente esas 2.
-r = await api(V,'/api/app/puestos');
-ok(r.cuerpo?.length===2, 'y a partir de ahi ve exactamente esas 2', `${r.cuerpo?.length}`);
+// Ahora ya son suyas exactamente esas 2.
+r = await api(V,'/api/app/mis-puestos');
+ok(r.cuerpo?.length===2, 'y a partir de ahi son suyas exactamente esas 2', `${r.cuerpo?.length}`);
 
 // Le quitan una.
 await api(T,`/api/app/vendedores/${vid}/puestos`,{method:'PUT',body:JSON.stringify({puestoIds:[dos[0].id]})});

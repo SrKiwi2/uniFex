@@ -8,12 +8,20 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-export async function abrirChrome(puerto = 9222) {
+/**
+ * @param puerto  puerto de depuracion
+ * @param extras  argumentos sueltos para Chrome. Sirven, por ejemplo, para darle una camara
+ *                falsa que reproduzca un video preparado, y poder probar asi el lector de QR
+ *                sin un telefono delante:
+ *                  ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream',
+ *                   `--use-file-for-fake-video-capture=${ruta}.y4m`]
+ */
+export async function abrirChrome(puerto = 9222, extras = []) {
   const perfil = mkdtempSync(join(tmpdir(), 'chrome-prueba-'));
   const proc = spawn('google-chrome', [
     '--headless=new', `--remote-debugging-port=${puerto}`, '--no-sandbox', '--disable-gpu',
     '--disable-dev-shm-usage', '--no-first-run', '--no-default-browser-check',
-    `--user-data-dir=${perfil}`, 'about:blank',
+    `--user-data-dir=${perfil}`, ...extras, 'about:blank',
   ], { stdio: 'ignore' });
 
   let destino = null;

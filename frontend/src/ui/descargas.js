@@ -19,9 +19,16 @@ import { toast } from './toast.js';
  * telefonos de los responsables e importes, y el endpoint publico de verificacion esta hecho
  * a proposito para no revelar nada de eso.
  */
-export async function descargarPdf(ruta, nombreArchivo) {
-  const r = await apiFetch(ruta);
-  if (!r.ok) throw new Error('El servidor no devolvió el documento');
+export async function descargarPdf(ruta, nombreArchivo, opciones = {}) {
+  // `opciones` permite pedirlo por POST con un cuerpo: las credenciales se generan a partir
+  // de una seleccion que puede ser de cientos de ids, y eso no cabe en una URL.
+  const r = await apiFetch(ruta, opciones);
+  if (!r.ok) {
+    // El servidor explica en texto plano por que no hay documento (por ejemplo, que ninguna
+    // de las credenciales pedidas cumple los requisitos). Decirlo es mas util que un generico.
+    const motivo = await r.text().catch(() => '');
+    throw new Error(motivo && motivo.length < 200 ? motivo : 'El servidor no devolvió el documento');
+  }
   const blob = await r.blob();
 
   if (esNativo()) {

@@ -35,7 +35,7 @@ public record PuestoEstadoDTO(
         Double mapaY,
         Double tamanoMapa,        // tamaño base de la categoria, fraccion del ancho del plano
         Double mapaEscala,        // multiplicador propio de esta caseta
-        Integer mapaRotacion,     // giro propio, grados 0..359 horarios (V24); 0 = sin girar
+        Integer mapaRotacion,     // giro propio, grados 0..359 horarios (V25); 0 = sin girar
         /*
          * Precio de venta en Bs (el de la categoria). Viaja al mapa porque el vendedor lo
          * necesita en la mano: toca una caseta delante del cliente y le dice cuanto cuesta,

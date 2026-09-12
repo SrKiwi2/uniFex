@@ -307,19 +307,25 @@ watch(form, () => guardarBorrador(auth.id, form), { deep: true });
  * con el dedo/ratón. El indicador aparece solo mientras quede contenido por debajo
  * y se oculta al llegar al final.
  */
-const hayMasAbajo = ref(false);
+const ventaRef = ref(null);
+ const hayMasAbajo = ref(false);
+
 function revisarDesplazamiento() {
-  const d = document.documentElement;
-  hayMasAbajo.value = d.scrollHeight - window.scrollY - d.clientHeight > 24;
+  const el = ventaRef.value;
+  if (!el) return;
+  // Calculamos en base al contenedor, no al document/window
+  hayMasAbajo.value = el.scrollHeight - el.scrollTop - el.clientHeight > 24;
 }
 // Cambiar de paso reinicia el alto de la página: hay que volver a medir DESPUÉS de pintar.
 watch(paso, () => {
-  window.scrollTo({ top: 0 });
+  if (ventaRef.value) {
+    ventaRef.value.scrollTo({ top: 0 }); // Scroll interno
+  }
   nextTick(revisarDesplazamiento);
 });
 
 onMounted(async () => {
-  window.addEventListener('scroll', revisarDesplazamiento, { passive: true });
+
   window.addEventListener('resize', revisarDesplazamiento);
 
   const guardado = leerBorrador(auth.id);
@@ -350,7 +356,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="venta">
+  <div class="venta" ref="ventaRef" @scroll="revisarDesplazamiento">
     <!-- Resumen siempre visible: en el movil, saber cuanto se esta cobrando no puede
          depender de bajar hasta el final del formulario. -->
     <header class="resumen card">
@@ -547,9 +553,15 @@ onUnmounted(() => {
             <input class="control" type="number" inputmode="numeric" v-model.number="form.numComprobante" placeholder="Solo números" />
           </label>
         </div>
-        <p v-if="!form.pagoContado" class="nota">
-          La foto del comprobante se sube después, desde <strong>Mis pendientes</strong>.
-          Registrar ahora asegura las casetas.
+        <!-- El recibo hace falta SIEMPRE, tambien al contado: marcar contado dice como se
+             pago, no que exista el papel. Sin el no se acredita al expositor, asi que el
+             aviso no puede desaparecer cuando se tilda la casilla. -->
+        <p class="nota">
+          <template v-if="form.pagoContado">
+            Aunque sea al contado, hay que subir la foto del recibo.
+          </template>
+          <template v-else>La foto del comprobante se sube después.</template>
+          Se hace desde <strong>Mis pendientes</strong>; registrar ahora asegura las casetas.
         </p>
       </section>
 
@@ -574,8 +586,25 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.venta { display: flex; flex-direction: column; gap: 1rem; max-width: 720px; margin: 0 auto; }
-
+.venta { 
+  display: flex; 
+  flex-direction: column; 
+  gap: 1rem; 
+  max-width: 720px; 
+  margin: 0 auto; 
+  
+  /* --- LA MAGIA PARA EL APK --- */
+  /* Forzamos a que respete el espacio exacto del celular (entre menús) */
+  position: absolute;
+  top: 70px;
+  bottom: 70px;
+  left: 0;
+  right: 0;
+  
+  overflow-y: auto;         /* Activa el scroll obligatoriamente aquí */
+  -webkit-overflow-scrolling: touch; 
+  overscroll-behavior-y: contain;    
+}
 .resumen {
   display: flex; align-items: center; justify-content: space-between; gap: 1rem;
   padding: 0.8rem 1rem; position: sticky; top: 0; z-index: 5;
@@ -680,8 +709,20 @@ onUnmounted(() => {
 /* En móvil el formulario se vuelve de una columna y los botones ocupan el ancho:
    es la misma pantalla que va en el APK y ahí se usa con una mano. */
 @media (max-width: 560px) {
+.venta {
+    /* Espacio prudente al final para que los botones flotantes no tapen el último campo */
+    padding-bottom: 1.5rem; 
+  }
   .dos { grid-template-columns: 1fr; }
-  .pie { position: sticky; bottom: var(--tabbar-h); background: var(--bg); padding: 0.6rem 0 1rem; z-index: 6; }
+  .pie { 
+    position: sticky; 
+    bottom: 0; /* Se pegará exacto al ras del límite del APK */
+    background: var(--bg); 
+    padding: 0.8rem 0 1.5rem; 
+    z-index: 6; 
+    /* Pequeña sombra arriba para que se note que flota sobre el contenido */
+    box-shadow: 0 -4px 12px rgba(0,0,0,0.05);
+  }
   .acciones { padding-bottom: 0; }
   .acciones .btn { flex: 1; }
 

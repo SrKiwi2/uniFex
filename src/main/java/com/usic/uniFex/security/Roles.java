@@ -48,4 +48,30 @@ public final class Roles {
      * declarada aparte por si en el futuro un rol de solo-lectura (p.ej. ASESORIA) debe verlos.
      */
     public static final String ADMINISTRA = "hasAnyRole('SUPER_USUARIO','ADMINISTRADOR')";
+
+    /**
+     * Quien prepara y verifica las credenciales: revisa que la inscripcion este completa
+     * (comprobante y fotos) y las imprime.
+     *
+     * Incluye VERIFICADOR, que existe precisamente para esto y NO es administracion: no toca
+     * el plano, ni los usuarios, ni las ventas. Por eso no vale reutilizar ADMINISTRA —
+     * hacerlo le daria de paso los listados globales y los reportes.
+     */
+    public static final String VERIFICA_CREDENCIALES =
+            "hasAnyRole('SUPER_USUARIO','ADMINISTRADOR','VERIFICADOR')";
+
+    /**
+     * Quien puede USAR el modulo de credenciales, cada uno con su alcance.
+     *
+     * Añade ADMINISTRATIVO a los de arriba, pero **no le da lo mismo**: el vendedor solo ve y
+     * imprime las credenciales de las ventas que el registro. Ese recorte no se hace aqui
+     * —una expresion de rol no sabe de quien es cada venta— sino en la consulta, y se vuelve a
+     * comprobar contra la base al pedir un PDF, porque los ids los manda el cliente.
+     *
+     * Existe separada de {@link #VERIFICA_CREDENCIALES} porque las dos cosas son distintas:
+     * preparar la acreditacion de toda la feria es un trabajo, y acreditar a los propios
+     * expositores es otro. Los endpoints que si son de toda la feria siguen con la primera.
+     */
+    public static final String USA_CREDENCIALES =
+            "hasAnyRole('SUPER_USUARIO','ADMINISTRADOR','VERIFICADOR','ADMINISTRATIVO')";
 }

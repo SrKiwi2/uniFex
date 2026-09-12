@@ -142,6 +142,26 @@ async function main() {
   // comprueba lo que de verdad importa: que el endpoint acepte el upgrade a WebSocket.
   paso('El endpoint /ws acepta la conexion WebSocket', await wsResponde(base));
 
+  /*
+   * 9. Lo que NO existe tiene que responder 404, nunca una redireccion al login.
+   *
+   * Un 404 dentro de una ruta permitida se reenvia a /error, y mientras /error exigio sesion
+   * ese reenvio salia como un 302 a la pagina de login. El sintoma no se parecia en nada a la
+   * causa: una foto que faltaba en disco daba ERR_TOO_MANY_REDIRECTS, y detras del proxy de
+   * desarrollo la redireccion apuntaba al origen del backend, asi que el navegador la cortaba
+   * por CORS con un mensaje que solo hablaba de la raiz del servidor. Nada mencionaba el
+   * archivo que faltaba.
+   */
+  for (const [ruta, que] of [
+    ['/files/no-existe-esta-foto.jpg', 'un archivo subido que no esta en disco'],
+    ['/api/ruta-que-no-existe', 'una ruta inventada'],
+  ]) {
+    const res = await fetch(base + ruta, { redirect: 'manual' });
+    paso(`${que} responde 404, no una redireccion al login`,
+         res.status === 404,
+         `status=${res.status}${res.headers.get('location') ? ` -> ${res.headers.get('location')}` : ''}`);
+  }
+
   return resumen();
 }
 

@@ -2,9 +2,12 @@
 import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import { usePermisosStore } from '../stores/permisos';
 import { tema, alternarTema } from '../ui/tema';
 
 const auth = useAuthStore();
+const permisos = usePermisosStore();
+permisos.asegurar();
 const router = useRouter();
 const route = useRoute();
 const abierto = ref(false); // sidebar en móvil
@@ -14,29 +17,35 @@ const abierto = ref(false); // sidebar en móvil
 const titulo = computed(() => route.meta.titulo || '');
 const inmersivo = computed(() => Boolean(route.meta.inmersivo));
 
-// La navegación depende del rol: un vendedor no ve las herramientas de administración.
-const enlaces = computed(() => {
-  const base = [
-    { a: '/', icono: '🏠', txt: 'Inicio' },
-    { a: '/mapa', icono: '🗺️', txt: 'Mapa de ventas' },
-    { a: '/venta', icono: '🛒', txt: 'Registrar venta' },
-    { a: '/mis-ventas', icono: '🧾', txt: 'Mis ventas' },
-    { a: '/notificaciones', icono: '🔔', txt: 'Notificaciones' },
-  ];
-  if (auth.puedeEditarPlano) {
-    base.push(
-      { a: '/vendedores', icono: '👥', txt: 'Vendedores' },
-      { a: '/inscripciones', icono: '📋', txt: 'Inscripciones' },
-      { a: '/reportes', icono: '📊', txt: 'Reportes' },
-      { a: '/noches-fexpo', icono: '🎤', txt: 'Noches de FEXPO' },
-      { a: '/editor', icono: '✏️', txt: 'Editor del plano' },
-      { a: '/personas', icono: '🪪', txt: 'Personas' },
-      { a: '/usuarios', icono: '👥', txt: 'Usuarios' },
-      { a: '/roles', icono: '🛡️', txt: 'Roles' },
-    );
-  }
-  return base;
-});
+/*
+ * El menu entero, en el orden en que se quiere leer. Cada entrada dice a que PANTALLA
+ * corresponde, y el filtro de abajo decide cuales se enseñan.
+ *
+ * Antes esto era un `if (auth.puedeEditarPlano)` con la lista de administracion dentro: el
+ * menu estaba cableado a un rol concreto, asi que un rol nuevo —CONTROL en la puerta,
+ * VERIFICADOR— no tenia forma de ver lo suyo sin tocar este archivo.
+ */
+const TODOS = [
+  { a: '/', p: 'inicio', icono: '🏠', txt: 'Inicio' },
+  { a: '/mapa', p: 'mapa', icono: '🗺️', txt: 'Mapa de ventas' },
+  { a: '/venta', p: 'venta', icono: '🛒', txt: 'Registrar venta' },
+  { a: '/mis-ventas', p: 'mis-ventas', icono: '🧾', txt: 'Mis ventas' },
+  { a: '/escaner', p: 'escaner', icono: '📷', txt: 'Escanear credencial' },
+  { a: '/notificaciones', p: 'notificaciones', icono: '🔔', txt: 'Notificaciones' },
+  { a: '/tablero', p: 'tablero', icono: '📌', txt: 'Tablero' },
+  { a: '/credenciales', p: 'credenciales', icono: '🪪', txt: 'Credenciales' },
+  { a: '/vendedores', p: 'vendedores', icono: '👥', txt: 'Vendedores' },
+  { a: '/inscripciones', p: 'inscripciones', icono: '📋', txt: 'Inscripciones' },
+  { a: '/reportes', p: 'reportes', icono: '📊', txt: 'Reportes' },
+  { a: '/noches-fexpo', p: 'noches-fexpo', icono: '🎤', txt: 'Noches de FEXPO' },
+  { a: '/editor', p: 'editor', icono: '✏️', txt: 'Editor del plano' },
+  { a: '/personas', p: 'personas', icono: '🪪', txt: 'Personas' },
+  { a: '/usuarios', p: 'usuarios', icono: '👤', txt: 'Usuarios' },
+  { a: '/roles', p: 'roles', icono: '🛡️', txt: 'Roles' },
+  { a: '/permisos', p: 'permisos', icono: '🔐', txt: 'Permisos por rol' },
+];
+
+const enlaces = computed(() => TODOS.filter((e) => permisos.puedeVer(e.p)));
 
 // Las 4 tareas del día a día del vendedor, para la barra inferior estilo app: los mismos
 // destinos de siempre, solo que a mano del pulgar en vez de en un cajón que hay que abrir.
@@ -46,6 +55,9 @@ const enlacesPrincipales = computed(() => enlaces.value.slice(0, 4));
 const iconoTema = computed(() => (tema.value === 'dark' ? '🌙' : tema.value === 'light' ? '☀️' : '🌗'));
 
 function salir() {
+  // Los permisos se olvidan con la sesion: en un equipo compartido, el siguiente en entrar no
+  // puede heredar el menu del anterior aunque sea de otro rol.
+  permisos.limpiar();
   auth.logout();
   router.push('/login');
 }
