@@ -698,6 +698,129 @@ titulo('Identidad: icono, pestaña y bienvenida');
   paso('el logo de la bienvenida esta empaquetado', hay('frontend/public/logo-fexpo.png'));
 }
 
+// ---------------------------------------------------------------- refs de plantilla
+/*
+ * En <script setup>, un `ref="x"` de la plantilla ESCRIBE en la variable `x` del script si
+ * existe. Para una referencia al elemento eso es justo lo que se quiere —`const x = ref(null)`
+ * es el patron normal— pero si `x` ya guardaba DATOS, Vue le mete dentro el nodo del DOM.
+ *
+ * Paso de verdad: en Login.vue convivian `ref="contrasena"` y `const contrasena = ref('')`.
+ * Al montarse, `contrasena` pasaba a ser el <input>; el boton llamaba a `contrasena.trim()`,
+ * el render reventaba y la pantalla de login quedaba EN BLANCO. Nadie podia entrar, y el
+ * servidor estaba perfecto.
+ */
+titulo('Refs de plantilla que pisan datos');
+{
+  const { readFileSync, readdirSync, statSync } = await import('node:fs');
+  const RAIZ = resolve(AQUI, '../../../..') + '/frontend/src/';
+
+  const vues = [];
+  (function recorrer(dir) {
+    for (const e of readdirSync(dir)) {
+      const p = dir + e;
+      if (statSync(p).isDirectory()) recorrer(p + '/');
+      else if (e.endsWith('.vue')) vues.push(p);
+    }
+  })(RAIZ);
+
+  const choques = [];
+  for (const p of vues) {
+    const txt = readFileSync(p, 'utf8');
+    const nombres = new Set([...txt.matchAll(/\bref="([A-Za-z_$][\w$]*)"/g)].map((m) => m[1]));
+    for (const n of nombres) {
+      // Solo molesta cuando la variable se inicializa con algo que NO es null: entonces
+      // guarda datos, y el nodo del DOM los pisa.
+      const decl = new RegExp(`\\b(?:const|let)\\s+${n}\\s*=\\s*ref\\(\\s*([^)]*)\\)`).exec(txt);
+      if (decl && decl[1].trim() !== '' && decl[1].trim() !== 'null') {
+        choques.push(`${p.slice(RAIZ.length)}: ref="${n}" pisa ${n} = ref(${decl[1].trim()})`);
+      }
+    }
+  }
+  paso(`ninguna ref de plantilla pisa una variable con datos (${vues.length} vistas)`,
+       choques.length === 0, choques.join(' | '));
+}
+
+// ---------------------------------------------------------------- giro de las casetas
+/*
+ * El giro (V24) se guarda por caseta y viaja CON la posicion, no por su propia ruta: el editor
+ * mueve, escala y gira en el mismo gesto y guarda un solo lote.
+ *
+ * Lo delicado es el orden del transform. El pin es una caja de 100 px que se reduce con
+ * `scale()` y se centra con `translate(-50%,-50%)`; el `rotate()` tiene que ir ENTRE los dos,
+ * porque el translate coloca la caja sobre su punto del plano ANTES de girarla. Puesto
+ * despues, la caseta orbitaria alrededor de su ancla en vez de girar sobre si misma — y eso no
+ * da ningun error, solo casetas descolocadas.
+ */
+titulo('Giro de las casetas en el plano');
+{
+  const { readFileSync } = await import('node:fs');
+  const RAIZ = resolve(AQUI, '../../../..') + '/';
+  const leer = (p) => readFileSync(RAIZ + p, 'utf8');
+
+  paso('existe la migracion del giro',
+       leer('src/main/resources/db/reserva/V24__puesto_rotacion.sql').includes('mapa_rotacion'));
+  paso('la base acota el giro a 0..359',
+       /CHECK \(mapa_rotacion IS NULL OR \(mapa_rotacion >= 0 AND mapa_rotacion <= 359\)\)/
+         .test(leer('src/main/resources/db/reserva/V24__puesto_rotacion.sql')));
+
+  const dao = leer('src/main/java/com/usic/uniFex/model/dao/IPuestoDao.java');
+  paso('el giro se guarda junto a la posicion, en una sola escritura',
+       /mapa_rotacion = COALESCE\(:rotacion, mapa_rotacion\)/.test(dao));
+  paso('y no se toca si no lo mandan (COALESCE)', /COALESCE\(:rotacion/.test(dao));
+
+  const svc = leer('src/main/java/com/usic/uniFex/model/service/PuestoMapaService.java');
+  paso('el servidor normaliza el giro (no se fia del cliente)', svc.includes('giroValido'));
+  paso('el record Posicion lo lleva', /record Posicion\(Long id, Double x, Double y, Double escala, Integer rotacion\)/.test(svc));
+  paso('el DTO lo difunde', leer('src/main/java/com/usic/uniFex/model/dto/PuestoEstadoDTO.java').includes('mapaRotacion'));
+
+  const mapaJs = leer('frontend/src/mapa.js');
+  paso('estiloPin publica --giro', /'--giro': `\$\{p\.mapaRotacion \|\| 0\}deg`/.test(mapaJs));
+
+  const estilos = ['frontend/src/views/Mapa.vue', 'frontend/src/views/Editor.vue']
+    .map((p) => leer(p).replace(/\/\*[\s\S]*?\*\//g, ''));
+  paso('el rotate va ENTRE el scale y el translate (si no, la caseta orbita)',
+       estilos.every((e) => /transform:\s*scale\(calc\(var\(--pin, 20\) \/ 100\)\) rotate\(var\(--giro, 0deg\)\) translate\(-50%, -50%\)/.test(e)));
+  paso('el numero se contragira para leerse derecho',
+       estilos.every((e) => /\.num-caseta[^}]*transform:\s*rotate\(calc\(-1 \* var\(--giro, 0deg\)\)\)/.test(e)));
+
+  const ed = leer('frontend/src/views/Editor.vue');
+  paso('el giro entra en deshacer/rehacer', /const geom = \([\s\S]{0,200}mapaRotacion/.test(ed));
+  paso('se normaliza tambien en el editor', ed.includes('const normalizarGiro'));
+  paso('se guarda con el resto de la geometria', /rotacion: p\.mapaRotacion \?\? 0/.test(ed));
+  paso('copiar y pegar lo conservan',
+       /mapaRotacion: p\.mapaRotacion \?\? 0/.test(ed) && /rotacion: c\.mapaRotacion \?\? 0/.test(ed));
+  paso('hay atajo de teclado', /key\.toLowerCase\(\) === 'r'/.test(ed));
+
+  const store = leer('frontend/src/stores/puestos.js');
+  paso('un broadcast no pisa el giro sin guardar del editor',
+       (store.match(/mapaRotacion: local\.mapaRotacion/g) || []).length === 2);
+  /*
+   * `v-memo` es lo que hace que reservar se sienta instantaneo: sin el, cambiar UNA caseta
+   * obliga a repintar las 520. El precio es que hay que MANTENER la lista de dependencias, y
+   * olvidarse de una no da ningun error: el dato llega, el store se actualiza y la pantalla
+   * simplemente no se entera.
+   *
+   * Paso de verdad con el giro: viajaba por el WebSocket, el store lo guardaba, y el mapa de
+   * ventas seguia pintando la caseta derecha. Peor todavia, como la copia en disco se hidrata
+   * antes, ni recargar lo arreglaba.
+   *
+   * Esta comprobacion se mantiene sola: cualquier campo que estiloPin lea del puesto tiene que
+   * estar en el v-memo, asi que añadir uno nuevo y olvidar la lista falla aqui.
+   */
+  const usadosPorEstiloPin = [...leer('frontend/src/mapa.js')
+    .slice(leer('frontend/src/mapa.js').indexOf('export function estiloPin'))
+    .slice(0, 400)
+    .matchAll(/\bp\.(\w+)/g)].map((m) => m[1]);
+  const memo = (leer('frontend/src/views/Mapa.vue').match(/v-memo="\[([^\]]*)\]"/) || [])[1] || '';
+  const olvidados = [...new Set(usadosPorEstiloPin)].filter((c) => !memo.includes(`p.${c}`));
+  paso('el v-memo del mapa no se olvida de ningun campo que dibuje el pin',
+       olvidados.length === 0, olvidados.map((c) => `p.${c}`).join(', '));
+  // `tamanoDe` lee tamanoMapa y mapaEscala por dentro, asi que se comprueban aparte.
+  paso('y tampoco del tamaño de la caseta',
+       memo.includes('p.tamanoMapa') && memo.includes('p.mapaEscala'));
+
+}
+
 console.log(fallos.length ? `\n${fallos.length} paso(s) fallaron:` : '\nTodo paso.');
 for (const f of fallos) console.log(`  - ${f}`);
 process.exit(fallos.length ? 1 : 0);

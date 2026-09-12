@@ -60,6 +60,15 @@ public class Puesto extends AuditoriaConfig{
     private Double mapaEscala;
 
     /**
+     * Giro de la caseta en el plano, en grados 0..359 en sentido horario (V24).
+     *
+     * NULL y 0 significan lo mismo. Se deja nulo por defecto para no tener que reescribir las
+     * 500+ filas que ya existian, y quien lo lee lo trata como 0.
+     */
+    @Column(name = "mapa_rotacion")
+    private Integer mapaRotacion;
+
+    /**
      * Donde esta la caseta, en palabras ("frente a la puerta 3", "esquina norte").
      * Complementa al plano: sirve para explicarselo al cliente por telefono, donde el mapa
      * no ayuda.

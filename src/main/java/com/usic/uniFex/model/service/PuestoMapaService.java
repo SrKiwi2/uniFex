@@ -33,11 +33,18 @@ public class PuestoMapaService {
     private final ICategoriaService categoriaService;
 
     /**
-     * Posicion normalizada (0..1) de una caseta, con su escala opcional.
+     * Posicion normalizada (0..1) de una caseta, con su escala y su giro opcionales.
      * {@code x} e {@code y} nulos significan "quitar del plano" (la caseta sigue existiendo).
-     * {@code escala} nula significa "no la cambies".
+     * {@code escala} y {@code rotacion} nulos significan "no los cambies".
      */
-    public record Posicion(Long id, Double x, Double y, Double escala) {
+    public record Posicion(Long id, Double x, Double y, Double escala, Integer rotacion) {
+    }
+
+    /** Deja el giro dentro de 0..359. Fuera de ahi dibujaria igual, pero ensucia los datos. */
+    private static Integer giroValido(Integer grados) {
+        if (grados == null) return null;
+        int g = grados % 360;
+        return g < 0 ? g + 360 : g;
     }
 
     /**
@@ -49,7 +56,7 @@ public class PuestoMapaService {
         List<Long> cambiados = new ArrayList<>();
         for (Posicion p : posiciones) {
             if (p.id() == null) continue;
-            if (puestoDao.actualizarPosicion(p.id(), p.x(), p.y(), p.escala()) > 0) {
+            if (puestoDao.actualizarPosicion(p.id(), p.x(), p.y(), p.escala(), giroValido(p.rotacion())) > 0) {
                 cambiados.add(p.id());
             }
         }

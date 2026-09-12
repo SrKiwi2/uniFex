@@ -107,6 +107,21 @@ const puedoVender = (p) => {
   return a != null && a.vendedorId === auth.id;
 };
 
+/**
+ * Soy vendedor, hay casetas en el plano, y ninguna es mia.
+ *
+ * Es distinto de `tienda.sinAsignaciones`, que significa "no hay NINGUNA caseta creada" —el
+ * plano todavia no se armo—. Este otro caso quedo sin cubrir cuando el servidor dejo de
+ * filtrar el listado: desde entonces el vendedor sin casetas recibe las 119 igual que todos,
+ * asi que `puestos.length === 0` nunca se cumple y el aviso no podia salir nunca. Veia el
+ * mapa entero en gris sin una sola palabra que lo explicara.
+ */
+const sinHabilitadas = computed(() =>
+  auth.esVendedor
+  && !tienda.cargando
+  && tienda.puestos.length > 0
+  && ![...tienda.asignaciones.values()].some((a) => a.vendedorId === auth.id));
+
 /** ¿La reserva en tramite de esta caseta es de quien esta mirando? */
 const esMia = (p) => p.estado === 'T' && p.reservadoPor != null && p.reservadoPor === auth.id;
 
@@ -334,15 +349,24 @@ onUnmounted(() => {
       @quitar="(p) => click(p)"
     />
 
-    <!-- Sin casetas asignadas no hay nada que pintar, y el vendedor tiene que saber POR QUE.
-         Antes veia el plano vacio y no habia forma de distinguirlo de un fallo de carga. -->
+    <!-- No hay NINGUNA caseta creada: el plano todavia no se armo. Ocupa la pantalla porque
+         no hay nada que enseñar debajo. -->
     <div v-if="tienda.sinAsignaciones" class="sin-asignaciones">
       <span class="icono">🗺️</span>
-      <h2>Todavía no tienes casetas habilitadas</h2>
+      <h2>Todavía no hay casetas en el plano</h2>
       <p>
-        Administración aún no te asignó una categoría ni casetas para vender.
-        En cuanto lo haga, aparecerán aquí solas: no hace falta que cierres la aplicación.
+        Administración aún no armó el mapa de la feria.
+        En cuanto lo haga, aparecerá aquí solo: no hace falta que cierres la aplicación.
       </p>
+    </div>
+
+    <!-- Hay casetas, pero ninguna es suya. NO se le oculta el mapa: en gris le sigue sirviendo
+         para decirle a un cliente quien vende cada caseta (la ficha da el contacto). Lo que
+         hacia falta era la frase que explicara por que no puede tocar ninguna. -->
+    <div v-else-if="sinHabilitadas" class="aviso-habilitadas" role="status">
+      <strong>Todavía no tienes casetas habilitadas.</strong>
+      Administración aún no te asignó ninguna; aparecerán solas en cuanto lo haga.
+      Mientras tanto puedes tocar cualquier caseta para ver quién la vende.
     </div>
 
     <!-- key: cambiar de plano cambia la proporcion y el encuadre, y `reset()` solo corre al
@@ -369,7 +393,7 @@ onUnmounted(() => {
         <button
           v-for="p in ubicados"
           :key="p.id"
-          v-memo="[p.estado, p.reservadoPor === auth.id, conFoto.has(p.id), p.mapaX, p.mapaY, p.mapaEscala, p.tamanoMapa, p.color, p.forma, p.codigo, puedoVender(p)]"
+          v-memo="[p.estado, p.reservadoPor === auth.id, conFoto.has(p.id), p.mapaX, p.mapaY, p.mapaEscala, p.mapaRotacion, p.tamanoMapa, p.color, p.forma, p.codigo, puedoVender(p)]"
           class="pin"
           :class="[CLASE_ESTADO[p.estado], `forma-${p.forma || 'cuadrado'}`,
                    { mia: esMia(p), 'con-foto': conFoto.has(p.id), ajena: !puedoVender(p) }]"
@@ -399,6 +423,15 @@ onUnmounted(() => {
 .legend { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 .chip { padding: 0.2rem 0.55rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600; }
 .chip-ajena { background: var(--bloqueado); color: #fff; }
+
+/* Franja, no pantalla completa: el mapa en gris sigue siendo util para consultar. */
+.aviso-habilitadas {
+  margin: 0 0 0.6rem; padding: 0.7rem 0.9rem; border-radius: var(--radio-sm);
+  border: 1px solid color-mix(in srgb, var(--tramite) 45%, transparent);
+  background: color-mix(in srgb, var(--tramite) 12%, var(--panel));
+  color: var(--text); font-size: 0.9rem; line-height: 1.45;
+}
+.aviso-habilitadas strong { color: var(--tramite); }
 .info { font-size: 0.9rem; }
 .numeros.on { border-color: var(--acento); color: var(--acento); font-weight: 700; }
 
@@ -475,7 +508,10 @@ onUnmounted(() => {
 .pin {
   position: absolute; width: 100px; height: 100px;
   transform-origin: 0 0;
-  transform: scale(calc(var(--pin, 20) / 100)) translate(-50%, -50%);
+  /* El `rotate` va ENTRE el scale y el translate, y ese orden no es casual: el translate
+     centra la caja de 100 px sobre su punto del plano ANTES de girarla, asi que el giro sale
+     sobre el centro de la caseta y no la desplaza. Ponerlo despues la haria orbitar. */
+  transform: scale(calc(var(--pin, 20) / 100)) rotate(var(--giro, 0deg)) translate(-50%, -50%);
   border: none;
   padding: 0; cursor: pointer;
   /* Separador con la caseta vecina y aro de categoria, en px de la caja de 100. */
@@ -585,6 +621,10 @@ onUnmounted(() => {
      asi que aqui basta con ocuparla entera y usar un tamaño de fuente normal. */
   position: absolute; inset: 0;
   align-items: center; justify-content: center;
+  /* Se deshace el giro de la caseta: lo que se gira es la FIGURA, no su numero. Una fila
+     puesta a 90 grados con los numeros de lado no la leeria nadie. */
+  transform: rotate(calc(-1 * var(--giro, 0deg)));
+  transform-origin: 50% 50%;
   font-size: 52px; line-height: 1; font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: #fff;

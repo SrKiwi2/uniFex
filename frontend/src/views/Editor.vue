@@ -7,6 +7,9 @@ import { useAuthStore } from '../stores/auth';
 import { usePuestosStore } from '../stores/puestos';
 import { usePlanoStore } from '../stores/plano';
 import { anchoParaLeer, anchoParaTocar, estiloPin, numeracionCompacta, numerosVisibles, ordenLectura } from '../mapa';
+import * as pdfjsLib from 'pdfjs-dist';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
 /*
  * Diseñador del plano. De 531 casetas solo unas pocas estan colocadas, asi que la herramienta
@@ -71,7 +74,10 @@ const puedeDeshacer = computed(() => indice.value >= 0);
 const puedeRehacer = computed(() => indice.value < historial.value.length - 1);
 
 const buscar = (id) => puestos.value.find((p) => p.id === id);
-const geom = (p) => ({ id: p.id, mapaX: p.mapaX, mapaY: p.mapaY, mapaEscala: p.mapaEscala ?? 1 });
+const geom = (p) => ({
+  id: p.id, mapaX: p.mapaX, mapaY: p.mapaY,
+  mapaEscala: p.mapaEscala ?? 1, mapaRotacion: p.mapaRotacion ?? 0,
+});
 
 function marcarSucio(id) {
   const s = new Set(dirty.value);
@@ -85,6 +91,7 @@ function aplicarGeom(g) {
   p.mapaX = g.mapaX;
   p.mapaY = g.mapaY;
   p.mapaEscala = g.mapaEscala;
+  p.mapaRotacion = g.mapaRotacion;
   marcarSucio(g.id);
 }
 
@@ -346,6 +353,64 @@ function terminarEscala() {
   if (antesEscala?.length) registrar(antesEscala);
   antesEscala = null;
 }
+/*
+ * ---- giro de la seleccion ----
+ *
+ * Todas las casetas se dibujaban con la misma orientacion, asi que un pasillo en diagonal o
+ * una fila contra una pared inclinada no se podian representar. El giro es por caseta y va
+ * en grados enteros 0..359, horarios, como los aplica el CSS.
+ *
+ * Mismo reparto que el tamaño: los botones giran un PASO relativo (util para enderezar un
+ * bloque entero sin perder sus diferencias) y el deslizador fija un valor ABSOLUTO igual para
+ * toda la seleccion (util para alinear una fila contra una pared).
+ */
+const GIRO_PASO = 15;
+const giroSeleccion = computed(() => seleccionadas.value[0]?.mapaRotacion ?? 0);
+let antesGiro = null;
+
+/** 0..359 siempre: girar -15 desde 0 tiene que dar 345, no -15. */
+const normalizarGiro = (g) => ((Math.round(Number(g) || 0) % 360) + 360) % 360;
+
+function girar(delta) {
+  const ids = [...seleccion.value];
+  if (!ids.length) { mensaje.value = 'Selecciona casetas primero.'; return; }
+  conHistoria(ids, () => {
+    for (const p of seleccionadas.value) {
+      p.mapaRotacion = normalizarGiro((p.mapaRotacion ?? 0) + delta);
+      marcarSucio(p.id);
+    }
+  });
+  mensaje.value = `${ids.length} caseta(s) giradas ${delta > 0 ? '+' : ''}${delta}°`;
+}
+
+// Igual que el tamaño: el arrastre pinta en vivo pero deja UN solo paso de deshacer.
+function iniciarGiro() {
+  antesGiro = [...seleccion.value].map((id) => geom(buscar(id))).filter(Boolean);
+}
+function fijarGiro(valor) {
+  const v = normalizarGiro(valor);
+  for (const p of seleccionadas.value) {
+    p.mapaRotacion = v;
+    marcarSucio(p.id);
+  }
+}
+function terminarGiro() {
+  if (antesGiro?.length) registrar(antesGiro);
+  antesGiro = null;
+}
+
+function enderezar() {
+  const ids = [...seleccion.value];
+  if (!ids.length) return;
+  conHistoria(ids, () => {
+    for (const p of seleccionadas.value) {
+      p.mapaRotacion = 0;
+      marcarSucio(p.id);
+    }
+  });
+  mensaje.value = `${ids.length} caseta(s) enderezadas`;
+}
+
 function restablecerEscala() {
   const ids = [...seleccion.value];
   if (!ids.length) return;
@@ -477,6 +542,7 @@ function copiarSeleccion() {
   portapapeles.value = sel.map((p) => ({
     categoriaId: p.categoriaId, tamano: p.tamano || '3x3',
     mapaX: p.mapaX, mapaY: p.mapaY, mapaEscala: p.mapaEscala ?? 1,
+    mapaRotacion: p.mapaRotacion ?? 0,
   }));
   vecesPegado.value = 0;
   mensaje.value = `${portapapeles.value.length} caseta(s) copiadas. Pega con Ctrl+V.`;
@@ -516,6 +582,7 @@ async function pegar() {
         x: Math.min(1, Math.max(0, aRejilla(c.mapaX) + despl)),
         y: Math.min(1, Math.max(0, aRejilla(c.mapaY) + despl)),
         escala: c.mapaEscala,
+        rotacion: c.mapaRotacion ?? 0,
       });
     }
     if (!posiciones.length) { mensaje.value = 'No se pudo pegar: el servidor rechazó las altas.'; return; }
@@ -702,7 +769,7 @@ async function guardar() {
   if (ocupado.value) return;
   const pos = [...dirty.value].map((id) => {
     const p = buscar(id);
-    return { id, x: p.mapaX, y: p.mapaY, escala: p.mapaEscala ?? 1 };
+    return { id, x: p.mapaX, y: p.mapaY, escala: p.mapaEscala ?? 1, rotacion: p.mapaRotacion ?? 0 };
   });
   ocupado.value = true;
   try {
@@ -746,7 +813,28 @@ const entradaFoto = ref(null);
 const entradaPlano = ref(null);
 
 /**
+ * Convierte la primera pagina de un PDF a una imagen de alta calidad (canvas -> blob).
+ * Usa pdf.js para renderizar a 2x escala para buen soporte de zoom.
+ */
+async function pdfAImagen(archivo) {
+  const arrayBuffer = await archivo.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pagina = await pdf.getPage(1);
+
+  const viewport = pagina.getViewport({ scale: 2.0 });
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+
+  await pagina.render({ canvasContext: context, viewport }).promise;
+
+  return new Blob([await new Promise((resolve) => canvas.toBlob(resolve, 'image/png', 0.9))], { type: 'image/png' });
+}
+
+/**
  * Reemplaza la imagen del plano de la edicion activa.
+ * Acepta PDF: se renderiza la primera pagina a 2x y se sube como PNG.
  *
  * Se avisa ANTES de subir porque el efecto no se puede deshacer con un botón: las casetas
  * guardan su sitio como fracciones 0..1 de la imagen, asi que un plano con OTRO encuadre
@@ -765,13 +853,17 @@ async function subirPlano(evento) {
 
   ocupado.value = true;
   try {
+    let archivoSubir = archivo;
+    if (archivo.type === 'application/pdf') {
+      mensaje.value = 'Renderizando PDF…';
+      archivoSubir = new File([await pdfAImagen(archivo)], 'plano.png', { type: 'image/png' });
+    }
+
     const datos = new FormData();
-    datos.append('archivo', archivo);
+    datos.append('archivo', archivoSubir);
     const r = await apiFetch('/api/app/plano', { method: 'POST', body: datos });
     const d = await r.json().catch(() => ({}));
     if (r.ok && d.ok) {
-      // Se aplica en el acto: el store lo comparte con el Mapa, asi que las dos vistas
-      // pasan al plano nuevo sin recargar.
       planoTienda.aplicar(d.plano);
       mensaje.value = d.mensaje || 'Plano actualizado';
     } else {
@@ -889,6 +981,12 @@ function onTecla(e) {
   else if (e.ctrlKey && e.key.toLowerCase() === 'c') { e.preventDefault(); copiarSeleccion(); }
   else if (e.ctrlKey && e.key.toLowerCase() === 'v') { e.preventDefault(); pegar(); }
   else if (e.key === 'Escape') seleccion.value = new Set();
+  // Girar con una tecla: colocar un pasillo en diagonal son decenas de giros seguidos y
+  // bajar al deslizador cada vez rompe el ritmo. Sin Ctrl, que Ctrl+R recarga la pagina.
+  else if (!e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'r') {
+    e.preventDefault();
+    girar(e.shiftKey ? -GIRO_PASO : GIRO_PASO);
+  }
   else if (e.key === 'ArrowLeft') { e.preventDefault(); desplazar(-paso, 0); }
   else if (e.key === 'ArrowRight') { e.preventDefault(); desplazar(paso, 0); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); desplazar(0, -paso); }
@@ -958,6 +1056,25 @@ onUnmounted(() => {
         </label>
         <button :disabled="ocupado || !seleccion.size" @click="escalar(1.15)" title="Agrandar un paso">🔍+</button>
         <button :disabled="ocupado || !seleccion.size" @click="restablecerEscala" title="Volver al tamaño de su categoría">↺</button>
+      </div>
+
+      <!-- Giro. Separado del tamaño para que no se confundan dos deslizadores seguidos. -->
+      <div v-if="modo === 'seleccionar'" class="grupo">
+        <button :disabled="ocupado || !seleccion.size" @click="girar(-GIRO_PASO)"
+                :title="`Girar ${GIRO_PASO}° a la izquierda`">⟲</button>
+        <label class="campo deslizador" title="Mismo ángulo para toda la selección">
+          Giro
+          <input type="range" min="0" max="355" step="5"
+                 :value="giroSeleccion" :disabled="ocupado || !seleccion.size"
+                 @pointerdown="iniciarGiro"
+                 @input="fijarGiro($event.target.value)"
+                 @change="terminarGiro" />
+          <span class="val">{{ giroSeleccion }}°</span>
+        </label>
+        <button :disabled="ocupado || !seleccion.size" @click="girar(GIRO_PASO)"
+                :title="`Girar ${GIRO_PASO}° a la derecha (tecla R; con Shift, al revés)`">⟳</button>
+        <button :disabled="ocupado || !seleccion.size" @click="girar(90)" title="Un cuarto de vuelta">90°</button>
+        <button :disabled="ocupado || !seleccion.size" @click="enderezar" title="Dejarlas derechas">⊾ Enderezar</button>
         <button :disabled="ocupado || !seleccion.size" @click="quitarDelMapa" title="Quitar del plano, sin borrar">⏏ Quitar</button>
         <button :disabled="ocupado || !seleccion.size" @click="alternarBloqueo" :title="accionBloqueo.titulo">{{ accionBloqueo.txt }}</button>
         <button :disabled="ocupado || !seleccion.size" class="peligro" @click="eliminarCasetas" title="Baja definitiva">🗑 Eliminar</button>
@@ -994,12 +1111,12 @@ onUnmounted(() => {
                title="Se guarda en todas las casetas seleccionadas" />
       </div>
 
-      <!-- Reemplazar el plano de la feria. No hace falta recompilar el APK: la imagen la
-           sirve el servidor y las apps la recogen al abrir el mapa. -->
+<!-- Reemplazar el plano de la feria. No hace falta recompilar el APK: la imagen la
+            sirve el servidor y las apps la recogen al abrir el mapa. -->
       <div class="grupo">
-        <input ref="entradaPlano" type="file" accept="image/png,image/jpeg" class="oculto" @change="subirPlano" />
+        <input ref="entradaPlano" type="file" accept="image/png,image/jpeg,application/pdf" class="oculto" @change="subirPlano" />
         <button :disabled="ocupado" @click="entradaPlano?.click()"
-                title="Sube una imagen nueva del plano para esta edición (PNG o JPG)">🗺 Cambiar plano</button>
+                title="Sube una imagen o PDF del plano para esta edición (PNG, JPG o PDF)">🗺 Cambiar plano</button>
         <span class="cuenta" :title="planoTienda.plano.propio ? 'Plano subido para esta edición' : 'Plano de respaldo que viene en la app'">
           {{ planoTienda.plano.ancho }}×{{ planoTienda.plano.alto }}{{ planoTienda.plano.propio ? ` · v${planoTienda.plano.version}` : ' · respaldo' }}
         </span>
@@ -1261,7 +1378,10 @@ aside li button.sel { background: #eff6ff; border-color: #bfdbfe; }
 .pin {
   position: absolute; width: 100px; height: 100px;
   transform-origin: 0 0;
-  transform: scale(calc(var(--pin, 20) / 100)) translate(-50%, -50%);
+  /* El `rotate` va ENTRE el scale y el translate, y ese orden no es casual: el translate
+     centra la caja de 100 px sobre su punto del plano ANTES de girarla, asi que el giro sale
+     sobre el centro de la caseta y no la desplaza. Ponerlo despues la haria orbitar. */
+  transform: scale(calc(var(--pin, 20) / 100)) rotate(var(--giro, 0deg)) translate(-50%, -50%);
   --borde: 6px;
   --aro: 12px;
   /* El separador va en box-shadow y no en `border`: con `box-sizing: border-box`, 1 px de
@@ -1307,6 +1427,10 @@ aside li button.sel { background: #eff6ff; border-color: #bfdbfe; }
      asi que aqui basta con ocuparla entera y usar un tamaño de fuente normal. */
   position: absolute; inset: 0;
   align-items: center; justify-content: center;
+  /* Se deshace el giro de la caseta: lo que se gira es la FIGURA, no su numero. Una fila
+     puesta a 90 grados con los numeros de lado no la leeria nadie. */
+  transform: rotate(calc(-1 * var(--giro, 0deg)));
+  transform-origin: 50% 50%;
   font-size: 52px; line-height: 1; font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: #fff;

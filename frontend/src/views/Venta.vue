@@ -301,19 +301,18 @@ async function registrar() {
 watch(form, () => guardarBorrador(auth.id, form), { deep: true });
 
 /*
- * Aviso de "hay mas abajo". En una pantalla chica el formulario no cabe entero y nada
- * delata que sigue: el vendedor rellena lo que ve y busca el boton de continuar. El aviso
- * aparece solo mientras quede contenido por debajo y se va al llegar al final.
+ * Indicador de "hay más abajo". En pantallas pequeñas el formulario no cabe entero y nada
+ * delata que sigue: el vendedor rellena lo que ve y busca el botón de continuar.
+ * Ahora es SOLO un indicador visual (no botón): el formulario es naturalmente scrolleable
+ * con el dedo/ratón. El indicador aparece solo mientras quede contenido por debajo
+ * y se oculta al llegar al final.
  */
 const hayMasAbajo = ref(false);
 function revisarDesplazamiento() {
   const d = document.documentElement;
   hayMasAbajo.value = d.scrollHeight - window.scrollY - d.clientHeight > 24;
 }
-function bajar() {
-  window.scrollBy({ top: window.innerHeight * 0.75, behavior: 'smooth' });
-}
-// Cambiar de paso reinicia el alto de la pagina: hay que volver a medir DESPUES de pintar.
+// Cambiar de paso reinicia el alto de la página: hay que volver a medir DESPUÉS de pintar.
 watch(paso, () => {
   window.scrollTo({ top: 0 });
   nextTick(revisarDesplazamiento);
@@ -554,13 +553,14 @@ onUnmounted(() => {
         </p>
       </section>
 
-      <!-- El aviso de "hay mas abajo" viaja en la MISMA franja pegajosa que los botones,
-           sobre fondo opaco: flotando suelto se posaba encima de un campo y parecia que
-           lo tapaba. -->
+<!-- El aviso de "hay más abajo" viaja en la MISMA franja pegajosa que los botones,
+             sobre fondo opaco: flotando suelto se posaba encima de un campo y parecía que
+             lo tapaba. Ahora es SOLO un indicador visual (no botón clickeable): el formulario
+             es naturalmente scrolleable con el dedo/ratón en cualquier dispositivo. -->
       <div class="pie">
-        <button v-if="hayMasAbajo" class="mas-abajo" type="button" @click="bajar">
+        <div v-if="hayMasAbajo" class="mas-abajo" role="status" aria-live="polite">
           <span class="flecha">↓</span> Desliza para ver más
-        </button>
+        </div>
         <div class="acciones">
           <button class="btn" :disabled="paso === 0 || enviando" @click="atras">Atrás</button>
           <button v-if="paso < 2" class="btn btn-primario" @click="siguiente">Siguiente</button>
@@ -656,16 +656,17 @@ onUnmounted(() => {
 /* Franja inferior: aviso de "hay más" + botones, juntos y sobre fondo opaco. */
 .pie { display: flex; flex-direction: column; align-items: stretch; gap: 0.5rem; }
 
-/* El aviso de "hay más abajo" pasaba desapercibido: era gris sobre gris, del tamaño de una
-   nota al pie, justo encima de unos botones que sí llaman la atención. Ahora usa el color de
-   acento y la flecha se mueve, que es lo que el ojo persigue en una pantalla llena de texto. */
+/* El aviso de "hay más abajo" es SOLO un indicador visual (no botón clickeable).
+   El formulario es naturalmente scrolleable con el dedo/ratón en cualquier dispositivo.
+   Usa el color de acento y la flecha se mueve para llamar la atención. */
 .mas-abajo {
-  align-self: center; cursor: pointer; font: inherit;
+  align-self: center; font: inherit;
   display: inline-flex; align-items: center; gap: 0.45rem;
   border: 1px solid color-mix(in srgb, var(--acento) 45%, transparent);
   background: color-mix(in srgb, var(--acento) 12%, var(--panel));
   color: var(--acento); font-weight: 700; font-size: 0.9rem;
   border-radius: 999px; padding: 0.5rem 1.1rem; box-shadow: var(--sombra);
+  pointer-events: none; /* No es clickeable, solo indicador */
 }
 .mas-abajo .flecha { display: inline-block; animation: rebote 1.4s ease-in-out infinite; }
 @keyframes rebote {

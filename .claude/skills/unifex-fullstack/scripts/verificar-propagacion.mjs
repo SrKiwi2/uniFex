@@ -11,6 +11,13 @@
  * Un cambio de habilitacion NO viaja por el primero, por eso hace falta el segundo: sin el,
  * el vendedor se quedaba con su lista vieja hasta cerrar y volver a entrar.
  *
+ * OJO CON LO QUE SE CUENTA. El vendedor ve TODAS las casetas del plano: las que no lleva le
+ * salen en gris, y al tocarlas la ficha le da el telefono del companiero que si las vende,
+ * para poder derivar al cliente que esta parado delante. Asi que el largo de
+ * /api/app/puestos NO dice cuantas tiene habilitadas -- son todas, siempre. Lo que manda es
+ * /api/app/puestos/asignaciones, y lo que le impide vender una ajena es la comprobacion del
+ * servidor en cada escritura, no esconderla.
+ *
  * Deja la base como estaba.
  *
  *   node .claude/skills/unifex-fullstack/scripts/verificar-propagacion.mjs
@@ -67,6 +74,14 @@ const esperar = async (arr, n, ms = 6000) => {
 };
 const ultimoDe = (id) => [...estados].reverse().find((e) => e.id === id);
 
+/** Cuantas casetas tiene HABILITADAS este vendedor, segun lo que el mismo puede consultar. */
+const habilitadas = async () => ((await api(V, '/api/app/puestos/asignaciones')).cuerpo || [])
+  .filter((a) => a.vendedorId === vid).length;
+/** Cuantas casetas ve en el plano (todas las vivas, sea de quien sea). */
+const enElPlano = async () => ((await api(V, '/api/app/puestos')).cuerpo || []).length;
+
+const totalInicial = await enElPlano();
+
 // --- 1. Habilitarle casetas ---
 const catalogo = (await api(T, '/api/app/vendedores/puestos-asignables')).cuerpo || [];
 const libres = catalogo.filter((p) => !p.asignadoAId && p.estado === 'L').slice(0, 2);
@@ -76,7 +91,8 @@ ok(await esperar(avisos, 1), 'al habilitarle una caseta, el aviso llega solo');
 ok(avisos.at(-1)?.tipo === 'ASIGNACION_CAMBIADA', 'con el tipo que dispara la recarga del mapa', avisos.at(-1)?.tipo);
 
 let r = await api(V, '/api/app/puestos');
-ok(r.cuerpo?.length === 1, 'y a partir de ahi ve EXACTAMENTE esa caseta, no todas', `${r.cuerpo?.length}`);
+ok(r.cuerpo?.length === totalInicial, 've el plano entero (las ajenas, en gris)', `${r.cuerpo?.length}`);
+ok((await habilitadas()) === 1, 'pero solo UNA le figura habilitada', `${await habilitadas()}`);
 
 // --- 2. Mover la caseta desde el editor ---
 estados.length = 0;
@@ -98,8 +114,10 @@ ok(await esperar(estados, 2) && ultimoDe(libres[0].id)?.estado === 'L', 'y desbl
 estados.length = 0;
 await api(T, `/api/app/puestos/${libres[1].id}/bloquear`, { method: 'POST' });
 await esperar(estados, 1);
-r = await api(V, '/api/app/puestos');
-ok(r.cuerpo?.length === 1, 'una caseta ajena que cambia NO aparece en su mapa', `${r.cuerpo?.length}`);
+ok(ultimoDe(libres[1].id)?.estado === 'X',
+   'el cambio de una caseta AJENA tambien le llega (la vera en gris, bloqueada)',
+   ultimoDe(libres[1].id)?.estado);
+ok((await habilitadas()) === 1, 'y sigue sin poder venderla: no se le habilito', `${await habilitadas()}`);
 await api(T, `/api/app/puestos/${libres[1].id}/desbloquear`, { method: 'POST' });
 
 // --- 5. Caseta nueva creada en el editor y habilitada ---
@@ -108,22 +126,21 @@ const nueva = await api(T, '/api/app/puestos', { method: 'POST',
   body: JSON.stringify({ categoriaId: catId, codigo: `P${marca}`, tamano: '3x3' }) });
 const nuevaId = nueva.cuerpo?.id;
 ok(nueva.estado === 200 && nuevaId, 'se crea una caseta nueva desde el editor', `id=${nuevaId}`);
-r = await api(V, '/api/app/puestos');
-ok(r.cuerpo?.length === 1, 'que todavia NO le sale al vendedor (no es suya)', `${r.cuerpo?.length}`);
+ok((await enElPlano()) === totalInicial + 1,
+   'y le aparece en el plano al instante, aunque todavia no sea suya', `${await enElPlano()}`);
+ok((await habilitadas()) === 1, 'en gris: aun no la tiene habilitada', `${await habilitadas()}`);
 
 await api(T, `/api/app/vendedores/${vid}/puestos`, { method: 'PUT',
   body: JSON.stringify({ puestoIds: [libres[0].id, nuevaId] }) });
 ok(await esperar(avisos, 1), 'al habilitarsela, le llega el aviso');
-r = await api(V, '/api/app/puestos');
-ok(r.cuerpo?.length === 2, 'y ya le salen las dos', `${r.cuerpo?.length}`);
+ok((await habilitadas()) === 2, 'y ya tiene DOS habilitadas', `${await habilitadas()}`);
 
 // --- 6. Quitarle una ---
 avisos.length = 0;
 await api(T, `/api/app/vendedores/${vid}/puestos`, { method: 'PUT', body: JSON.stringify({ puestoIds: [nuevaId] }) });
 ok(await esperar(avisos, 1), 'al quitarle una, tambien le llega el aviso');
 ok(/Se te quitaron/.test(avisos.at(-1)?.cuerpo || ''), 'diciendo que se le quito', avisos.at(-1)?.cuerpo);
-r = await api(V, '/api/app/puestos');
-ok(r.cuerpo?.length === 1, 'y le queda solo la otra', `${r.cuerpo?.length}`);
+ok((await habilitadas()) === 1, 'y le queda UNA habilitada', `${await habilitadas()}`);
 
 // --- 7. Borrar la caseta desde el editor ---
 estados.length = 0;

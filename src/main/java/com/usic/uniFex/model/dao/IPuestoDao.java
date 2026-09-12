@@ -130,15 +130,20 @@ List<Puesto> findLibresPorCategoriaOrdenados(@Param("estadoPuesto") String estad
     List<Puesto> listarActivos();
 
     /**
-     * Guarda posicion (0..1) y, si viene, la escala propia. Pasar x/y nulos quita la caseta
-     * del plano sin borrarla. Nunca toca una caseta anulada.
+     * Guarda posicion (0..1) y, si vienen, la escala y el giro propios. Pasar x/y nulos quita
+     * la caseta del plano sin borrarla. Nunca toca una caseta anulada.
+     *
+     * El giro viaja con la posicion y no por su propia ruta porque el editor las mueve, escala
+     * y gira en el mismo gesto y las guarda en el mismo lote: separarlas serian dos escrituras
+     * por caseta y dos difusiones por WebSocket para un solo cambio.
      */
     @Modifying(clearAutomatically = true)
     @Query(value = "UPDATE puesto SET mapa_x = :x, mapa_y = :y, " +
-           "mapa_escala = COALESCE(:escala, mapa_escala) " +
+           "mapa_escala = COALESCE(:escala, mapa_escala), " +
+           "mapa_rotacion = COALESCE(:rotacion, mapa_rotacion) " +
            "WHERE id = :id AND (\"_estado\" IS NULL OR \"_estado\" <> 'X')", nativeQuery = true)
     int actualizarPosicion(@Param("id") Long id, @Param("x") Double x, @Param("y") Double y,
-                           @Param("escala") Double escala);
+                           @Param("escala") Double escala, @Param("rotacion") Integer rotacion);
 
     /**
      * Anula una caseta (baja logica). UPDATE condicional, como toda transicion:

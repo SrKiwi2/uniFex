@@ -63,6 +63,11 @@ public class SecurityConfig {
                 "https://localhost",        // APK Android (Capacitor)
                 "capacitor://localhost",    // iOS, si algun dia se compila
                 "http://localhost:5173",    // SPA en desarrollo
+                // Un SEGUNDO servidor de desarrollo, para probar la SPA contra otro backend
+                // sin parar el primero (VITE_BACKEND=... npx vite --port 5174). Sin esta
+                // linea el navegador recibe 403 en el login y no hay pista de por que: curl
+                // funciona, porque no manda cabecera Origin y el navegador si.
+                "http://localhost:5174",
                 "http://localhost:7676"));  // la propia app servida por Spring
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         // If-None-Match lo manda el cliente para preguntar "¿cambio algo?"; sin declararlo,

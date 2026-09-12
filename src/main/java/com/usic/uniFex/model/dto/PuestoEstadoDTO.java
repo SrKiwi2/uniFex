@@ -35,6 +35,7 @@ public record PuestoEstadoDTO(
         Double mapaY,
         Double tamanoMapa,        // tamaño base de la categoria, fraccion del ancho del plano
         Double mapaEscala,        // multiplicador propio de esta caseta
+        Integer mapaRotacion,     // giro propio, grados 0..359 horarios (V24); 0 = sin girar
         /*
          * Precio de venta en Bs (el de la categoria). Viaja al mapa porque el vendedor lo
          * necesita en la mano: toca una caseta delante del cliente y le dice cuanto cuesta,
@@ -69,6 +70,7 @@ public record PuestoEstadoDTO(
                 p.getMapaY(),
                 (c != null && c.getTamanoMapa() != null) ? c.getTamanoMapa() : TAMANO_POR_DEFECTO,
                 p.getMapaEscala() != null ? p.getMapaEscala() : 1.0,
+                p.getMapaRotacion() != null ? p.getMapaRotacion() : 0,
                 (c != null && c.getPrecioBase() != null) ? c.getPrecioBase() : java.math.BigDecimal.ZERO,
                 p.getReferencia(),
                 !ANULADO.equals(p.getEstado()));

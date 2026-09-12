@@ -1,5 +1,4 @@
 import { ref, computed } from 'vue';
-import { useAuthStore } from './auth.js';
 import { defineStore } from 'pinia';
 import { apiFetch } from '../api.js';
 import { crearClientePuestos } from '../ws.js';
@@ -152,16 +151,6 @@ export const usePuestosStore = defineStore('puestos', () => {
    * Aplica un PuestoEstadoDTO recibido por WebSocket.
    * Cubre alta, cambio y baja (`activo: false`), que es lo que necesita el editor.
    */
-  /**
-   * ¿Este usuario ve el plano entero? Los vendedores (ADMINISTRATIVO) ven solo lo asignado, y el
-   * servidor ya se lo filtra al pedir la lista. Se lee del rol y no de la lista recibida porque
-   * un vendedor sin asignaciones tambien las recibe todas, y ahi si debe comportarse como admin.
-   */
-  function puedeVerTodas() {
-    const rol = (useAuthStore().rol || '').toUpperCase().replace(/ /g, '_');
-    return rol !== 'ADMINISTRATIVO';
-  }
-
   function aplicar(dto) {
     const i = puestos.value.findIndex((p) => p.id === dto.id);
     if (dto.activo === false) {
@@ -169,15 +158,17 @@ export const usePuestosStore = defineStore('puestos', () => {
       return;
     }
     if (i < 0) {
-      // Una caseta que no estaba en la lista solo se agrega si el usuario puede verlas todas.
+      // Una caseta que no estaba en la lista se agrega, sea quien sea el que mira.
       //
-      // El topic /topic/puestos es unico y global -- es el invariante que mantiene coherentes a
-      // todos los clientes -- asi que a un vendedor con casetas asignadas tambien le llegan las
-      // ajenas. Si se agregaran, el mapa se le iria llenando de casetas que no le tocan en cuanto
-      // otro vendedor las tocara, y el filtro del servidor no serviria de nada. Las suyas ya estan
-      // en la lista, asi que para el lo unico que aporta el mensaje es la ACTUALIZACION de estado,
-      // no el alta.
-      if (!puedeVerTodas()) return;
+      // Aqui hubo una guarda que la descartaba cuando el rol era ADMINISTRATIVO, partiendo de
+      // que "el servidor ya se lo filtra al pedir la lista". Eso dejo de ser cierto: el mapa
+      // ensena TODAS las casetas y pinta en gris las que no le tocan, justamente para que el
+      // vendedor pueda decirle a un cliente quien lleva cada una. Con la guarda puesta, una
+      // caseta creada desde el Editor NO le aparecia al vendedor hasta que recargara -- el
+      // mismo sintoma que se reporto desde el APK y que se suponia arreglado.
+      //
+      // Lo que impide que venda una caseta ajena no es esconderla, es la comprobacion del
+      // servidor en cada escritura (PuestoApiController.vetoPorAsignacion).
       puestos.value.push(dto);
       return;
     }
@@ -192,6 +183,7 @@ export const usePuestosStore = defineStore('puestos', () => {
         mapaX: local.mapaX,
         mapaY: local.mapaY,
         mapaEscala: local.mapaEscala,
+        mapaRotacion: local.mapaRotacion,
       };
     } else {
       puestos.value[i] = dto;
@@ -216,7 +208,13 @@ export const usePuestosStore = defineStore('puestos', () => {
     puestos.value = lista.map((dto) => {
       const local = previos.get(dto.id);
       if (!local || ![...guardias].some((g) => g(dto.id))) return dto;
-      return { ...dto, mapaX: local.mapaX, mapaY: local.mapaY, mapaEscala: local.mapaEscala };
+      return {
+        ...dto,
+        mapaX: local.mapaX,
+        mapaY: local.mapaY,
+        mapaEscala: local.mapaEscala,
+        mapaRotacion: local.mapaRotacion,
+      };
     });
   }
 

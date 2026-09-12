@@ -65,6 +65,7 @@ export function estiloPin(p) {
     left: `${p.mapaX * 100}%`,
     top: `${p.mapaY * 100}%`,
     '--pin': `calc(var(--mundo, 1200) * ${tamanoDe(p)})`,
+    '--giro': `${p.mapaRotacion || 0}deg`,
   };
 }
 
