@@ -6,6 +6,7 @@ import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestController;
@@ -46,6 +47,7 @@ public class ManejadorErroresApi {
             MethodArgumentTypeMismatchException.class,
             HttpMessageNotReadableException.class,
             MissingServletRequestParameterException.class,
+            MethodArgumentNotValidException.class,
     })
     public ResponseEntity<Map<String, Object>> peticionInvalida(Exception e, HttpServletRequest peticion) {
         log.warn("Peticion invalida en {} {}: {}", peticion.getMethod(), peticion.getRequestURI(), e.getMessage());

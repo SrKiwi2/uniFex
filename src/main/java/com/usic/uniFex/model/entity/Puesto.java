@@ -60,7 +60,7 @@ public class Puesto extends AuditoriaConfig{
     private Double mapaEscala;
 
     /**
-     * Giro de la caseta en el plano, en grados 0..359 en sentido horario (V24).
+     * Giro de la caseta en el plano, en grados 0..359 en sentido horario (V25).
      *
      * NULL y 0 significan lo mismo. Se deja nulo por defecto para no tener que reescribir las
      * 500+ filas que ya existian, y quien lo lee lo trata como 0.

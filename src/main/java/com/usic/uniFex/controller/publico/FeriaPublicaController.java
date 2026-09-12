@@ -42,32 +42,46 @@ public class FeriaPublicaController {
         // 1. Edición activa
         Edicion edicionActiva = edicionDao.findFirstByActivaTrueOrderByAnioDesc().orElse(null);
         if (edicionActiva != null) {
-            cuerpo.put("edicion", Map.of(
-                    "id", edicionActiva.getId(),
-                    "nombre", edicionActiva.getNombre(),
-                    "anio", edicionActiva.getAnio(),
-                    "plano", edicionActiva.getPlanoArchivo() != null
-                            ? Map.of(
-                                    "archivo", edicionActiva.getPlanoArchivo(),
-                                    "ancho", edicionActiva.getPlanoAncho(),
-                                    "alto", edicionActiva.getPlanoAlto(),
-                                    "version", edicionActiva.getPlanoVersion(),
-                                    "subidoEn", edicionActiva.getPlanoSubidoEn())
-                            : null,
-                    "urlPlano", edicionActiva.getPlanoArchivo() != null
-                            ? "/files/" + edicionActiva.getPlanoArchivo() + "?v=" + edicionActiva.getPlanoVersion()
-                            : "/files/mapa.pdf"));
+            // LinkedHashMap y no Map.of: "plano" es null en cuanto la edición no tiene un
+            // plano propio subido (el caso normal de una edición recién creada), y Map.of
+            // lanza NullPointerException ante cualquier valor null, aunque sea uno solo.
+            Map<String, Object> edicionInfo = new LinkedHashMap<>();
+            edicionInfo.put("id", edicionActiva.getId());
+            edicionInfo.put("nombre", edicionActiva.getNombre());
+            edicionInfo.put("anio", edicionActiva.getAnio());
+            if (edicionActiva.getPlanoArchivo() != null) {
+                // Igual que arriba: ancho/alto/subidoEn pueden ser null en datos existentes
+                // aunque ya haya un archivo, así que tampoco aquí sirve Map.of.
+                Map<String, Object> planoInfo = new LinkedHashMap<>();
+                planoInfo.put("archivo", edicionActiva.getPlanoArchivo());
+                planoInfo.put("ancho", edicionActiva.getPlanoAncho());
+                planoInfo.put("alto", edicionActiva.getPlanoAlto());
+                planoInfo.put("version", edicionActiva.getPlanoVersion());
+                planoInfo.put("subidoEn", edicionActiva.getPlanoSubidoEn());
+                edicionInfo.put("plano", planoInfo);
+            } else {
+                edicionInfo.put("plano", null);
+            }
+            edicionInfo.put("urlPlano", edicionActiva.getPlanoArchivo() != null
+                    ? "/files/" + edicionActiva.getPlanoArchivo() + "?v=" + edicionActiva.getPlanoVersion()
+                    : "/files/mapa.pdf");
+            cuerpo.put("edicion", edicionInfo);
         } else {
             cuerpo.put("edicion", null);
         }
 
         // 2. Todas las ediciones (para selector histórico)
+        // LinkedHashMap y no Map.of: `activa` es un Boolean de entidad (puede ser null en
+        // ediciones antiguas que no pasaron por el backfill de V6), y Map.of no admite null.
         List<Map<String, Object>> ediciones = edicionDao.findAllByOrderByAnioDesc().stream()
-                .map(e -> Map.<String, Object>of(
-                        "id", e.getId(),
-                        "nombre", e.getNombre(),
-                        "anio", e.getAnio(),
-                        "activa", e.getActiva()))
+                .map(e -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("id", e.getId());
+                    m.put("nombre", e.getNombre());
+                    m.put("anio", e.getAnio());
+                    m.put("activa", Boolean.TRUE.equals(e.getActiva()));
+                    return m;
+                })
                 .toList();
         cuerpo.put("ediciones", ediciones);
 

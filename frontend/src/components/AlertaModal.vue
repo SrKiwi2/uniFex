@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { alertaVisible, alertaConfig, cerrar } from '../ui/alerta';
 
 const segundos = ref(0);
@@ -43,15 +43,28 @@ function cancelar() {
   cerrar(false);
 }
 
+// AlertaModal vive montado siempre en App.vue (junto a ToastHost y Bienvenida), visible o
+// no: bloquear el scroll en onMounted lo dejaba bloqueado desde el arranque de la app
+// entera, en TODAS las rutas, se mostrara una alerta o no. Pasaba desapercibido porque las
+// rutas bajo AppLayout desplazan un contenedor interno, no el body — pero una pagina suelta
+// como /feria, que sí depende del scroll del documento, quedaba sin poder hacer scroll nunca.
+watch(alertaVisible, (visible) => {
+  if (visible) {
+    iniciarTemporizador();
+    document.body.style.overflow = 'hidden';
+  } else {
+    limpiar();
+    document.body.style.overflow = '';
+  }
+});
+
 onMounted(() => {
-  iniciarTemporizador();
-  document.body.style.overflow = 'hidden';
   document.addEventListener('keydown', onTecla);
 });
 
 onUnmounted(() => {
   limpiar();
-  document.body.style.overflow = '';
+  if (alertaVisible.value) document.body.style.overflow = '';
   document.removeEventListener('keydown', onTecla);
 });
 
