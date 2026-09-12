@@ -19,6 +19,12 @@ import { ref, onMounted, onUnmounted } from 'vue';
 
 const emit = defineEmits(['fin']);
 
+// La build de producción sirve la SPA bajo /app/ (ver VITE_BASE en el perfil Maven
+// "frontend"), así que una ruta fija "/logo-fexpo.png" apunta a la raíz del dominio, donde
+// el archivo no existe, y da 404 solo en producción (en dev, base es "/", coincide por
+// casualidad). BASE_URL trae el prefijo correcto en cada entorno.
+const BASE = import.meta.env.BASE_URL;
+
 /** Lo que dura en pantalla antes de empezar a irse. Optimizado: más rápido para mejor UX. */
 const VISIBLE_MS = 900;
 /** Lo que tarda en desvanecerse; tiene que coincidir con la transición del CSS. */
@@ -48,7 +54,7 @@ onUnmounted(() => {
   <div class="bienvenida" :class="{ saliendo }" @click="terminar" role="presentation">
     <div class="halo"></div>
     <div class="marca">
-      <img src="/logo-fexpo.png" alt="FEXPO UAP" width="640" height="433" />
+      <img :src="`${BASE}logo-fexpo.png`" alt="FEXPO UAP" width="640" height="433" />
       <div class="barra"><span></span></div>
     </div>
   </div>

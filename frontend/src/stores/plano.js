@@ -13,7 +13,11 @@ import { url as urlServidor } from '../config.js';
  * Se comparte entre Mapa y Editor por la misma razon que los puestos: las dos vistas viven
  * en <KeepAlive> y pedirlo por separado seria bajarlo dos veces.
  */
-const RESPALDO = { url: '/mapa.png', ancho: 1836, alto: 2376, version: 0, propio: false };
+// BASE_URL (no una ruta fija "/mapa.png"): en el APK, base es "/" y no cambia nada; en la
+// web de producción la SPA se sirve bajo /app/ (VITE_BASE del perfil Maven "frontend"), y
+// una ruta fija ahí apunta a la raíz del dominio, donde el archivo no existe — 404 solo en
+// ese caso, justo cuando este respaldo hace más falta (API caída o sin red).
+const RESPALDO = { url: `${import.meta.env.BASE_URL}mapa.png`, ancho: 1836, alto: 2376, version: 0, propio: false };
 
 /*
  * El plano tambien se recuerda entre arranques, y no solo por velocidad.

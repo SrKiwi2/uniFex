@@ -5,9 +5,12 @@
     <!-- El icono de la pestaña. Se declaran los dos tamaños porque el navegador elige: 16 px
          para la pestaña y 32 px para la barra de marcadores y la pantalla de inicio. Es el
          badge cuadrado y no el logotipo apaisado: a 16 px un dibujo con letras no se lee. -->
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- %BASE_URL% (no una ruta fija): en producción la SPA se sirve bajo /app/ (ver
+         VITE_BASE en el perfil Maven "frontend"), y Vite reemplaza este placeholder por
+         ese prefijo solo en el HTML de build; con "/" a secas el ícono daba 404 ahí. -->
+    <link rel="icon" type="image/png" sizes="32x32" href="%BASE_URL%favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="%BASE_URL%favicon-16.png" />
+    <link rel="apple-touch-icon" href="%BASE_URL%apple-touch-icon.png" />
     <meta name="theme-color" content="#083D14" />
     <!-- `viewport-fit=cover` no es decorativo: sin el, env(safe-area-inset-*) devuelve 0 y
          TODO el codigo que ya lo usaba (barra inferior, avisos) no hacia nada. Desde que el

@@ -12,6 +12,15 @@ const menuAbierto = ref(false);
 const heroLogoWrap = ref(null);
 const ahora = ref(Date.now());
 
+// Producción sirve la SPA bajo /app/ (ver VITE_BASE en el perfil Maven "frontend"): una
+// ruta fija "/foo.png" apunta a la raíz del dominio, donde el archivo no existe, y da 404
+// solo ahí (en dev, base es "/", coincide por casualidad y el problema no se nota).
+// BASE_URL trae el prefijo correcto en cada entorno.
+const BASE = import.meta.env.BASE_URL;
+function imgPublica(nombre) {
+  return `${BASE}${nombre}`;
+}
+
 // Colores de las noches: los mismos rojo/morado/azul de las insignias de facultad del
 // logo, reutilizados aquí como identificador de cada jornada.
 const COLORES_NOCHE = ['#e31e24', '#3c1884', '#0048c0'];
@@ -46,56 +55,56 @@ const nochesFexpo = [
 // onMounted).
 const standsDestacados = [
   {
-    imagen: '/STAND-MIPES.png',
+    imagen: imgPublica('STAND-MIPES.png'),
     alt: 'Stand MYPES en la FEXPO UAP, con emprendedores atendiendo su puesto',
     titulo: 'Stand MYPES',
     descripcion: 'Las MYPES reúnen a las micro y pequeñas empresas de la región: emprendedores pandinos que muestran y venden sus productos artesanales, gastronomía y creaciones locales. Es la zona ideal para conocer el talento local, probar sabores de la tierra y llevarte algo hecho en Pando.',
     invertido: false
   },
   {
-    imagen: '/STAND-EMPRESAS.png',
+    imagen: imgPublica('STAND-EMPRESAS.png'),
     alt: 'Stand Empresas en la FEXPO UAP, con marcas y cooperativas atendiendo al público',
     titulo: 'Stand Empresas',
     descripcion: 'El Stand Empresas reúne a empresas, bancos y cooperativas que apuestan por el desarrollo de Pando. Aquí presentan sus servicios y propuestas directamente a la comunidad, cara a cara con quienes visitan la feria.',
     invertido: true
   },
   {
-    imagen: '/STAND-PROFESIOGRAFICA.png',
+    imagen: imgPublica('STAND-PROFESIOGRAFICA.png'),
     alt: 'Stand Profesiográfico en la FEXPO UAP, con actividades de las carreras de la universidad',
     titulo: 'Stand Profesiográfico',
     descripcion: 'El Stand Profesiográfico invita a conocer, explorar y elegir tu futuro: cada facultad de la Universidad Amazónica de Pando muestra sus carreras con proyectos, laboratorios y actividades en vivo, para que quienes visitan la feria descubran su vocación y decidan qué estudiar.',
     invertido: false
   },
   {
-    imagen: '/STAND-ARTESANIAS.png',
+    imagen: imgPublica('STAND-ARTESANIAS.png'),
     alt: 'Stand Artesanías en la FEXPO UAP, con tallados en madera y tejidos hechos a mano',
     titulo: 'Stand Artesanías',
     descripcion: 'El Stand Artesanías reúne el trabajo hecho a mano de artesanos y artesanas de Pando: tallados en madera, tejidos, bisutería y piezas únicas que llevan la tradición local. Apoya el talento de la región y llévate contigo algo hecho con las manos de quienes lo crearon.',
     invertido: true
   },
   {
-    imagen: '/AGROPECUARIA.png',
+    imagen: imgPublica('AGROPECUARIA.png'),
     alt: 'Stand Agropecuario en la FEXPO UAP, con ganadería y producción del campo pandino',
     titulo: 'Stand Agropecuario',
     descripcion: 'El Stand Agropecuario muestra el trabajo del campo pandino: ganadería, producción sostenible y proyectos agrícolas de la región. Apoya a los productores locales y descubre de cerca cómo se cultiva y se cría lo que llega a tu mesa.',
     invertido: false
   },
   {
-    imagen: '/STAND-VIVERO.png',
+    imagen: imgPublica('STAND-VIVERO.png'),
     alt: 'Stand Planta Viveros en la FEXPO UAP, con plantines y proyectos de conservación de fauna',
     titulo: 'Stand Planta Viveros',
     descripcion: 'El Stand Planta Viveros impulsa el cuidado del medio ambiente: viveros de plantas nativas, estudios de fauna y proyectos de conservación que protegen los bosques y la biodiversidad de Pando. Súmate a sembrar un futuro más verde y sostenible para la región.',
     invertido: true
   },
   {
-    imagen: '/STAND-VEHICULAR.png',
+    imagen: imgPublica('STAND-VEHICULAR.png'),
     alt: 'Stand Vehicular en la FEXPO UAP, con camionetas, autos y motos en exhibición',
     titulo: 'Stand Vehicular',
     descripcion: 'El Stand Vehicular reúne a las principales marcas y concesionarias de la región, con camionetas, autos y motos de último modelo en exhibición. Ven a descubrir las novedades del mercado automotor y conocer de cerca lo último en tecnología vehicular.',
     invertido: false
   },
   {
-    imagen: '/STAND-COMIDA.png',
+    imagen: imgPublica('STAND-COMIDA.png'),
     alt: 'Stand Comida en la FEXPO UAP, con anticuchos, salchipapas y hamburguesas recién preparados',
     titulo: 'Stand Comida',
     descripcion: 'El Stand Comida invita a la familia a disfrutar de una gran variedad de platos, desde anticuchos y salchipapas típicos hasta hamburguesas y opciones para todos los gustos. Ven con hambre y descubre los sabores que se preparan al momento, listos para compartir.',
@@ -292,7 +301,7 @@ const cuentaRegresiva = computed(() => {
     <header class="nav-fexpo">
       <div class="nav-inner">
         <a href="#inicio" class="nav-marca" @click="cerrarMenu">
-          <img src="/logo-fexpo-v2.png" alt="FEXPO UAP" class="nav-logo" width="1254" height="1254" />
+          <img :src="imgPublica('logo-fexpo-v2.png')" alt="FEXPO UAP" class="nav-logo" width="1254" height="1254" />
           <span>FEXPO UAP <em class="nav-anio">{{ anioFeria }}</em></span>
         </a>
 
@@ -320,10 +329,16 @@ const cuentaRegresiva = computed(() => {
     </header>
 
     <!-- Hero: la foto pone la escena, el logo 3D y la cuenta regresiva son el centro -->
-    <section id="inicio" class="hero" @mousemove="onHeroMouseMove" @mouseleave="onHeroMouseLeave">
+    <section
+      id="inicio"
+      class="hero"
+      :style="{ '--hero-foto': `url(${imgPublica('hero-campus.png')})` }"
+      @mousemove="onHeroMouseMove"
+      @mouseleave="onHeroMouseLeave"
+    >
       <div class="contenedor hero-contenido">
         <div class="hero-logo-3d" ref="heroLogoWrap">
-          <img src="/FEXPO-UAP-TRASPARENTE.svg" alt="FEXPO UAP v.2.0" class="hero-logo-img" width="976" height="661" />
+          <img :src="imgPublica('FEXPO-UAP-TRASPARENTE.svg')" alt="FEXPO UAP v.2.0" class="hero-logo-img" width="976" height="661" />
         </div>
 
         <div class="hero-cuenta">
@@ -489,7 +504,7 @@ const cuentaRegresiva = computed(() => {
     <footer class="footer-fexpo">
       <div class="contenedor footer-grid">
         <div class="footer-marca">
-          <img src="/logo-fexpo-v2.png" alt="FEXPO UAP" class="footer-logo" width="1254" height="1254" loading="lazy" />
+          <img :src="imgPublica('logo-fexpo-v2.png')" alt="FEXPO UAP" class="footer-logo" width="1254" height="1254" loading="lazy" />
           <p>La feria de ciencia y tecnología de la Universidad Amazónica de Pando.</p>
         </div>
         <nav class="footer-nav" aria-label="Secciones de la feria">
@@ -511,10 +526,10 @@ const cuentaRegresiva = computed(() => {
       <div class="modal-plano">
         <button class="modal-cerrar" @click="cerrarPlano" aria-label="Cerrar plano">✕</button>
         <div class="plano-visor">
-          <img src="/MAPA-WEB-PUBLICO.png" alt="Mapa de zonas de la FEXPO UAP" class="plano-imagen" />
+          <img :src="imgPublica('MAPA-WEB-PUBLICO.png')" alt="Mapa de zonas de la FEXPO UAP" class="plano-imagen" />
         </div>
         <div class="modal-pie">
-          <a href="/MAPA-WEB-PUBLICO.png" target="_blank" rel="noopener" class="btn btn-fantasma">Abrir en nueva pestaña</a>
+          <a :href="imgPublica('MAPA-WEB-PUBLICO.png')" target="_blank" rel="noopener" class="btn btn-fantasma">Abrir en nueva pestaña</a>
           <button class="btn btn-primario" @click="cerrarPlano">Cerrar</button>
         </div>
       </div>
@@ -717,9 +732,13 @@ html.fx-scroll-suave {
   overflow: hidden;
   color: #f2f7ec;
   background-color: var(--fx-selva-oscura);
+  /* La foto llega por variable CSS (puesta con :style en el <section>, ver script) en vez
+     de un url('/hero-campus.png') fijo: en producción la SPA se sirve bajo /app/ (VITE_BASE
+     del perfil Maven "frontend"), y un url() literal aquí no se reescribe con ese prefijo,
+     así que la foto daba 404 solo ahí. */
   background-image:
     linear-gradient(to top, rgba(3, 10, 3, 0.88) 0%, rgba(3, 10, 3, 0.2) 55%, rgba(3, 10, 3, 0.15) 100%),
-    url('/hero-campus.png');
+    var(--hero-foto);
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -744,6 +763,10 @@ html.fx-scroll-suave {
 .hero-logo-3d {
   perspective: 900px;
   transition: transform 0.15s ease-out;
+  /* Promueve el envoltorio a su propia capa de composición: el transform que le pone
+     el mousemove (ver script) no debería competir por repintado con la animación
+     continua del hijo. */
+  will-change: transform;
 }
 
 .hero-logo-img {
@@ -753,6 +776,12 @@ html.fx-scroll-suave {
   filter: drop-shadow(0 18px 32px rgba(0, 0, 0, 0.55));
   transform-style: preserve-3d;
   animation: flotarLogo3d 6s ease-in-out infinite;
+  /* will-change fuerza una capa de composición propia para esta imagen: sin esto, en
+     GPUs más débiles o con drivers distintos el navegador puede repintar el
+     drop-shadow por CPU en cada frame de la animación infinita, y si no llega a 60fps
+     la rotación se ve saltando/rebotando rápido en vez de flotar suave. */
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
 @keyframes flotarLogo3d {
@@ -997,9 +1026,14 @@ html.fx-scroll-suave {
 }
 
 .artista-silueta {
+  position: relative;
   flex-shrink: 0;
   width: 72px;
   height: 72px;
+  overflow: hidden;
+  /* Color de respaldo por si el navegador no soporta mask-image: sin esto, sin el
+     ::before (que sí queda recortado por la máscara) se vería vacío. */
+  background: var(--color-artista);
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='20' r='12'/%3E%3Cpath d='M32 36c-15 0-26 10-26 22v6h52v-6c0-12-11-22-26-22z'/%3E%3C/svg%3E");
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='20' r='12'/%3E%3Cpath d='M32 36c-15 0-26 10-26 22v6h52v-6c0-12-11-22-26-22z'/%3E%3C/svg%3E");
   -webkit-mask-size: contain;
@@ -1008,6 +1042,16 @@ html.fx-scroll-suave {
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
   mask-position: center;
+}
+
+/* El brillo ya no anima "background-position" (una propiedad que fuerza repintado en
+   cada frame): en vez de eso desliza con "transform" una capa más ancha que el propio
+   ícono, que el navegador sí puede componer por GPU de forma fiable. La máscara del
+   padre (.artista-silueta) recorta este ::before a la silueta igual que antes. */
+.artista-silueta::before {
+  content: '';
+  position: absolute;
+  inset: 0 -80%;
   background: linear-gradient(
     115deg,
     color-mix(in srgb, var(--color-artista) 60%, black) 0%,
@@ -1016,13 +1060,13 @@ html.fx-scroll-suave {
     var(--color-artista) 65%,
     color-mix(in srgb, var(--color-artista) 60%, black) 100%
   );
-  background-size: 260% 100%;
   animation: brillarSilueta 3.2s ease-in-out infinite;
+  will-change: transform;
 }
 
 @keyframes brillarSilueta {
-  0% { background-position: 0% 0; }
-  100% { background-position: -160% 0; }
+  0% { transform: translateX(-25%); }
+  100% { transform: translateX(25%); }
 }
 
 .artista-etiqueta {

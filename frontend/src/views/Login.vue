@@ -21,6 +21,10 @@ const formVisible = ref(false);
  */
 const campoContrasena = ref(null);
 
+// Producción sirve la SPA bajo /app/ (ver VITE_BASE en el perfil Maven "frontend"): una
+// ruta fija "/logo-fexpo.png" apunta a la raíz del dominio y da 404 solo ahí.
+const BASE = import.meta.env.BASE_URL;
+
 async function entrar() {
   // El formulario ya dispara `submit` al pulsar Enter; sin esta guarda, una pulsacion que
   // ademas llegara por otro camino mandaria dos peticiones de login.
@@ -55,7 +59,7 @@ onMounted(() => {
 
     <main class="login-card" :class="{ visible: formVisible }">
       <div class="logo-contenedor" aria-hidden="true">
-        <img src="/logo-fexpo.png" alt="FEXPO UAP" class="logo" width="640" height="433" />
+        <img :src="`${BASE}logo-fexpo.png`" alt="FEXPO UAP" class="logo" width="640" height="433" />
       </div>
 
       <header class="cabecera">
