@@ -307,6 +307,13 @@ onUnmounted(() => {
               title="Muestra el número de cada caseta sobre el plano (hay que acercarse para leerlo)">
         🔢 Nº
       </button>
+      <!-- Recargar plano: fuerza bajar el plano del servidor, útil si se cambió en el Editor
+           y el cache local no se actualizó. Solo para quien puede editar el plano. -->
+      <button v-if="auth.puedeEditarPlano" class="btn btn-fantasma btn-sm"
+              @click="planoTienda.invalidarCache(); planoTienda.asegurar()"
+              title="Forzar recarga del plano desde el servidor">
+        🔄 Plano
+      </button>
       <!-- El conteo de ubicadas/sin ubicar habla del Editor del plano: al vendedor no le
            dice nada y le mete ruido en la unica pantalla que usa todo el dia. -->
       <div v-if="auth.puedeEditarPlano" class="info">
