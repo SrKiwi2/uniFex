@@ -373,10 +373,12 @@ onUnmounted(() => {
          montar. Remontar es lo que hace que el plano nuevo se vea bien encuadrado sin recargar. -->
     <PanZoom v-if="!tienda.sinAsignaciones" :key="planoTienda.src" :focus="focoInicial" :contenido="esMovil ? zonaEncuadre : null"
              :aspect="planoTienda.aspecto" :umbral-detalle="umbralNumeros" :max-ancho="topeZoom" llenar>
-      <div class="plano" :class="{ 'con-numeros': numerosVisibles }">
+      <div class="plano" :class="{ 'con-numeros': numerosVisibles }" :style="{ aspectRatio: planoTienda.aspecto ? 1 / planoTienda.aspecto : 'auto' }">
         <!-- width/height intrinsecos: el navegador reserva la proporcion antes de
              descargar, asi los pines no bailan mientras carga el plano. Salen del propio
-             plano (V13), no de un numero fijo, porque cada edicion puede traer el suyo. -->
+             plano (V13), no de un numero fijo, porque cada edicion puede traer el suyo.
+             aspect-ratio en el contenedor garantiza que el alto reserve el espacio exacto
+             antes de que cargue la imagen, evitando saltos de layout en el APK. -->
         <img
           :src="planoTienda.src"
           :key="planoTienda.src"

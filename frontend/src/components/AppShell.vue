@@ -166,7 +166,7 @@ nav { display: flex; flex-direction: column; gap: 2px; padding: 0.4rem 0.6rem; f
 }
 /* Columna flex para que el plano (con la prop `llenar`) reparta con la barra de leyenda
    el alto disponible, sin tener que adivinar en CSS cuanto mide cada cosa. */
-.contenido.inmersivo { display: flex; flex-direction: column; padding: 0; padding-bottom: var(--tabbar-h); max-width: none; }
+.contenido.inmersivo { display: flex; flex-direction: column; padding: 0; padding-bottom: var(--tabbar-h); max-width: none; width: 100%; }
 
 .velo { display: none; }
 .tabbar { display: none; }

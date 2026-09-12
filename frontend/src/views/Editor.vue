@@ -1213,14 +1213,17 @@ onUnmounted(() => {
         </ul>
       </aside>
 
-      <PanZoom :key="planoTienda.src" :selectMode="modo !== 'mapa'"
-               :focus="{ x: 0.44, y: 0.34, scale: 2.4 }" :aspect="planoTienda.aspecto"
-               :umbral-detalle="umbralNumeros" :max-ancho="topeZoom">
+<PanZoom :key="planoTienda.src" :selectMode="modo !== 'mapa'"
+                :focus="{ x: 0.44, y: 0.34, scale: 2.4 }" :aspect="planoTienda.aspecto"
+                :umbral-detalle="umbralNumeros" :max-ancho="topeZoom">
         <div class="plano" ref="lienzo" :class="[`modo-${modo}`, { 'con-numeros': numerosVisibles }]"
+             :style="{ aspectRatio: planoTienda.aspecto ? 1 / planoTienda.aspecto : 'auto' }"
              @pointerdown="onDown" @pointermove="onMove" @pointerup="onUp" @pointercancel="onUp">
           <!-- width/height intrinsecos: reservan la proporcion antes de descargar, para que
-               las casetas no se desplacen mientras carga. Vienen del plano de la edicion
-               (V13), que se puede reemplazar sin recompilar el APK. -->
+               las casetas no se desplazan mientras carga. Vienen del plano de la edicion
+               (V13), que se puede reemplazar sin recompilar el APK.
+               aspect-ratio en el contenedor garantiza que el alto reserve el espacio exacto
+               antes de que cargue la imagen, evitando saltos de layout en el APK. -->
           <img
             ref="plano"
             :src="planoTienda.src"

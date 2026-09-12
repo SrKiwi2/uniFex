@@ -6,6 +6,12 @@ const router = createRouter({
   routes: [
     { path: '/login', component: () => import('./views/Login.vue') },
     {
+      // Vista pública de la feria: sin autenticación, para QR, web pública, APK sin login
+      path: '/feria',
+      component: () => import('./views/FeriaPublica.vue'),
+      meta: { titulo: 'FEXPO UAP', publico: true }
+    },
+    {
       // Layout global: AppShell (menu/cabecera fijos) con el router-view dentro.
       // Cada vista se carga de forma diferida y asincrona en el contenedor central.
       path: '/',
@@ -31,6 +37,8 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   const auth = useAuthStore();
+  // Rutas públicas: no requieren autenticación
+  if (to.meta.publico) return;
   if (to.meta.requiereAuth && !auth.autenticado) return '/login';
   if (to.path === '/login' && auth.autenticado) return '/';
   // Esconder las herramientas de administración a quien no puede editar. Es solo comodidad:

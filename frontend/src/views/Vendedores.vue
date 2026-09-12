@@ -288,7 +288,7 @@ const esAdmin = computed(() => auth.puedeEditarPlano);
     v-if="modalPuestos"
     :titulo="'Casetas de ' + (vendedorSel?.username || '')"
     @cerrar="modalPuestos = false; busquedaPuesto = ''"
-    ancho="760px">
+    ancho="900px">
     <div class="cuerpo-modal">
       <div class="barra-puestos">
         <input v-model="busquedaPuesto" class="control" placeholder="Buscar por categoría o número…" />
@@ -407,48 +407,56 @@ const esAdmin = computed(() => auth.puedeEditarPlano);
 .cuerpo-modal { max-height: 60vh; overflow-y: auto; }
 
 /* ---- Modal de casetas: rejilla agrupada por categoria ---- */
-.barra-puestos { display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap; }
-.barra-puestos .control { flex: 1; min-width: 200px; }
-.check-otros { display: flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; color: var(--muted); white-space: nowrap; }
-.ayuda { font-size: 0.8rem; margin: 0.6rem 0 0.2rem; }
+.barra-puestos { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+.barra-puestos .control { flex: 1; min-width: 250px; padding: 0.6rem 0.8rem; }
+.check-otros { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; color: var(--muted); white-space: nowrap; }
+.ayuda { font-size: 0.85rem; margin: 1rem 0; line-height: 1.4; }
 
-.grupos { display: flex; flex-direction: column; gap: 0.6rem; max-height: 52vh; overflow-y: auto; }
+/* ELIMINADO EL MAX-HEIGHT Y OVERFLOW AQUÍ PARA EVITAR DOBLE SCROLL */
+.cuerpo-modal { max-height: 75vh; overflow-y: auto; padding-right: 0.5rem; }
+.grupos { display: flex; flex-direction: column; gap: 0.8rem; padding-bottom: 1rem; }
+
 .grupo { border: 1px solid var(--border); border-radius: var(--radio-sm); overflow: hidden; }
+
+/* Mejora de espaciado en la cabecera */
 .cab-grupo {
-  display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.7rem;
+  display: flex; align-items: center; gap: 0.8rem; padding: 0.8rem 1rem;
   background: var(--panel-2); cursor: pointer; flex-wrap: wrap;
 }
-.flecha { width: 1rem; color: var(--muted); }
-.de-otros { font-size: 0.75rem; }
-.acciones-grupo { display: flex; align-items: center; gap: 0.3rem; cursor: default; }
-.control-rango { width: 92px; padding: 0.3rem 0.45rem; font-size: 0.85rem; }
+.flecha { width: 1rem; color: var(--muted); font-weight: bold; }
+.de-otros { font-size: 0.8rem; }
 
-/* auto-fill y no un numero fijo de columnas: con 6 casetas no deja cinco huecos, y con 120
-   aprovecha el ancho que haya sin que haya que tocar nada por tamaño de pantalla. */
+/* CLASE CLAVE QUE FALTABA PARA EMPUJAR LOS BOTONES A LA DERECHA */
+.crecer { flex-grow: 1; min-width: 1rem; }
+
+.acciones-grupo { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; cursor: default; }
+.control-rango { width: 100px; padding: 0.4rem 0.5rem; font-size: 0.85rem; text-align: center; }
+
+/* Cuadrícula más grande y con más espacio */
 .rejilla {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
-  gap: 0.35rem; padding: 0.6rem;
+  display: grid; 
+  /* Aumentamos de 52px a 70px para que los números respiren */
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  gap: 0.5rem; 
+  padding: 1rem;
+  background: var(--fondo);
 }
+
 .caseta {
-  font: inherit; font-size: 0.82rem; font-weight: 700; cursor: pointer;
-  padding: 0.45rem 0.2rem; border-radius: var(--radio-sm);
+  font: inherit; font-size: 0.9rem; font-weight: 700; cursor: pointer;
+  padding: 0.6rem 0.2rem; border-radius: var(--radio-sm);
   border: 1px solid var(--border); background: var(--panel); color: var(--text);
-  min-height: 40px;
+  min-height: 45px; transition: all 0.15s ease;
 }
-.caseta:hover:not(:disabled) { border-color: var(--acento); }
+.caseta:hover:not(:disabled) { border-color: var(--acento); transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
 .caseta.elegida { background: var(--acento); border-color: var(--acento); color: var(--acento-texto); }
-/* Una caseta de otro vendedor se ve, pero no se puede tomar: esconderla sin mas deja al
-   administrador preguntandose por que falta el numero 7. */
-.caseta.ajena { opacity: 0.4; cursor: not-allowed; text-decoration: line-through; }
-/* Vendida sigue siendo asignable: quien la vendio tiene que poder verla en su mapa. */
+.caseta.ajena { opacity: 0.4; cursor: not-allowed; text-decoration: line-through; background: var(--panel-2); }
 .caseta.vendida:not(.elegida) { border-style: dashed; }
 
-.resumen-cambios { margin-right: auto; font-size: 0.82rem; color: var(--muted); display: flex; gap: 0.4rem; align-items: center; }
-.resumen-cambios strong { color: var(--ok); }
+.resumen-cambios { margin-right: auto; font-size: 0.9rem; color: var(--muted); display: flex; gap: 0.5rem; align-items: center; }
+.resumen-cambios strong { color: var(--ok); font-size: 1rem; }
 .resumen-cambios .resta { color: var(--danger); }
 
-/* Una caseta vendida sigue siendo asignable, pero tiene que distinguirse de un vistazo:
-   el mismo color que el mapa usa para "ocupado", para que signifique lo mismo en los dos sitios. */
 .badge-vendida { background: color-mix(in srgb, var(--ocupado) 18%, transparent); color: var(--ocupado); }
 .caseta.vendida:not(.elegida) { border-color: var(--ocupado); color: var(--ocupado); border-style: dashed; }
 .caseta.vendida.elegida { background: var(--ocupado); border-color: var(--ocupado); color: #fff; }
