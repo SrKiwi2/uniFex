@@ -1,12 +1,15 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { usePermisosStore } from '../stores/permisos';
+import { usePuestosStore } from '../stores/puestos';
+import { toast } from '../ui/toast';
 import { tema, alternarTema } from '../ui/tema';
 
 const auth = useAuthStore();
 const permisos = usePermisosStore();
+const tienda = usePuestosStore();
 permisos.asegurar();
 const router = useRouter();
 const route = useRoute();
@@ -55,6 +58,53 @@ const enlaces = computed(() => TODOS.filter((e) => permisos.puedeVer(e.p)));
 const enlacesPrincipales = computed(() => enlaces.value.slice(0, 4));
 
 const iconoTema = computed(() => (tema.value === 'dark' ? '🌙' : tema.value === 'light' ? '☀️' : '🌗'));
+
+/*
+ * Que un cambio de permisos llegue al telefono sin cerrar sesion. Dos vias, porque ninguna
+ * basta sola:
+ *
+ *   - el AVISO del servidor (PERMISOS_CAMBIADOS), que es inmediato mientras la aplicacion
+ *     este abierta y conectada;
+ *   - VOLVER AL FRENTE, porque Android corta los sockets de una aplicacion en segundo plano.
+ *     Sin esto, el aviso se pierde justo en el caso mas comun: al vendedor le cambian el rol
+ *     mientras tiene el telefono en el bolsillo.
+ */
+function alCambiarPermisos(n) {
+  if (n?.tipo !== 'PERMISOS_CAMBIADOS') return;
+  permisos.recargar().then(() => {
+    toast('Cambiaron tus opciones del menú', 'info');
+    // Si estaba parado en una pantalla que ya no le toca, se le saca de ahi.
+    const pantalla = route.meta?.pantalla;
+    if (pantalla && !permisos.puedeVer(pantalla)) router.push('/');
+  });
+}
+
+function alVolverAlFrente() {
+  if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+  permisos.recargar();
+}
+
+let quitarOyente = null;
+onMounted(() => {
+  /*
+   * `conectar()` y no `asegurar()`: lo unico que hace falta aqui es el canal de avisos
+   * personales, no la lista de casetas. `asegurar()` ademas la DESCARGA, y para un usuario de
+   * CONTROL —que solo escanea en la puerta— eso serian cientos de kilobytes por arranque que
+   * no va a mirar nunca.
+   *
+   * Sin esta linea el aviso no llegaba: los oyentes se registran en la tienda, pero si nadie
+   * ha abierto el mapa todavia no hay conexion por la que puedan llegar.
+   */
+  tienda.conectar();
+  quitarOyente = tienda.registrarNotificaciones(alCambiarPermisos);
+  document.addEventListener('visibilitychange', alVolverAlFrente);
+  window.addEventListener('online', alVolverAlFrente);
+});
+onUnmounted(() => {
+  if (quitarOyente) quitarOyente();
+  document.removeEventListener('visibilitychange', alVolverAlFrente);
+  window.removeEventListener('online', alVolverAlFrente);
+});
 
 function salir() {
   // Los permisos se olvidan con la sesion: en un equipo compartido, el siguiente en entrar no

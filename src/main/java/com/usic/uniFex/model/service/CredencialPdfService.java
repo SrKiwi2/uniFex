@@ -1,8 +1,10 @@
 package com.usic.uniFex.model.service;
 
-import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
@@ -19,6 +21,8 @@ import com.itextpdf.text.pdf.PdfContentByte;
 import com.itextpdf.text.pdf.PdfWriter;
 
 import com.usic.uniFex.model.dto.CredencialDTO;
+import com.usic.uniFex.model.dto.PlantillaCredencial;
+import com.usic.uniFex.model.dto.PlantillaCredencial.Caja;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,15 +30,11 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * Imprime credenciales: la plantilla de fondo, el QR y los datos encima.
  *
- * <h2>Por que la disposicion es un DATO y no coordenadas en el codigo</h2>
- * La plantilla va a cambiar —ya hay dos versiones— y cada cambio movería el QR y los campos.
- * Aqui la posicion de cada cosa se expresa en FRACCIONES de la plantilla (0..1), no en
- * milimetros ni en pixeles: asi la misma disposicion vale para una plantilla de 1182 px o de
- * 4000, y para una credencial impresa de 8 cm o de 12. Cambiar de plantilla es cambiar una
- * imagen y cuatro numeros, no tocar el generador.
- *
- * Las fracciones de {@link #CON_ETIQUETAS} estan MEDIDAS sobre la plantilla, no estimadas a
- * ojo: se detectaron las cajas blancas impresas buscando las franjas de blanco puro.
+ * <h2>Aqui no se declara ninguna plantilla</h2>
+ * Que plantillas hay y donde va cada cosa en ellas vive en {@link PlantillaCredencial}, que es
+ * el unico archivo que hay que tocar para añadir una. Este servicio solo sabe dibujar: recibe
+ * una disposicion en fracciones (0..1) y la pinta al tamaño que se le pida. Cambiar de plantilla
+ * es cambiar una imagen y cuatro numeros, no tocar el generador.
  *
  * <h2>La hoja</h2>
  * Carta, con la credencial centrada y del ancho que se pida en centimetros. Se imprime una por
@@ -46,77 +46,44 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class CredencialPdfService {
 
-    /** Un rectangulo dentro de la plantilla, en fracciones de su ancho y su alto. */
-    public record Caja(double x, double y, double ancho, double alto) {
-    }
-
-    /**
-     * Donde va cada cosa sobre una plantilla concreta.
-     *
-     * @param imagen   recurso de la plantilla dentro del jar
-     * @param qr       caja del QR; se usa el ANCHO y sale cuadrado
-     * @param nombre   nombre y apellidos del responsable
-     * @param empresa  entidad y rubro, juntos
-     * @param ci       cedula de identidad
-     * @param codigo   numeros de caseta, con la categoria debajo en letra pequeña
-     * @param mayusculas si el texto se imprime en mayusculas (como el resto del sistema)
-     *
-     * Cualquier caja puede ser {@code null}: ese campo simplemente no se dibuja. Hace falta
-     * porque la plantilla de QR grande no lleva ni nombre ni entidad ni C.I. — ahi el dato lo
-     * da el QR, y el papel solo tiene que decir de que caseta es.
-     */
-    public record Disposicion(String imagen, Caja qr, Caja nombre, Caja empresa,
-                              Caja ci, Caja codigo, boolean mayusculas) {
-    }
-
-    /**
-     * Plantilla con las etiquetas ya impresas ("NOMBRE Y APELLIDO", "EMPRESA / SERVICIO"...).
-     * Los valores se dibujan en la MITAD INFERIOR de cada caja, debajo de su etiqueta.
-     */
-    public static final Disposicion CON_ETIQUETAS = new Disposicion(
-            "static/assets/CREDENCIAL_4.jpg",
-            // Centrado en el recuadro claro de arriba a la derecha, que va de 0.685 a 0.947.
-            new Caja(0.703, 0.050, 0.225, 0.225),
-            new Caja(0.165, 0.502, 0.758, 0.048),
-            new Caja(0.165, 0.608, 0.758, 0.048),
-            new Caja(0.165, 0.713, 0.431, 0.048),
-            new Caja(0.658, 0.713, 0.182, 0.048),
-            true);
-
-    /**
-     * Misma plantilla sin etiquetas impresas, con el QR grande y centrado un poco por encima
-     * del medio. Los datos ocupan las cajas enteras, porque aqui no hay etiqueta que estorbe.
-     */
-    public static final Disposicion QR_GRANDE = new Disposicion(
-            "static/assets/CREDENCIAL3.jpg",
-            // Lo mas grande que cabe entre el logotipo de FEXPO y la primera caja blanca.
-            // El alto que ocupa sale de la proporcion de la plantilla, no de este numero:
-            // 0.375 de ancho son 0.289 de alto, asi que termina justo encima de la caja.
-            new Caja(0.3125, 0.170, 0.375, 0.375),
-            null,   // sin nombre
-            null,   // sin entidad ni rubro
-            null,   // sin C.I.
-            // Lo unico escrito, dentro de la PRIMERA caja de la plantilla y centrado: la
-            // caseta grande con su categoria debajo. Quien necesite saber QUIEN es, escanea
-            // el QR; el papel solo dice DE DONDE es.
-            new Caja(0.147, 0.474, 0.794, 0.076),
-            true);
-
-    public static Disposicion porNombre(String nombre) {
-        return "QR_GRANDE".equalsIgnoreCase(nombre) ? QR_GRANDE : CON_ETIQUETAS;
-    }
-
     /** Ancho impreso por defecto. Con la proporcion de la plantilla da unos 13 cm de alto. */
     public static final double ANCHO_CM_POR_DEFECTO = 10.0;
     private static final float CM = 72f / 2.54f;   // puntos PostScript por centimetro
 
     /**
+     * Los bytes de cada plantilla, leidos del jar una sola vez.
+     *
+     * Se cachean los BYTES y no la {@link Image} de iText: una imagen ya construida arrastra la
+     * referencia indirecta del documento en el que se uso, y compartirla entre dos PDF a la vez
+     * es pedir un PDF corrupto. Construir la imagen desde bytes ya en memoria es barato; leer
+     * 1,2 MB del classpath en cada peticion, no.
+     */
+    private final Map<String, byte[]> cache = new ConcurrentHashMap<>();
+
+    /**
+     * Alto / ancho de la plantilla, que es la proporcion con la que se imprime.
+     *
+     * La necesita la pantalla para dibujar la vista previa sobre la hoja carta. Sale de la
+     * imagen real, no de un numero escrito a mano: una plantilla nueva con otras medidas no
+     * puede dejar la vista previa mintiendo.
+     */
+    public double proporcion(PlantillaCredencial plantilla) {
+        try {
+            Image img = Image.getInstance(bytes(plantilla.imagen()));
+            return img.getHeight() / img.getWidth();
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                    "No se pudo leer la plantilla " + plantilla.id() + ": " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * @param credenciales lo que se imprime, una por hoja
-     * @param disposicion  donde va cada cosa
+     * @param plantilla    la plantilla y donde va cada cosa en ella
      * @param anchoCm      ancho impreso de la credencial; el alto sale de la proporcion
      * @param urlBase      raiz publica para el QR (ej. https://virtual.uap.edu.bo:8070)
      */
-    public byte[] generar(List<CredencialDTO> credenciales, Disposicion disposicion,
+    public byte[] generar(List<CredencialDTO> credenciales, PlantillaCredencial plantilla,
                           double anchoCm, String urlBase, CredencialCodigoService codigos) {
         if (credenciales == null || credenciales.isEmpty()) {
             throw new IllegalArgumentException("No hay credenciales que imprimir");
@@ -131,16 +98,19 @@ public class CredencialPdfService {
             PdfContentByte lienzo = writer.getDirectContent();
             BaseFont fuente = BaseFont.createFont(
                     BaseFont.HELVETICA_BOLD, BaseFont.CP1252, BaseFont.NOT_EMBEDDED);
-            Image plantilla = cargarPlantilla(disposicion.imagen());
+            // Fuera del bucle a proposito: iText incrusta la imagen UNA vez y las copias de cada
+            // pagina comparten esa incrustacion. Movida aqui dentro, 800 credenciales pesarian
+            // 800 x 1,2 MB en vez de 3,5 MB.
+            Image fondoOriginal = Image.getInstance(bytes(plantilla.imagen()));
 
             for (int i = 0; i < credenciales.size(); i++) {
                 if (i > 0) doc.newPage();
-                pintar(lienzo, fuente, plantilla, disposicion, credenciales.get(i),
+                pintar(lienzo, fuente, fondoOriginal, plantilla, credenciales.get(i),
                         ancho, urlBase, codigos);
             }
             doc.close();
             log.info("Credenciales impresas: {} (plantilla {}, {} cm de ancho)",
-                    credenciales.size(), disposicion.imagen(), ancho);
+                    credenciales.size(), plantilla.id(), ancho);
             return salida.toByteArray();
         } catch (Exception e) {
             throw new IllegalStateException("No se pudo generar el PDF de credenciales: "
@@ -148,18 +118,18 @@ public class CredencialPdfService {
         }
     }
 
-    private void pintar(PdfContentByte lienzo, BaseFont fuente, Image plantilla,
-                        Disposicion d, CredencialDTO c, double anchoCm, String urlBase,
+    private void pintar(PdfContentByte lienzo, BaseFont fuente, Image plantillaImg,
+                        PlantillaCredencial d, CredencialDTO c, double anchoCm, String urlBase,
                         CredencialCodigoService codigos) throws Exception {
 
         Rectangle hoja = PageSize.LETTER;
         float w = (float) (anchoCm * CM);
-        float h = w * plantilla.getHeight() / plantilla.getWidth();
+        float h = w * plantillaImg.getHeight() / plantillaImg.getWidth();
         // Centrada en la hoja: es lo que permite recortarla y que quede igual por los cuatro lados.
         float x0 = (hoja.getWidth() - w) / 2f;
         float y0 = (hoja.getHeight() - h) / 2f;
 
-        Image fondo = Image.getInstance(plantilla);
+        Image fondo = Image.getInstance(plantillaImg);
         fondo.scaleAbsolute(w, h);
         fondo.setAbsolutePosition(x0, y0);
         lienzo.addImage(fondo);
@@ -181,12 +151,12 @@ public class CredencialPdfService {
         String empresa = c.entidad();
         if (c.rubro() != null && !c.rubro().isBlank()) empresa += "  ·  " + c.rubro();
 
-        texto(lienzo, fuente, d.nombre(), valor(c.nombre(), d), x0, y0, w, h);
-        texto(lienzo, fuente, d.empresa(), valor(empresa, d), x0, y0, w, h);
-        texto(lienzo, fuente, d.ci(), valor(c.ci(), d), x0, y0, w, h);
+        texto(lienzo, fuente, d.nombre(), valor(c.nombre(), d), x0, y0, w, h, d.centrado());
+        texto(lienzo, fuente, d.empresa(), valor(empresa, d), x0, y0, w, h, d.centrado());
+        texto(lienzo, fuente, d.ci(), valor(c.ci(), d), x0, y0, w, h, d.centrado());
         // La caseta con su categoria debajo: el numero solo no dice nada si hay trece zonas.
         codigoConCategoria(lienzo, fuente, d.codigo(), valor(c.casetas(), d),
-                valor(c.categoria(), d), x0, y0, w, h, d == QR_GRANDE);
+                valor(c.categoria(), d), x0, y0, w, h, d.centrado());
     }
 
     /**
@@ -240,20 +210,20 @@ public class CredencialPdfService {
         return t;
     }
 
-    private static String valor(String s, Disposicion d) {
+    private static String valor(String s, PlantillaCredencial d) {
         String t = s == null ? "" : s.trim();
         return d.mayusculas() ? t.toUpperCase() : t;
     }
 
     /**
-     * Escribe un texto dentro de su caja, centrado en vertical y alineado a la izquierda.
+     * Escribe un texto dentro de su caja, centrado en vertical.
      *
      * El tamaño se ENCOGE hasta que quepa. Hace falta de verdad: los nombres de entidad van de
      * "PIL" a "ASOCIACION DE PRODUCTORES AGROPECUARIOS DEL NORTE INTEGRADO", y sin esto el
      * texto largo se saldria de la credencial por el lado derecho.
      */
     private void texto(PdfContentByte lienzo, BaseFont fuente, Caja caja, String contenido,
-                       float x0, float y0, float w, float h) {
+                       float x0, float y0, float w, float h, boolean centrado) {
         if (caja == null || contenido == null || contenido.isBlank()) return;
 
         float cajaW = (float) (caja.ancho() * w);
@@ -280,16 +250,22 @@ public class CredencialPdfService {
         lienzo.setColorFill(BaseColor.BLACK);
         // El descuento de 0.30 centra opticamente la linea: la altura de una mayuscula es
         // ~0.7 del tamaño de fuente, no el tamaño entero.
-        lienzo.showTextAligned(Element.ALIGN_LEFT, pintable, x, y + (cajaH - tam * 0.70f) / 2f, 0);
+        lienzo.showTextAligned(
+                centrado ? Element.ALIGN_CENTER : Element.ALIGN_LEFT,
+                pintable,
+                centrado ? x + cajaW / 2f : x,
+                y + (cajaH - tam * 0.70f) / 2f, 0);
         lienzo.endText();
     }
 
-    private Image cargarPlantilla(String recurso) throws Exception {
-        try (InputStream in = new ClassPathResource(recurso).getInputStream()) {
-            return Image.getInstance(in.readAllBytes());
-        } catch (Exception e) {
-            throw new IllegalStateException(
-                    "No se encontro la plantilla de credencial: " + recurso, e);
-        }
+    private byte[] bytes(String recurso) {
+        return cache.computeIfAbsent(recurso, r -> {
+            try (InputStream in = new ClassPathResource(r).getInputStream()) {
+                return in.readAllBytes();
+            } catch (Exception e) {
+                throw new IllegalStateException(
+                        "No se encontro la plantilla de credencial: " + r, e);
+            }
+        });
     }
 }

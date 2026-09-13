@@ -54,13 +54,46 @@ const historial = ref(null);   // { credencial, filas[] } del panel de impresion
 const plantilla = ref('CON_ETIQUETAS');
 const anchoCm = ref(10);
 
-const PLANTILLAS = [
-  { id: 'CON_ETIQUETAS', nombre: 'Con etiquetas', detalle: 'QR arriba a la derecha' },
-  { id: 'QR_GRANDE', nombre: 'QR grande', detalle: 'QR centrado, sin etiquetas' },
-];
+/*
+ * El catalogo de plantillas lo manda el SERVIDOR, no esta escrito aqui.
+ *
+ * Es la misma lista que usa el generador del PDF. Mientras estuvo duplicada, una plantilla
+ * añadida solo aqui salia en los botones pero llegaba al servidor sin existir, y una añadida
+ * solo alli no habia manera de elegirla. Cada entrada trae ademas lo que la pantalla no puede
+ * adivinar: si esa plantilla exige la foto, y su proporcion (alto/ancho) medida sobre la imagen
+ * de verdad, que es lo que dibuja la vista previa sobre la hoja.
+ */
+const plantillas = ref([]);
+const plantillasRotas = ref(false);
 
-/** Alto impreso, derivado del ancho. La plantilla es de 1182×1534. */
-const altoCm = computed(() => (anchoCm.value * 1534 / 1182));
+const plantillaActual = computed(() =>
+  plantillas.value.find((p) => p.id === plantilla.value) || null);
+
+/** ¿La plantilla elegida imprime datos de la persona? Mientras carga se asume que si. */
+const pideFoto = computed(() => plantillaActual.value?.requiereFoto ?? true);
+
+/** Alto impreso, derivado del ancho y de la proporcion de LA PLANTILLA elegida. */
+const altoCm = computed(() =>
+  anchoCm.value * (plantillaActual.value?.proporcion || 1534 / 1182));
+
+const nombreDePlantilla = (id) =>
+  plantillas.value.find((p) => p.id === id)?.etiqueta || id;
+
+async function cargarPlantillas() {
+  try {
+    const r = await apiFetch('/api/app/credenciales/plantillas');
+    if (!r.ok) throw new Error('No se pudo cargar la lista de plantillas');
+    plantillas.value = await r.json();
+    // Si la que estaba elegida ya no existe, se cae en la primera antes de que alguien
+    // imprima contra un id que el servidor va a rechazar.
+    if (plantillas.value.length && !plantillas.value.some((p) => p.id === plantilla.value)) {
+      plantilla.value = plantillas.value[0].id;
+    }
+  } catch (e) {
+    plantillasRotas.value = true;
+    toast(e.message, 'error');
+  }
+}
 
 async function cargar() {
   cargando.value = true;
@@ -115,8 +148,11 @@ function marcarVisibles(marcar) {
 /**
  * Lanza la impresion. `ids` vacio = todas las listas de la edicion activa.
  * `forzar` imprime aunque falte algo; el servidor lo registra con lo que faltaba.
+ *
+ * `plantillaId` se puede fijar para tener un boton que SIEMPRE imprime con una plantilla
+ * concreta, sin depender de la que este elegida arriba.
  */
-async function imprimir(ids, etiqueta, forzar = false) {
+async function imprimir(ids, etiqueta, forzar = false, plantillaId = plantilla.value) {
   if (generando.value) return;
   generando.value = true;
   try {
@@ -125,7 +161,7 @@ async function imprimir(ids, etiqueta, forzar = false) {
       method: 'POST',
       body: JSON.stringify({
         responsables: ids,
-        plantilla: plantilla.value,
+        plantilla: plantillaId,
         anchoCm: Number(anchoCm.value),
         forzar,
       }),
@@ -193,17 +229,48 @@ async function verHistorial(c) {
   }
 }
 
+/**
+ * Las credenciales que salen de la MISMA inscripcion.
+ *
+ * Una credencial es de una persona, no de una venta: una entidad con tres responsables son
+ * tres credenciales. Se agrupa en memoria porque la lista ya trae `inscripcionId` — pedirle
+ * al servidor "los responsables de la inscripcion N" seria un viaje para algo que ya tenemos.
+ */
+function grupoDe(c) {
+  return credenciales.value.filter((x) => x.inscripcionId === c.inscripcionId);
+}
+
+/**
+ * Imprime la inscripcion entera: quien esta en el mostrador se lleva las de toda su entidad
+ * en un PDF, no una por una.
+ *
+ * Se filtra por `listo` DE ESTA PLANTILLA, que es lo que el servidor va a exigir; y si no
+ * queda ninguna se avisa en vez de mandar la lista vacia, que para el servidor significa
+ * "todas las de la feria".
+ */
+function imprimirInscripcion(c, plantillaId = plantilla.value) {
+  const aptas = grupoDe(c).filter((x) => x.listo?.[plantillaId]);
+  if (!aptas.length) {
+    alerta(`Ninguna credencial de ${c.entidad} está lista para esta plantilla.`, 'advertencia');
+    return;
+  }
+  imprimir(aptas.map((x) => x.responsableId), `inscripcion-${aptas.length}`, false, plantillaId);
+}
+
 function imprimirTodasListas() {
   if (!listas.value.length) {
     alerta('Ninguna credencial está lista todavía para esta plantilla. Hace falta el '
-      + 'comprobante de pago' + (plantilla.value === 'CON_ETIQUETAS'
-        ? ' y la foto del responsable.' : '.'), 'advertencia');
+      + 'comprobante de pago' + (pideFoto.value ? ' y la foto del responsable.' : '.'),
+      'advertencia');
     return;
   }
   imprimir([], `todas-${listas.value.length}`);
 }
 
-onMounted(cargar);
+onMounted(() => {
+  cargarPlantillas();
+  cargar();
+});
 </script>
 
 <template>
@@ -235,11 +302,15 @@ onMounted(cargar);
       <div class="grupo">
         <span class="rotulo">Plantilla</span>
         <div class="opciones">
-          <button v-for="p in PLANTILLAS" :key="p.id" class="opcion"
+          <button v-for="p in plantillas" :key="p.id" class="opcion"
                   :class="{ elegida: plantilla === p.id }" @click="plantilla = p.id">
-            <strong>{{ p.nombre }}</strong>
+            <strong>{{ p.etiqueta }}</strong>
             <small>{{ p.detalle }}</small>
           </button>
+          <!-- Sin catalogo no hay donde elegir, y una fila de botones vacia no explica nada. -->
+          <p v-if="!plantillas.length" class="nota">
+            {{ plantillasRotas ? 'No se pudieron cargar las plantillas.' : 'Cargando plantillas…' }}
+          </p>
         </div>
       </div>
 
@@ -293,7 +364,7 @@ onMounted(cargar);
       <template v-if="busqueda.trim()">No hay resultados para esa búsqueda.</template>
       <template v-else-if="filtro === 'listas'">
         Todavía no hay ninguna credencial lista para esta plantilla. Hace falta el comprobante
-        de pago<template v-if="plantilla === 'CON_ETIQUETAS'"> y la foto del responsable</template>.
+        de pago<template v-if="pideFoto"> y la foto del responsable</template>.
       </template>
       <template v-else-if="filtro === 'pendientes'">
         No falta nada: todas las credenciales están listas para esta plantilla.
@@ -356,11 +427,18 @@ onMounted(cargar);
                    :title="`Adjuntar la foto de ${c.nombre}`">📷 Foto</label>
           </template>
 
+          <!-- El par v-if / v-else tiene que quedar PEGADO: entre medias, Vue se queda sin
+               el v-if al que engancharse y pinta los dos botones en la misma fila. -->
           <button v-if="esListo(c)" class="btn btn-fantasma btn-sm" :disabled="generando"
                   title="Imprimir solo esta" @click="imprimir([c.responsableId], 1)">🖨</button>
           <button v-else class="btn btn-fantasma btn-sm" :disabled="generando"
                   :title="`Imprimir igual, aunque le falte ${faltaDe(c).join(' y ')}`"
                   @click="imprimirIgual(c)">🖨 igual</button>
+          <!-- Solo cuando la inscripcion tiene mas de un responsable: con uno solo haria
+               exactamente lo mismo que el boton de al lado. -->
+          <button v-if="grupoDe(c).length > 1" class="btn btn-fantasma btn-sm" :disabled="generando"
+                  :title="`Imprimir las ${grupoDe(c).length} credenciales de ${c.entidad}`"
+                  @click="imprimirInscripcion(c)">🎫 {{ grupoDe(c).length }}</button>
         </div>
       </li>
     </ul>
@@ -377,7 +455,7 @@ onMounted(cargar);
           <li v-for="(h, i) in historial.filas" :key="i">
             <span class="cuando">{{ h.cuando.slice(0, 16).replace('T', ' ') }}</span>
             <span class="quien2">{{ h.usuario }}</span>
-            <span class="plant">{{ h.plantilla === 'QR_GRANDE' ? 'QR grande' : 'Con etiquetas' }}</span>
+            <span class="plant">{{ nombreDePlantilla(h.plantilla) }}</span>
             <span v-if="h.faltaba" class="badge badge-aviso">faltaba: {{ h.faltaba }}</span>
             <span v-else class="badge badge-ok">completa</span>
           </li>
@@ -441,7 +519,9 @@ onMounted(cargar);
    De ahi los anchos fijos en las tres ultimas — es una lista para recorrer con la vista. */
 .fila {
   display: grid; align-items: center; gap: 0.8rem;
-  grid-template-columns: auto 46px minmax(0, 1fr) 170px 210px 200px;
+  /* La ultima columna da para DOS botones por linea: con 200px, una fila pendiente
+     (comprobante, foto, imprimir igual y la inscripcion entera) se partia en tres. */
+  grid-template-columns: auto 46px minmax(0, 1fr) 170px 210px 250px;
   padding: 0.55rem 0.8rem; border-radius: var(--radio-sm);
   background: var(--panel); border: 1px solid var(--border);
 }

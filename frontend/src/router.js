@@ -52,7 +52,7 @@ const router = createRouter({
   ],
 });
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const auth = useAuthStore();
   // Rutas públicas: no requieren autenticación
   if (to.meta.publico) return;
@@ -66,11 +66,15 @@ router.beforeEach((to) => {
    * Permisos por rol. Igual que lo de arriba: es COMODIDAD, no seguridad — evita que a alguien
    * le salga una pantalla que no le toca, pero lo que protege de verdad es el servidor.
    *
-   * `puedeVer` responde que sí mientras no se sepa (primer arranque, aún sin respuesta), para
-   * no dejar a nadie fuera de su propia aplicación por una petición lenta.
+   * Se ESPERA a saberlos antes de decidir. `puedeVer` ya no responde que sí mientras no se
+   * sepa —eso hacía que el menú del APK saliera entero cuando la petición fallaba—, así que
+   * sin esta espera un enlace directo rebotaría a Inicio solo por llegar antes que la
+   * respuesta. `asegurar()` es idempotente y comparte la petición en vuelo, así que esto no
+   * añade una llamada por navegación.
    */
   if (to.meta.pantalla) {
     const permisos = usePermisosStore();
+    await permisos.asegurar();
     if (!permisos.puedeVer(to.meta.pantalla)) return '/';
   }
 });

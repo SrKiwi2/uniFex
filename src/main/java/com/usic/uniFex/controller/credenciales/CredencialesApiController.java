@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import com.usic.uniFex.model.dto.CredencialDTO;
+import com.usic.uniFex.model.dto.PlantillaCredencial;
 import com.usic.uniFex.model.service.CredencialCodigoService;
 import com.usic.uniFex.model.service.CredencialPdfService;
 import com.usic.uniFex.model.service.CredencialService;
@@ -55,6 +56,31 @@ public class CredencialesApiController {
      */
     @Value("${unifex.publico.base-url:}")
     private String baseUrlPublica;
+
+    /**
+     * Las plantillas que se pueden elegir para imprimir.
+     *
+     * Viaja desde el servidor y no escrita a mano en la pantalla porque la lista tiene que ser
+     * LA MISMA que la que usa el generador: cuando estaban en dos sitios, una plantilla añadida
+     * solo en la pantalla salia en los botones pero llegaba al servidor sin existir, y una
+     * añadida solo en el servidor no habia forma de elegirla.
+     *
+     * `proporcion` (alto/ancho) es para la vista previa sobre la hoja carta, y sale de medir la
+     * imagen de verdad.
+     */
+    @GetMapping("/plantillas")
+    @PreAuthorize(Roles.USA_CREDENCIALES)
+    public List<Map<String, Object>> plantillas() {
+        return PlantillaCredencial.CATALOGO.stream().map(p -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", p.id());
+            m.put("etiqueta", p.etiqueta());
+            m.put("detalle", p.detalle());
+            m.put("requiereFoto", p.requiereFoto());
+            m.put("proporcion", pdfService.proporcion(p));
+            return m;
+        }).toList();
+    }
 
     /**
      * Categorías disponibles para generar credenciales.
@@ -158,9 +184,9 @@ public class CredencialesApiController {
             // y cambiar de plantilla en pantalla no obliga a volver a pedir la lista.
             Map<String, Object> listo = new LinkedHashMap<>();
             Map<String, Object> falta = new LinkedHashMap<>();
-            for (String plantilla : List.of("CON_ETIQUETAS", "QR_GRANDE")) {
-                listo.put(plantilla, c.apto(plantilla));
-                falta.put(plantilla, c.faltantes(plantilla));
+            for (PlantillaCredencial p : PlantillaCredencial.CATALOGO) {
+                listo.put(p.id(), c.apto(p.id()));
+                falta.put(p.id(), c.faltantes(p.id()));
             }
             m.put("listo", listo);
             m.put("faltantes", falta);
@@ -193,8 +219,25 @@ public class CredencialesApiController {
     @PostMapping("/pdf")
     @PreAuthorize(Roles.USA_CREDENCIALES)
     public ResponseEntity<byte[]> pdf(@RequestBody(required = false) PeticionPdf req) {
-        String plantilla = (req == null || req.plantilla() == null || req.plantilla().isBlank())
-                ? "CON_ETIQUETAS" : req.plantilla().trim().toUpperCase();
+        String pedida = req == null ? null : req.plantilla();
+        // Una plantilla que no existe se rechaza en vez de caer en la de por defecto. Cuando
+        // caia, el PDF salia 200 y con la plantilla equivocada: eso solo se descubre mirando el
+        // papel, y para entonces ya se imprimieron trescientas.
+        PlantillaCredencial disposicion;
+        if (pedida == null || pedida.isBlank()) {
+            disposicion = PlantillaCredencial.POR_DEFECTO;
+        } else {
+            var hallada = PlantillaCredencial.de(pedida);
+            if (hallada.isEmpty()) {
+                log.warn("Se pidio imprimir con la plantilla desconocida '{}'", pedida);
+                return ResponseEntity.badRequest()
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .body(("No existe la plantilla '" + pedida.trim() + "'.")
+                                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+            disposicion = hallada.get();
+        }
+        String plantilla = disposicion.id();
         boolean forzar = req != null && Boolean.TRUE.equals(req.forzar());
         Long soloMias = alcanceDelUsuario();
 
@@ -236,7 +279,7 @@ public class CredencialesApiController {
 
         byte[] pdf = pdfService.generar(
                 imprimibles,
-                CredencialPdfService.porNombre(plantilla),
+                disposicion,
                 req == null || req.anchoCm() == null
                         ? CredencialPdfService.ANCHO_CM_POR_DEFECTO : req.anchoCm(),
                 raizPublica(),

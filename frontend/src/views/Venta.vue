@@ -301,33 +301,21 @@ async function registrar() {
 watch(form, () => guardarBorrador(auth.id, form), { deep: true });
 
 /*
- * Indicador de "hay más abajo". En pantallas pequeñas el formulario no cabe entero y nada
- * delata que sigue: el vendedor rellena lo que ve y busca el botón de continuar.
- * Ahora es SOLO un indicador visual (no botón): el formulario es naturalmente scrolleable
- * con el dedo/ratón. El indicador aparece solo mientras quede contenido por debajo
- * y se oculta al llegar al final.
+ * Aqui hubo un aviso de "desliza para ver mas". Se quito, y conviene saber por que para no
+ * volver a ponerlo: existia porque los botones de continuar quedaban fuera de pantalla y el
+ * vendedor no sabia que el formulario seguia. Desde que la franja de botones esta SIEMPRE a
+ * la vista, pegada justo encima de la barra de opciones, ese problema ya no existe — y en un
+ * telefono de 400 px el aviso se posaba encima de los campos, tapando el titulo del bloque
+ * que se iba a rellenar. Curaba algo ya curado y estorbaba.
  */
 const ventaRef = ref(null);
- const hayMasAbajo = ref(false);
 
-function revisarDesplazamiento() {
-  const el = ventaRef.value;
-  if (!el) return;
-  // Calculamos en base al contenedor, no al document/window
-  hayMasAbajo.value = el.scrollHeight - el.scrollTop - el.clientHeight > 24;
-}
-// Cambiar de paso reinicia el alto de la página: hay que volver a medir DESPUÉS de pintar.
+/** Cambiar de paso deja al usuario mirando la mitad del formulario nuevo si no se sube. */
 watch(paso, () => {
-  if (ventaRef.value) {
-    ventaRef.value.scrollTo({ top: 0 }); // Scroll interno
-  }
-  nextTick(revisarDesplazamiento);
+  ventaRef.value?.scrollIntoView({ block: 'start', behavior: 'auto' });
 });
 
 onMounted(async () => {
-
-  window.addEventListener('resize', revisarDesplazamiento);
-
   const guardado = leerBorrador(auth.id);
   if (guardado) {
     Object.assign(form, guardado);
@@ -344,19 +332,16 @@ onMounted(async () => {
   } catch (e) {
     toast('No se pudieron cargar los tipos de entidad', 'error');
   }
-  nextTick(revisarDesplazamiento);
 });
 
 onUnmounted(() => {
-  window.removeEventListener('scroll', revisarDesplazamiento);
-  window.removeEventListener('resize', revisarDesplazamiento);
   // Las previsualizaciones son URLs de objeto: sin revocarlas se quedan en memoria.
   fotos.value.forEach((f) => f?.url && URL.revokeObjectURL(f.url));
 });
 </script>
 
 <template>
-  <div class="venta" ref="ventaRef" @scroll="revisarDesplazamiento">
+  <div class="venta" ref="ventaRef">
     <!-- Resumen siempre visible: en el movil, saber cuanto se esta cobrando no puede
          depender de bajar hasta el final del formulario. -->
     <header class="resumen card">
@@ -565,14 +550,8 @@ onUnmounted(() => {
         </p>
       </section>
 
-<!-- El aviso de "hay más abajo" viaja en la MISMA franja pegajosa que los botones,
-             sobre fondo opaco: flotando suelto se posaba encima de un campo y parecía que
-             lo tapaba. Ahora es SOLO un indicador visual (no botón clickeable): el formulario
-             es naturalmente scrolleable con el dedo/ratón en cualquier dispositivo. -->
+<!-- Franja de botones: siempre a la vista, pegada justo encima de la barra de opciones. -->
       <div class="pie">
-        <div v-if="hayMasAbajo" class="mas-abajo" role="status" aria-live="polite">
-          <span class="flecha">↓</span> Desliza para ver más
-        </div>
         <div class="acciones">
           <button class="btn" :disabled="paso === 0 || enviando" @click="atras">Atrás</button>
           <button v-if="paso < 2" class="btn btn-primario" @click="siguiente">Siguiente</button>
@@ -586,27 +565,31 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.venta { 
-  display: flex; 
-  flex-direction: column; 
-  gap: 1rem; 
-  max-width: 720px; 
-  margin: 0 auto; 
-  
-  /* --- LA MAGIA PARA EL APK --- */
-  /* Forzamos a que respete el espacio exacto del celular (entre menús) */
-  position: absolute;
-  top: 70px;
-  bottom: 70px;
-  left: 0;
-  right: 0;
-  
-  overflow-y: auto;         /* Activa el scroll obligatoriamente aquí */
-  -webkit-overflow-scrolling: touch; 
-  overscroll-behavior-y: contain;    
+/*
+ * La pantalla NO se saca del flujo con `position: absolute`.
+ *
+ * Estuvo asi, anclada con `top: 70px; bottom: 70px`, y esos dos numeros eran el problema que
+ * se veia en el telefono: no coinciden con nada real. La barra superior mide lo que mida mas
+ * la franja de estado del sistema (`--safe-top`), y la inferior es `--tabbar-h`, que ya
+ * incluye el area segura de abajo. Con 70px fijos, arriba se recortaba la fila del total y el
+ * boton de volver al mapa, y abajo quedaba una rendija por la que se veia pasar el contenido
+ * por debajo de los botones.
+ *
+ * Ahora vive dentro de `.contenido`, que ya reserva esos espacios, y el desplazamiento es el
+ * de la pagina. Menos codigo y, sobre todo, un solo sitio donde estan esas medidas.
+ */
+.venta {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
 }
+/* El total se queda a la vista al desplazar: es el dato que el vendedor esta cantando en voz
+   alta. `top` cuenta con la barra superior, que tambien es pegajosa. */
 .resumen {
-  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  display: flex; align-items: center; justify-content: space-between; gap: 0.8rem;
   padding: 0.8rem 1rem; position: sticky; top: 0; z-index: 5;
 }
 .resumen .total { font-variant-numeric: tabular-nums; font-size: 1.05rem; }
@@ -683,45 +666,36 @@ onUnmounted(() => {
 .acciones { display: flex; gap: 0.6rem; justify-content: flex-end; padding-bottom: 1rem; }
 
 /* Franja inferior: aviso de "hay más" + botones, juntos y sobre fondo opaco. */
-.pie { display: flex; flex-direction: column; align-items: stretch; gap: 0.5rem; }
+.pie { display: flex; flex-direction: column; align-items: stretch; gap: 0.5rem; position: relative; }
 
-/* El aviso de "hay más abajo" es SOLO un indicador visual (no botón clickeable).
-   El formulario es naturalmente scrolleable con el dedo/ratón en cualquier dispositivo.
-   Usa el color de acento y la flecha se mueve para llamar la atención. */
-.mas-abajo {
-  align-self: center; font: inherit;
-  display: inline-flex; align-items: center; gap: 0.45rem;
-  border: 1px solid color-mix(in srgb, var(--acento) 45%, transparent);
-  background: color-mix(in srgb, var(--acento) 12%, var(--panel));
-  color: var(--acento); font-weight: 700; font-size: 0.9rem;
-  border-radius: 999px; padding: 0.5rem 1.1rem; box-shadow: var(--sombra);
-  pointer-events: none; /* No es clickeable, solo indicador */
-}
-.mas-abajo .flecha { display: inline-block; animation: rebote 1.4s ease-in-out infinite; }
-@keyframes rebote {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(3px); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .mas-abajo .flecha { animation: none; }
-}
 
 /* En móvil el formulario se vuelve de una columna y los botones ocupan el ancho:
    es la misma pantalla que va en el APK y ahí se usa con una mano. */
 @media (max-width: 560px) {
-.venta {
-    /* Espacio prudente al final para que los botones flotantes no tapen el último campo */
-    padding-bottom: 1.5rem; 
-  }
   .dos { grid-template-columns: 1fr; }
-  .pie { 
-    position: sticky; 
-    bottom: 0; /* Se pegará exacto al ras del límite del APK */
-    background: var(--bg); 
-    padding: 0.8rem 0 1.5rem; 
-    z-index: 6; 
-    /* Pequeña sombra arriba para que se note que flota sobre el contenido */
-    box-shadow: 0 -4px 12px rgba(0,0,0,0.05);
+
+  /*
+   * Los botones se pegan al borde de abajo del CONTENIDO, que termina justo encima de la
+   * barra de opciones del usuario. El margen negativo cancela el relleno lateral de
+   * `.contenido` para que la franja llegue de lado a lado, como en cualquier aplicacion:
+   * media franja con los bordes al aire se veia como un recorte.
+   *
+   * `--tabbar-h` es cero cuando el teclado esta abierto (la barra se esconde), asi que al
+   * teclear los botones suben con el y no se quedan detras.
+   */
+  .pie {
+    position: sticky;
+    /* Justo ENCIMA de la barra de opciones, sin hueco entre las dos. Con `bottom: 0` la
+       franja se pegaba al borde de la ventana, o sea DETRAS de esa barra, y quedaba la
+       rendija por la que se veia pasar el formulario al desplazar. */
+    bottom: var(--tabbar-h);
+    /* Los margenes negativos cancelan el relleno lateral del contenedor: la franja tiene que
+       llegar de lado a lado o parece un recorte flotando. */
+    margin: 0 -1.4rem;
+    padding: 0.7rem 1.4rem;
+    background: var(--bg);
+    z-index: 6;
+    border-top: 1px solid var(--border);
   }
   .acciones { padding-bottom: 0; }
   .acciones .btn { flex: 1; }
@@ -743,9 +717,9 @@ onUnmounted(() => {
   .fila-check input[type='checkbox'] { width: 24px; height: 24px; }
   .nota { font-size: 0.95rem; }
   .faltan { font-size: 1rem; }
-  .acciones .btn { min-height: 52px; font-size: 1.05rem; }
+  /* Se pulsan de pie y delante del cliente: mas altos que el minimo tactil a proposito. */
+  .acciones .btn { min-height: 56px; font-size: 1.08rem; font-weight: 700; }
   .bloque > .btn { min-height: 50px; font-size: 1rem; }
-  .mas-abajo { font-size: 1rem; padding: 0.6rem 1.2rem; }
   .foto img, .foto .sinfoto { width: 88px; height: 88px; }
   .foto-acciones .btn { min-height: 44px; }
 }

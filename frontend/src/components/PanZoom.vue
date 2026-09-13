@@ -71,11 +71,36 @@ function bajarCapa() {
   if (world.value) world.value.style.willChange = 'auto';
 }
 
+/*
+ * El transform se escribe UNA vez por fotograma, no una vez por evento.
+ *
+ * Un dedo arrastrando en Android genera bastantes mas eventos de puntero que fotogramas tiene
+ * la pantalla. Escribiendo en cada evento, todas las escrituras menos la ultima de cada
+ * fotograma son trabajo tirado —y no es gratis: cada una invalida el layout de la capa—, y
+ * ademas se llamaba a `promoverCapa()` en cada una, que reprograma su temporizador. Medido
+ * con el procesador frenado 6x, como un telefono de gama baja, el arrastre tenia un fotograma
+ * de cada veinte por encima de 67 ms; a eso se le nota el tiron.
+ *
+ * Se guarda la ultima posicion pedida y se pinta en el siguiente fotograma. Si llegan cinco
+ * eventos entre dos fotogramas, se pinta una vez, con el valor bueno.
+ */
+let cuadroPendiente = 0;
+
 function pintar() {
+  if (cuadroPendiente) return;
+  cuadroPendiente = requestAnimationFrame(() => {
+    cuadroPendiente = 0;
+    pintarYa();
+  });
+}
+
+/** Escribe el transform en el acto. Para cuando el resultado se necesita ya (encuadre inicial,
+ *  cambio de tamaño): esperar un fotograma ahi se ve como un salto. */
+function pintarYa() {
   const el = world.value;
   if (!el) return;
+  if (cuadroPendiente) { cancelAnimationFrame(cuadroPendiente); cuadroPendiente = 0; }
   el.style.transform = `translate(${t.x}px, ${t.y}px) scale(${t.scale})`;
-  promoverCapa();
 }
 
 // Ancho del viewport con el que se calculo el transform actual. Al redimensionar, el mundo
@@ -140,7 +165,8 @@ function focusOn(nx, ny, scale) {
   t.x = r.width / 2 - nx * worldW * t.scale;
   t.y = r.height / 2 - ny * worldH * t.scale;
   actualizarDetalle(r.width);
-  pintar();
+  // En el acto: encuadrar es un salto, no un gesto. Esperar un fotograma se ve como un tiron.
+  pintarYa();
 }
 
 function reset() {
@@ -176,6 +202,7 @@ function zoomAt(cx, cy, factor) {
 
 function onWheel(e) {
   e.preventDefault();
+  promoverCapa();
   zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.15 : 1 / 1.15);
 }
 
@@ -201,6 +228,7 @@ function onDown(e) {
 }
 function onMove(e) {
   if (!pointers.has(e.pointerId)) return;
+  promoverCapa();   // mantiene viva la capa mientras dure el gesto; el temporizador la baja al soltar
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (pointers.size === 2 && pinch) {
     const [a, b] = [...pointers.values()];

@@ -47,7 +47,27 @@ public class SecurityConfig {
      * Se admiten comodines porque se usa {@code setAllowedOriginPatterns}. Un valor exacto
      * tambien es un patron valido, asi que el comportamiento por defecto no cambia.
      */
-    @Value("${unifex.cors.origenes}")
+    /**
+     * El valor por defecto vive AQUI, no solo en application.properties.
+     *
+     * Un {@code @Value} sin defecto convierte una propiedad ausente en un fallo de arranque:
+     * la inyeccion de securityConfig revienta, Tomcat no levanta y el servidor entero se queda
+     * abajo con un "Injection of autowired dependencies failed" que no nombra la propiedad
+     * hasta el cuarto "Caused by". Paso exactamente eso al desplegar con las clases nuevas y un
+     * application.properties todavia sin esta linea.
+     *
+     * Y el fallo era desproporcionado: quedarse sin lista de origenes CORS afecta a quien llama
+     * al API desde otro origen, no al resto del sistema. Con el defecto aqui, el despliegue
+     * funciona aunque el fichero de propiedades venga atrasado, y la propiedad pasa a ser lo
+     * que deberia: un ajuste opcional.
+     */
+    private static final String ORIGENES_POR_DEFECTO =
+            "https://localhost,capacitor://localhost,"
+            + "http://localhost:5173,http://127.0.0.1:5173,"
+            + "http://localhost:5174,http://127.0.0.1:5174,"
+            + "http://localhost:7676,http://127.0.0.1:7676";
+
+    @Value("${unifex.cors.origenes:" + ORIGENES_POR_DEFECTO + "}")
     private String origenesCors;
 
     @Bean

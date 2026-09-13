@@ -63,6 +63,17 @@ public interface IUsuarioDao extends JpaRepository<Usuario, Long> {
               + "and u.persona is not null")
       List<Long> idsDePersonasConUsuario();
 
+      /**
+       * Los usuarios vivos de un rol, para avisarles cuando cambia lo que pueden ver.
+       *
+       * Sin este aviso, cambiar los permisos de un rol no llegaba a quien ya estaba dentro:
+       * el menu se queda con la copia en disco hasta cerrar y volver a abrir la aplicacion. Es
+       * el mismo fallo que se arreglo en su dia con las habilitaciones de casetas.
+       */
+      @Query("select u.id from Usuario u where u.rol.id = :rolId "
+              + "and (u.estado is null or u.estado <> 'ELIMINADO')")
+      List<Long> idsPorRol(@Param("rolId") Long rolId);
+
       /** Cuantos usuarios vivos tiene un rol. Un rol con usuarios no se puede eliminar. */
       @Query("select count(u) from Usuario u where u.rol.id = :rolId "
               + "and (u.estado is null or u.estado <> 'ELIMINADO')")

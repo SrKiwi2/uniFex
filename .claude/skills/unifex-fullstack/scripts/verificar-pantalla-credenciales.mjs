@@ -120,6 +120,40 @@ try {
   paso('con QR grande ya no se le exige la foto',
        /sin comprobante/.test(conQr || '') && !/sin foto/.test(conQr || ''), conQr);
 
+  titulo('Las plantillas y el boton de la inscripcion entera');
+  // Los botones de plantilla los manda el servidor. Si la pantalla se los inventara, una
+  // plantilla añadida al generador no se podria elegir y una borrada seguiria ofreciendose.
+  const catalogo = (await api(T, '/api/app/credenciales/plantillas')).cuerpo || [];
+  const opciones = await ch.evaluar("document.querySelectorAll('.opciones .opcion').length");
+  paso('los botones de plantilla salen del catalogo del servidor',
+       catalogo.length > 0 && opciones === catalogo.length,
+       `${opciones} en pantalla, ${catalogo.length} en el servidor`);
+
+  // Una credencial es de una PERSONA: una entidad con tres responsables son tres credenciales.
+  // El boton de imprimirlas juntas solo tiene sentido —y solo debe salir— cuando hay mas de una;
+  // con una sola haria exactamente lo mismo que el de al lado.
+  const todas = (await api(T, '/api/app/credenciales')).cuerpo || [];
+  const porInscripcion = {};
+  todas.forEach((c) => { porInscripcion[c.inscripcionId] = (porInscripcion[c.inscripcionId] || 0) + 1; });
+  const esperadas = todas.filter((c) => porInscripcion[c.inscripcionId] > 1).length;
+  await ch.evaluar(`[...document.querySelectorAll('.resumen .tarjeta')]
+      .find(b => /en total/i.test(b.textContent))?.click()`);
+  await ch.esperar(800);
+  const conBoton = await ch.evaluar(
+      "[...document.querySelectorAll('.fila')].filter(f => f.textContent.includes('\\u{1F3AB}')).length");
+  paso('el boton de la inscripcion entera sale exactamente donde hay varios responsables',
+       conBoton === esperadas,
+       `${conBoton} filas con boton de ${todas.length}, esperadas ${esperadas}`);
+
+  // "Imprimir igual" es para lo INCOMPLETO: ofrecerlo en una credencial lista invita a dejar
+  // constancia de una impresion forzada que no lo era. Sale de un v-if/v-else, y basta con
+  // colar cualquier cosa entre las dos etiquetas para que Vue pinte los dos botones a la vez.
+  const listaConIgual = await ch.evaluar(`[...document.querySelectorAll('.fila')]
+      .filter(f => /Lista/.test(f.querySelector('.estado')?.textContent || ''))
+      .filter(f => /igual/.test(f.querySelector('.acciones')?.textContent || '')).length`);
+  paso('una credencial lista no ofrece ademas "imprimir igual"', listaConIgual === 0,
+       `${listaConIgual} fila(s) con los dos botones`);
+
   titulo('Imprimir incompleta queda registrado, y la pantalla lo enseña');
   await api(T, '/api/app/credenciales/pdf', { method: 'POST', body: JSON.stringify({
     responsables: [((await api(T, '/api/app/credenciales')).cuerpo || [])

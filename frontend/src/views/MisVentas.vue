@@ -1,8 +1,8 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 import { apiFetch } from '../api';
 import { toast } from '../ui/toast';
-import { descargarRecibo } from '../ui/descargas';
+import { descargarRecibo, compartirRecibo } from '../ui/descargas';
 import { usePuestosStore } from '../stores/puestos.js';
 import UiModal from '../components/UiModal.vue';
 import FotosResponsables from '../components/FotosResponsables.vue';
@@ -12,8 +12,6 @@ const tienda = usePuestosStore();
 const items = ref([]);       // filas de fn_get_inscripciones: una por (inscripción, categoría)
 const resumen = ref({ cantidad: 0, total: 0 });
 const cargando = ref(true);
-const expandida = ref(null); // id_inscripción abierta
-const puestos = ref([]);     // detalle de la inscripción expandida
 const ediciones = ref([]);   // ediciones de la feria (V6), para el selector
 const edicionSel = ref(null); // null = la edición ACTIVA
 
@@ -93,18 +91,6 @@ async function cargarSolicitudes() {
       }
     }
   } catch { /* la pantalla sigue siendo util sin esta seccion */ }
-}
-
-async function alternar(id) {
-  if (expandida.value === id) { expandida.value = null; return; }
-  expandida.value = id;
-  puestos.value = [];
-  try {
-    const r = await apiFetch(conEdicion(`/api/app/mis-ventas/${id}/puestos`));
-    if (r.ok) puestos.value = await r.json();
-  } catch (e) {
-    toast(e.message, 'error');
-  }
 }
 
 const fecha = (f) => (f ? new Date(f).toLocaleDateString('es-BO') : '');
@@ -218,6 +204,7 @@ async function confirmarSubidaComprobante(archivo) {
     if (!r.ok || !d.ok) { toast(d.mensaje || 'No se pudo subir el comprobante', 'error'); return; }
     toast('Comprobante adjuntado', 'ok');
     await cargarPendientes();
+    if (ficha.value?.id === id) await abrirFicha(id);
   } catch (e) {
     toast(e.message, 'error');
   } finally {
@@ -234,6 +221,105 @@ async function confirmarSubidaComprobante(archivo) {
 function verRecibo(id) {
   return descargarRecibo(id);
 }
+
+// ---------------------------------------------------------------- ficha de la venta
+/*
+ * Toda la venta en una ventana, y desde ahi se corrige.
+ *
+ * La tabla de antes tenia siete columnas y en un telefono solo se veian tres: habia que
+ * arrastrarla de lado para leer el total. Y para ver quien atiende la caseta o si falta una
+ * foto no habia sitio en ninguna columna. Ahora la lista da lo justo para reconocer la venta
+ * —entidad, casetas, total— y el resto vive aqui.
+ *
+ * El detalle llega en UNA peticion (`/detalle`) en vez de tres. En la feria la red es mala y
+ * tres esperas seguidas se notan.
+ */
+const ficha = ref(null);         // { id, entidad, pago, casetas, responsables }
+const cargandoFicha = ref(false);
+const editando = ref(null);      // 'entidad' | id del responsable | null
+const guardando = ref(false);
+const borrador = reactive({});
+
+async function abrirFicha(id) {
+  ficha.value = null;
+  cargandoFicha.value = true;
+  editando.value = null;
+  try {
+    const r = await apiFetch(`/api/app/inscripciones/${id}/detalle`);
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.ok === false) { toast(d.mensaje || 'No se pudo abrir la venta', 'error'); return; }
+    ficha.value = d;
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    cargandoFicha.value = false;
+  }
+}
+
+function cerrarFicha() {
+  ficha.value = null;
+  editando.value = null;
+}
+
+/** Pasa a modo edicion con una copia de lo que hay: cancelar tiene que dejarlo como estaba. */
+function editarEntidad() {
+  const e = ficha.value?.entidad || {};
+  Object.keys(borrador).forEach((k) => delete borrador[k]);
+  Object.assign(borrador, {
+    entidadNombre: e.nombre || '', nit: e.nit || '', descripcion: e.descripcion || '',
+    representanteLegal: e.representanteLegal || '', ciRepresentante: e.ciRepresentante || '',
+    celularRepresentante: e.celularRepresentante || '',
+  });
+  editando.value = 'entidad';
+}
+
+function editarResponsable(r) {
+  Object.keys(borrador).forEach((k) => delete borrador[k]);
+  // `r.nombre` viene con los apellidos pegados, para pintarlo de una vez. Aqui hace falta el
+  // nombre de pila suelto, y se obtiene QUITANDO los apellidos que llegan aparte: partir la
+  // cadena por espacios adivinaria mal con dos nombres de pila y guardaria esa adivinanza.
+  const apellidos = [r.paterno, r.materno].filter(Boolean).join(' ');
+  const pila = apellidos && r.nombre?.endsWith(apellidos)
+    ? r.nombre.slice(0, -apellidos.length).trim()
+    : (r.nombre || '');
+  Object.assign(borrador, {
+    nombre: pila, paterno: r.paterno || '', materno: r.materno || '',
+    ci: r.ci || '', celular: r.celular || '',
+  });
+  editando.value = r.id;
+}
+
+async function guardarEdicion() {
+  if (guardando.value || !ficha.value) return;
+  const id = ficha.value.id;
+  const esEntidad = editando.value === 'entidad';
+  guardando.value = true;
+  try {
+    const ruta = esEntidad
+      ? `/api/app/inscripciones/${id}/entidad`
+      : `/api/app/inscripciones/${id}/responsables/${editando.value}`;
+    const r = await apiFetch(ruta, { method: 'PATCH', body: JSON.stringify({ ...borrador }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.ok === false) { toast(d.mensaje || 'No se pudo guardar', 'error'); return; }
+    toast(d.mensaje || 'Guardado', 'ok');
+    editando.value = null;
+    // Se recarga la ficha y la lista: el nombre de la entidad sale en las dos.
+    await Promise.all([abrirFicha(id), cargar()]);
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    guardando.value = false;
+  }
+}
+
+/** Adjuntar el comprobante desde la ficha, que es donde se ve que falta. */
+function comprobanteDesdeFicha() {
+  if (ficha.value) elegirComprobante(ficha.value.id);
+}
+
+/** Cuantos responsables no tienen foto todavia: es lo que frena la credencial. */
+const sinFoto = computed(() =>
+  (ficha.value?.responsables || []).filter((r) => !r.tieneFoto).length);
 
 // ---------------------------------------------------------------- tiempo real
 /** Un aviso del backend: aprobaron o rechazaron mi solicitud. Recargar y avisar. */
@@ -290,11 +376,13 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
         <span class="dias" :class="{ urgente: p.diasSinComprobante >= 3 }">
           {{ p.diasSinComprobante === 0 ? 'hoy' : `hace ${p.diasSinComprobante} día${p.diasSinComprobante === 1 ? '' : 's'}` }}
         </span>
+        <!-- Aqui SOLO se adjunta. El recibo y el compartir viven en la ficha de la venta:
+             en una lista que existe para decir "falta el comprobante", un boton de recibo
+             confunde sobre cual es la accion que se espera. -->
         <button class="btn btn-primario btn-sm" :disabled="subiendo === p.id"
                 @click="elegirComprobante(p.id)">
           {{ subiendo === p.id ? 'Subiendo…' : '📷 Adjuntar' }}
         </button>
-        <button class="btn btn-fantasma btn-sm" title="Ver recibo" @click="verRecibo(p.id)">🧾</button>
       </li>
     </ul>
   </section>
@@ -321,83 +409,180 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
       </div>
     </div>
 
-    <!-- tabla-scroll: la tabla tiene 7 columnas y en un teléfono medía más que la pantalla,
-         así que arrastraba el ancho de TODA la página. Ahora se desplaza dentro de su caja. -->
-    <div class="card tabla-scroll">
+    <!-- La tabla de siete columnas se cambio por una LISTA.
+         En un telefono de 400 px aquella tabla mostraba tres columnas y para leer el total
+         habia que arrastrarla de lado; el resto de los datos no cabia en ninguna columna. La
+         lista da lo justo para reconocer la venta y el resto se abre en la ficha. -->
+    <section class="card lista-ventas">
+      <header class="cab">
+        <h2>Entidades registradas</h2>
+        <span class="cuenta">{{ inscripciones.length }}</span>
+      </header>
+
       <div v-if="cargando" class="vacio">Cargando…</div>
       <div v-else-if="inscripciones.length === 0" class="vacio">
         Aún no tienes ventas confirmadas.
       </div>
-      <table v-else class="tabla">
-        <thead>
-          <tr><th>Entidad</th><th>Tipo</th><th>Categorías</th><th>Pago</th><th>Fecha</th><th class="der">Total</th><th></th></tr>
-        </thead>
-        <tbody>
-          <template v-for="ins in inscripciones" :key="ins.id">
-            <tr class="fila-ins" @click="alternar(ins.id)">
-              <td>
-                <strong>{{ ins.entidad }}</strong>
-                <!-- Estado de la solicitud de cancelacion (V11) -->
-                <span v-if="solicitudes[ins.id]" class="badge solicitud"
-                      :class="`solicitud-${solicitudes[ins.id].estado.toLowerCase()}`"
-                      :title="solicitudes[ins.id].respuesta || solicitudes[ins.id].motivo">
-                  {{ etiquetaSolicitud(solicitudes[ins.id]) }}
-                </span>
-              </td>
-              <td>{{ ins.tipo }}</td>
-              <td>{{ ins.categorias.join(', ') }}</td>
-              <td>
-                <span class="badge" :class="ins.contado ? 'badge-ok' : 'badge-muted'">
-                  {{ ins.contado ? 'Contado' : 'Crédito' }}
-                </span>
-              </td>
-              <td>{{ fecha(ins.fecha) }}</td>
-              <td class="der">{{ bs(ins.total) }}</td>
-              <td class="acciones">
-                <!-- .stop: la fila entera despliega el detalle; el boton no debe hacerlo. -->
-                <button class="btn btn-fantasma btn-sm" title="Ver recibo"
-                        @click.stop="verRecibo(ins.id)">🧾</button>
-                <!-- Cancelar: solo despues de la aprobacion de administracion (V11). -->
-                <button v-if="solicitudes[ins.id]?.estado === 'APROBADA'"
-                        class="btn btn-peligro btn-sm" title="Administracion aprobo la cancelacion"
-                        :disabled="cancelandoId === ins.id" @click.stop="cancelarVenta(ins.id)">
-                  {{ cancelandoId === ins.id ? 'Cancelando…' : 'Cancelar venta' }}
-                </button>
-                <button v-else-if="!solicitudes[ins.id]" class="btn btn-fantasma btn-sm"
-                        title="Pedir a administracion que habilite la cancelacion"
-                        @click.stop="abrirSolicitud(ins)">Solicitar cancelación</button>
-              </td>
-            </tr>
-            <tr v-if="expandida === ins.id" class="detalle">
-              <td colspan="7">
-                <div v-if="puestos.length === 0" class="muted">Sin detalle de puestos.</div>
-                <div v-else class="puestos">
-                  <span v-for="(p, i) in puestos" :key="i" class="chip-puesto">
-                    {{ p.categoria || p.nombre_categoria || 'Caseta' }} {{ p.codigo || p.codigo_puesto || '' }}
-                  </span>
-                </div>
-                <div v-if="solicitudes[ins.id]?.estado === 'PENDIENTE'" class="aviso-espera">
-                  Tu solicitud de cancelación está en espera de la revisión de administración.
-                </div>
-                <div v-else-if="solicitudes[ins.id]?.estado === 'RECHAZADA'" class="aviso-rechazo">
-                  <strong>Solicitud rechazada.</strong>
-                  {{ solicitudes[ins.id].respuesta || 'Sin respuesta registrada.' }}
-                </div>
-                <div v-else-if="solicitudes[ins.id]?.estado === 'APROBADA'" class="aviso-aprobada">
-                  Solicitud aprobada por {{ solicitudes[ins.id].resueltoPor || 'administración' }}.
-                  Ya puedes cancelar la venta.
-                </div>
+      <ul v-else class="ventas">
+        <li v-for="ins in inscripciones" :key="ins.id" class="venta" @click="abrirFicha(ins.id)">
+          <div class="principal">
+            <strong class="nombre">{{ ins.entidad }}</strong>
+            <span v-if="solicitudes[ins.id]" class="badge solicitud"
+                  :class="`solicitud-${solicitudes[ins.id].estado.toLowerCase()}`"
+                  :title="solicitudes[ins.id].respuesta || solicitudes[ins.id].motivo">
+              {{ etiquetaSolicitud(solicitudes[ins.id]) }}
+            </span>
+          </div>
+          <div class="secundario">
+            <span class="cats">{{ ins.categorias.join(', ') }}</span>
+            <span class="sep">·</span>
+            <span>{{ fecha(ins.fecha) }}</span>
+            <span class="badge" :class="ins.contado ? 'badge-ok' : 'badge-muted'">
+              {{ ins.contado ? 'Contado' : 'Crédito' }}
+            </span>
+          </div>
+          <div class="derecha">
+            <strong class="total">{{ bs(ins.total) }}</strong>
+            <!-- Que se puede tocar tiene que decirlo la fila, no adivinarse. -->
+            <span class="ver">Ver detalle ›</span>
+          </div>
+        </li>
+      </ul>
+    </section>
 
-                <!-- Las fotos van aquí, dentro del detalle, y no en el formulario de venta:
-                     el momento de reunirlas casi nunca es el de vender. El componente se monta
-                     al desplegar, así que solo pide datos de la venta que se está mirando. -->
-                <FotosResponsables :inscripcion-id="ins.id" />
-              </td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
-    </div>
+    <!-- Ficha de la venta: todo lo registrado, y desde aqui se corrige. -->
+    <!-- Mas ancha que el resto de dialogos: lleva datos en dos columnas y tres botones con
+         palabras en el pie, y a 480 px eso se partia en dos filas. -->
+    <UiModal v-if="ficha || cargandoFicha" :titulo="ficha?.entidad?.nombre || 'Venta'"
+             ancho="620px" @cerrar="cerrarFicha">
+      <div v-if="cargandoFicha" class="vacio">Cargando…</div>
+      <div v-else-if="ficha" class="ficha">
+        <!-- Lo que falta, primero: es sobre lo que hay que actuar. -->
+        <div v-if="!ficha.pago.conComprobante || sinFoto" class="pendiente">
+          <strong>Falta para la credencial:</strong>
+          <ul>
+            <li v-if="!ficha.pago.conComprobante">el comprobante de pago</li>
+            <li v-if="sinFoto">{{ sinFoto }} foto{{ sinFoto === 1 ? '' : 's' }} de responsable</li>
+          </ul>
+        </div>
+
+        <!-- ENTIDAD -->
+        <section class="grupo">
+          <header>
+            <h3>Entidad</h3>
+            <button v-if="editando !== 'entidad'" class="btn btn-fantasma btn-sm"
+                    @click="editarEntidad">✏️ Modificar</button>
+          </header>
+
+          <dl v-if="editando !== 'entidad'" class="datos">
+            <div><dt>Nombre</dt><dd>{{ ficha.entidad.nombre || '—' }}</dd></div>
+            <div><dt>Rubro</dt><dd>{{ ficha.entidad.descripcion || '—' }}</dd></div>
+            <div><dt>Tipo</dt><dd>{{ ficha.entidad.tipo || '—' }}</dd></div>
+            <div><dt>NIT</dt><dd>{{ ficha.entidad.nit || '—' }}</dd></div>
+            <div><dt>Responsable legal</dt><dd>{{ ficha.entidad.representanteLegal || '—' }}</dd></div>
+            <div><dt>C.I.</dt><dd>{{ ficha.entidad.ciRepresentante || '—' }}</dd></div>
+            <div><dt>Celular</dt><dd>{{ ficha.entidad.celularRepresentante || '—' }}</dd></div>
+          </dl>
+
+          <div v-else class="form">
+            <label class="campo"><span>Nombre de la entidad</span>
+              <input class="control mayus" v-model="borrador.entidadNombre" /></label>
+            <div class="dos">
+              <label class="campo"><span>Rubro</span>
+                <input class="control mayus" v-model="borrador.descripcion" /></label>
+              <label class="campo"><span>NIT</span>
+                <input class="control" inputmode="numeric" v-model="borrador.nit" /></label>
+            </div>
+            <label class="campo"><span>Responsable legal</span>
+              <input class="control mayus" v-model="borrador.representanteLegal" /></label>
+            <div class="dos">
+              <label class="campo"><span>C.I.</span>
+                <input class="control" inputmode="numeric" v-model="borrador.ciRepresentante" /></label>
+              <label class="campo"><span>Celular</span>
+                <input class="control" type="tel" inputmode="tel" v-model="borrador.celularRepresentante" /></label>
+            </div>
+            <div class="acciones-form">
+              <button class="btn btn-fantasma" @click="editando = null">Cancelar</button>
+              <button class="btn btn-primario" :disabled="guardando" @click="guardarEdicion">
+                {{ guardando ? 'Guardando…' : 'Guardar' }}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- CASETAS -->
+        <section class="grupo">
+          <header><h3>Casetas</h3></header>
+          <div v-if="!ficha.casetas.length" class="muted">Sin casetas registradas.</div>
+          <div v-else class="puestos">
+            <span v-for="(c, i) in ficha.casetas" :key="i" class="chip-puesto"
+                  :style="c.color ? { background: c.color + '22', color: c.color } : null">
+              {{ c.categoria }} {{ c.codigo }}
+            </span>
+          </div>
+        </section>
+
+        <!-- RESPONSABLES -->
+        <section class="grupo">
+          <header><h3>Responsables</h3></header>
+          <div v-if="!ficha.responsables.length" class="muted">Sin responsables registrados.</div>
+          <ul v-else class="responsables">
+            <li v-for="r in ficha.responsables" :key="r.id">
+              <template v-if="editando !== r.id">
+                <div class="quien">
+                  <strong>{{ r.nombre }}</strong>
+                  <span class="muted">C.I. {{ r.ci || '—' }}<template v-if="r.celular"> · {{ r.celular }}</template></span>
+                </div>
+                <span class="badge" :class="r.tieneFoto ? 'badge-ok' : 'badge-danger'">
+                  {{ r.tieneFoto ? 'con foto' : 'sin foto' }}
+                </span>
+                <button class="btn btn-fantasma btn-sm" @click="editarResponsable(r)">✏️</button>
+              </template>
+              <div v-else class="form">
+                <div class="dos">
+                  <label class="campo"><span>Nombre</span>
+                    <input class="control mayus" v-model="borrador.nombre" /></label>
+                  <label class="campo"><span>C.I.</span>
+                    <input class="control" inputmode="numeric" v-model="borrador.ci" /></label>
+                </div>
+                <div class="dos">
+                  <label class="campo"><span>Apellido paterno</span>
+                    <input class="control mayus" v-model="borrador.paterno" /></label>
+                  <label class="campo"><span>Apellido materno</span>
+                    <input class="control mayus" v-model="borrador.materno" /></label>
+                </div>
+                <label class="campo"><span>Celular</span>
+                  <input class="control" type="tel" inputmode="tel" v-model="borrador.celular" /></label>
+                <div class="acciones-form">
+                  <button class="btn btn-fantasma" @click="editando = null">Cancelar</button>
+                  <button class="btn btn-primario" :disabled="guardando" @click="guardarEdicion">
+                    {{ guardando ? 'Guardando…' : 'Guardar' }}
+                  </button>
+                </div>
+              </div>
+            </li>
+          </ul>
+          <!-- Las fotos se gestionan con el componente que ya existe para eso. -->
+          <FotosResponsables :inscripcion-id="ficha.id" />
+        </section>
+      </div>
+
+      <template #pie>
+        <!-- El recibo es la accion que mas se repite, asi que es el boton grande y con
+             palabras. Antes era un 🧾 suelto y nadie sabia que hacia. -->
+        <button class="btn btn-grande" :disabled="!ficha"
+                @click="ficha && comprobanteDesdeFicha()">
+          {{ ficha?.pago?.conComprobante ? '📷 Cambiar comprobante' : '📷 Adjuntar comprobante' }}
+        </button>
+        <button class="btn btn-grande" :disabled="!ficha" @click="ficha && compartirRecibo(ficha.id)">
+          📤 Compartir
+        </button>
+        <button class="btn btn-primario btn-grande" :disabled="!ficha"
+                @click="ficha && verRecibo(ficha.id)">
+          🧾 Imprimir recibo
+        </button>
+      </template>
+    </UiModal>
 
   <!-- Solicitud de cancelacion: el vendedor pide con motivo, administracion decide. -->
   <UiModal v-if="modalSolicitar" titulo="Solicitar cancelación" @cerrar="modalSolicitar = null">
@@ -426,12 +611,64 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
 .tarjetas { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 1.2rem; }
 .kpi { padding: 1.1rem 1.3rem; display: flex; flex-direction: column; gap: 0.3rem; }
 .kpi strong { font-size: 1.7rem; }
-.der { text-align: right; }
-.fila-ins { cursor: pointer; }
-.detalle td { background: var(--panel-2); }
 .puestos { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.chip-puesto { background: var(--acento-suave); color: var(--acento); border-radius: 999px; padding: 0.2rem 0.6rem; font-size: 0.8rem; font-weight: 600; }
-.acciones { text-align: right; white-space: nowrap; }
+.chip-puesto { background: var(--acento-suave); color: var(--acento); border-radius: 999px; padding: 0.25rem 0.65rem; font-size: 0.85rem; font-weight: 600; }
+
+/* ---- lista de entidades ---- */
+.lista-ventas { padding: 0; }
+.cab { display: flex; align-items: center; gap: 0.6rem; padding: 0.9rem 1.1rem; border-bottom: 1px solid var(--border); }
+.cab h2 { margin: 0; font-size: 1.05rem; }
+.cab .cuenta { background: var(--acento-suave); color: var(--acento); border-radius: 999px; padding: 0.05rem 0.55rem; font-size: 0.8rem; font-weight: 700; }
+.ventas { list-style: none; margin: 0; padding: 0; }
+/*
+ * Una fila = una entidad, en rejilla de dos columnas: a la izquierda quien es, a la derecha
+ * cuanto y la invitacion a abrir. En movil la derecha se pasa debajo en vez de salirse, que
+ * es lo que hacia la tabla.
+ */
+.venta {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.15rem 0.8rem;
+  padding: 0.85rem 1.1rem; border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.venta:last-child { border-bottom: none; }
+.venta:hover, .venta:focus-within { background: var(--panel-2); }
+.principal { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; min-width: 0; }
+.nombre { font-size: 1.02rem; }
+.secundario {
+  grid-column: 1; display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;
+  color: var(--muted); font-size: 0.85rem;
+}
+.secundario .cats { font-weight: 600; }
+.derecha { grid-column: 2; grid-row: 1 / span 2; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 0.2rem; }
+.total { font-variant-numeric: tabular-nums; font-size: 1.05rem; white-space: nowrap; }
+.ver { color: var(--acento); font-size: 0.82rem; font-weight: 700; white-space: nowrap; }
+
+/* ---- ficha de la venta ---- */
+.ficha { display: flex; flex-direction: column; gap: 1.1rem; }
+.pendiente {
+  padding: 0.7rem 0.9rem; border-radius: var(--radio-sm);
+  background: var(--danger-suave); color: var(--danger); font-size: 0.9rem;
+}
+.pendiente ul { margin: 0.25rem 0 0; padding-left: 1.1rem; }
+.grupo { display: flex; flex-direction: column; gap: 0.6rem; }
+.grupo > header { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+.grupo h3 { margin: 0; font-size: 0.95rem; }
+.datos { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin: 0; }
+.datos dt { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 700; }
+.datos dd { margin: 0.1rem 0 0; font-size: 0.93rem; overflow-wrap: anywhere; }
+.form { display: flex; flex-direction: column; gap: 0.7rem; }
+.dos { display: grid; gap: 0.7rem; grid-template-columns: 1fr 1fr; }
+.acciones-form { display: flex; gap: 0.5rem; justify-content: flex-end; }
+.mayus { text-transform: uppercase; }
+.mayus::placeholder { text-transform: none; }
+.responsables { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.responsables li {
+  display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  padding: 0.6rem 0.7rem; border-radius: var(--radio-sm); background: var(--panel-2);
+}
+.responsables .quien { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.responsables .form { flex-basis: 100%; }
+/* El recibo y el comprobante se pulsan de pie: botones con palabras, no un emoji suelto. */
+.btn-grande { min-height: 48px; font-size: 0.98rem; font-weight: 700; }
 
 /* ---- solicitud de cancelacion (V11) ---- */
 .solicitud { margin-left: 0.4rem; }
@@ -471,5 +708,16 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
 @media (max-width: 560px) {
   .pendientes li { align-items: flex-start; }
   .pendientes .quien { flex-basis: 100%; }
+
+  /* En el telefono el total y el "ver detalle" se pasan debajo: apretados a la derecha
+     dejaban el nombre de la entidad en dos letras por linea. */
+  .venta { grid-template-columns: 1fr; }
+  .derecha {
+    grid-column: 1; grid-row: auto; flex-direction: row; align-items: center;
+    justify-content: space-between; margin-top: 0.35rem;
+  }
+  .datos, .dos { grid-template-columns: 1fr; }
+  .acciones-form .btn { flex: 1; min-height: 46px; }
+  .btn-grande { width: 100%; }
 }
 </style>

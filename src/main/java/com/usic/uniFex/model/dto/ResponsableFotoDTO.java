@@ -11,8 +11,18 @@ import com.usic.uniFex.model.entity.Responsable;
  */
 public record ResponsableFotoDTO(
         Long id,
+        /** Nombre y apellidos ya unidos: es lo unico que se pinta en una lista. */
         String nombre,
+        /*
+         * Y ademas por separado, porque la ficha de la venta deja CORREGIRLOS. Un formulario
+         * no puede rellenarse desde la cadena unida: partirla por espacios adivinaria mal en
+         * cuanto alguien tenga dos nombres de pila, y guardar esa adivinanza estropearia el
+         * dato que se venia a arreglar.
+         */
+        String paterno,
+        String materno,
         String ci,
+        String celular,
         boolean esTitular,
         /** Ruta servida en /files/**, o null si todavia no tiene foto. */
         String fotoUrl,
@@ -30,7 +40,10 @@ public record ResponsableFotoDTO(
         return new ResponsableFotoDTO(
                 r.getId(),
                 nombre,
+                p != null ? p.getPaterno() : null,
+                p != null ? p.getMaterno() : null,
                 p != null ? p.getCi() : null,
+                p != null ? p.getCelular() : null,
                 r.isEsTitular(),
                 hay ? "/files/" + foto : null,
                 hay);

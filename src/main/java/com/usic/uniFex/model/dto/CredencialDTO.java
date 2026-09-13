@@ -36,9 +36,15 @@ public record CredencialDTO(
         boolean conComprobante,
         boolean conFoto) {
 
-    /** La unica plantilla que imprime datos de la persona y por tanto exige su foto. */
+    /**
+     * ¿Esa plantilla imprime datos de la persona y por tanto exige su foto?
+     *
+     * La respuesta la da el catalogo ({@link PlantillaCredencial}), no un `if` con el nombre de
+     * una plantilla dentro: mientras la regla fue "todo lo que no sea QR_GRANDE", cada plantilla
+     * nueva nacia exigiendo una foto que a lo mejor ni siquiera imprime.
+     */
     public static boolean requiereFoto(String plantilla) {
-        return !"QR_GRANDE".equalsIgnoreCase(plantilla == null ? "" : plantilla.trim());
+        return PlantillaCredencial.oPorDefecto(plantilla).requiereFoto();
     }
 
     /** ¿Se puede imprimir con esa plantilla sin que quede nada pendiente? */

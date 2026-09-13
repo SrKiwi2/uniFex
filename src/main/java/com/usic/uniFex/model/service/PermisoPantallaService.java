@@ -34,6 +34,9 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class PermisoPantallaService {
 
+    private final com.usic.uniFex.model.dao.IUsuarioDao usuarioDao;
+    private final NotificacionService notificaciones;
+
     private final IPermisoPantallaDao dao;
 
     /** true si ese rol lo ve todo pase lo que pase. */
@@ -104,6 +107,15 @@ public class PermisoPantallaService {
         dao.reemplazar(rolId, validas, adminId);
         log.info("Permisos del rol {}: {} pantallas (cambiado por el usuario {})",
                 nombreRol, validas.size(), adminId);
+
+        // Avisar a quien ya esta dentro. Sin esto el cambio no se nota hasta cerrar y volver a
+        // abrir la aplicacion, porque el cliente guarda sus permisos en disco para que el menu
+        // no parpadee al arrancar. En el APK "cerrar y volver a abrir" puede tardar dias.
+        for (Long usuarioId : usuarioDao.idsPorRol(rolId)) {
+            notificaciones.notificar(usuarioId, NotificacionService.TIPO_PERMISOS,
+                    "Cambiaron tus opciones", "Se actualizo lo que puedes ver en el menu.",
+                    null, null);
+        }
         return validas;
     }
 }

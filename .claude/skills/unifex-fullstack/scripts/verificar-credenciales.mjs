@@ -94,14 +94,42 @@ if (!lista.length) {
   process.exit(1);
 }
 const c = lista[0];
-const PL = ['CON_ETIQUETAS', 'QR_GRANDE'];
+
+titulo('El catalogo de plantillas');
+const catalogo = (await api(T, '/api/app/credenciales/plantillas')).cuerpo || [];
+paso('el servidor publica las plantillas', Array.isArray(catalogo) && catalogo.length > 0,
+     catalogo.map((x) => x.id).join(', '));
+paso('cada una trae lo que la pantalla no puede adivinar',
+     catalogo.every((x) => ['id', 'etiqueta', 'detalle', 'requiereFoto', 'proporcion']
+         .every((k) => k in x)));
+// La proporcion se mide sobre la imagen: si sale 0 o disparatada, la plantilla no se leyo.
+paso('la proporcion sale de la imagen de verdad',
+     catalogo.every((x) => x.proporcion > 0.5 && x.proporcion < 3),
+     catalogo.map((x) => `${x.id}=${Number(x.proporcion).toFixed(3)}`).join(' '));
+paso('las dos de siempre siguen ahi',
+     ['CON_ETIQUETAS', 'QR_GRANDE'].every((id) => catalogo.some((x) => x.id === id)));
+// Sin esto, un id mal escrito devolvia 200 con el PDF impreso en la plantilla de por defecto,
+// y eso no se descubre hasta tener el papel equivocado en la mano.
+paso('una plantilla que no existe se rechaza, no se imprime con otra',
+     (await api(T, '/api/app/credenciales/pdf', { method: 'POST',
+        body: JSON.stringify({ plantilla: 'NO_EXISTE_ESTA' }) })).estado === 400);
+
+titulo('Listado y requisitos (continuacion)');
+// Las plantillas salen del catalogo, no de dos nombres escritos aqui: una plantilla nueva
+// entra en esta prueba sola.
+const PL = catalogo.map((x) => x.id);
+const exigeFoto = (pl) => catalogo.find((x) => x.id === pl)?.requiereFoto === true;
 const listo = (x, pl) => Boolean(x.listo?.[pl]);
 const falta = (x, pl) => x.faltantes?.[pl] || [];
 
 paso('cada una trae su codigo, requisitos y motivo',
      ['codigo', 'conComprobante', 'conFoto', 'listo', 'faltantes'].every((k) => k in c));
+// Si el catalogo y estos mapas se separan, la pantalla lee `listo[plantilla]` = undefined y
+// marca TODAS las credenciales como no listas, sin un solo error por ningun lado.
 paso('lo de "listo" y lo que falta viene por plantilla, no suelto',
      lista.every((x) => PL.every((pl) => pl in (x.listo || {}) && pl in (x.faltantes || {}))));
+paso('y cubre exactamente el catalogo, ni una mas ni una menos',
+     lista.every((x) => Object.keys(x.listo || {}).length === PL.length));
 
 // Las dos reglas del flujo de verificacion, en la forma en la que fallarian si alguien las
 // relaja: el recibo no lo sustituye marcar "contado", y la foto solo la pide la plantilla
@@ -109,10 +137,12 @@ paso('lo de "listo" y lo que falta viene por plantilla, no suelto',
 paso('el comprobante hace falta para las DOS plantillas',
      lista.filter((x) => !x.conComprobante).every((x) => PL.every((pl) => !listo(x, pl))));
 paso('marcar contado NO cuenta como comprobante',
-     lista.filter((x) => x.pagoContado && !x.conComprobante).every((x) => !listo(x, 'QR_GRANDE')));
-paso('la foto solo la exige la plantilla con etiquetas',
+     lista.filter((x) => x.pagoContado && !x.conComprobante).every((x) => PL.every((pl) => !listo(x, pl))));
+// La foto la exige quien imprime datos de la persona, y solo esa: pedirla en una plantilla que
+// no lleva ni nombre ni C.I. solo frena la cola de acreditacion.
+paso('la foto la exige exactamente quien dice el catalogo',
      lista.filter((x) => x.conComprobante && !x.conFoto)
-          .every((x) => !listo(x, 'CON_ETIQUETAS') && listo(x, 'QR_GRANDE')));
+          .every((x) => PL.every((pl) => listo(x, pl) === !exigeFoto(pl))));
 paso('con recibo y foto, las dos quedan listas',
      lista.filter((x) => x.conComprobante && x.conFoto).every((x) => PL.every((pl) => listo(x, pl))));
 paso('las no listas dicen que les falta',
@@ -160,8 +190,8 @@ if (!aptas.length) {
   console.log('  (ninguna credencial cumple los requisitos en esta base)');
 } else {
   for (const [nombre, cuerpo] of [
-    ['plantilla con etiquetas', { plantilla: 'CON_ETIQUETAS', anchoCm: 10 }],
-    ['plantilla de QR grande', { plantilla: 'QR_GRANDE', anchoCm: 12 }],
+    // Todas las del catalogo: la plantilla que se añada se prueba sin tocar esta linea.
+    ...catalogo.map((x) => [`plantilla ${x.etiqueta}`, { plantilla: x.id, anchoCm: 10 }]),
     ['una sola credencial', { responsables: [aptas[0].responsableId] }],
   ]) {
     const p = await api(T, '/api/app/credenciales/pdf', { method: 'POST', body: JSON.stringify(cuerpo) });

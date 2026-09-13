@@ -51,6 +51,16 @@ public class NotificacionService {
      */
     public static final String TIPO_ASIGNACION = "ASIGNACION_CAMBIADA";
 
+    /**
+     * Cambio lo que puede ver un rol. Es la señal con la que la aplicacion vuelve a pedir sus
+     * permisos y rehace el menu sin cerrar sesion.
+     *
+     * Hace falta por lo mismo que {@link #TIPO_ASIGNACION}: el cliente guarda sus permisos en
+     * disco para que el menu no parpadee al arrancar, y sin un aviso esa copia se queda vieja
+     * hasta que el usuario cierra y vuelve a abrir. En un telefono eso puede ser dias.
+     */
+    public static final String TIPO_PERMISOS = "PERMISOS_CAMBIADOS";
+
     /** Estados de hilo para OBSERVACION_ADMIN. */
     public static final String HILO_ABIERTA = "ABIERTA";
     public static final String HILO_RESPONDIDA = "RESPONDIDA";

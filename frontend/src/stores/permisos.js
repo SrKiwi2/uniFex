@@ -45,38 +45,62 @@ export const usePermisosStore = defineStore('permisos', () => {
     }
   }
 
-  /** Idempotente: la primera llamada pide, las demas comparten la misma peticion. */
+  /**
+   * Idempotente: la primera llamada pide, las demas comparten la misma peticion.
+   *
+   * Si falla, la promesa se SUELTA. Antes se quedaba memorizada para siempre, asi que un
+   * unico fallo de red al arrancar —lo normal en un telefono que aun no engancho el wifi—
+   * dejaba los permisos sin cargar durante toda la sesion, sin un solo reintento.
+   */
   function asegurar() {
     if (promesa) return promesa;
     hidratar();
     promesa = (async () => {
       try {
         const r = await apiFetch('/api/app/permisos/mias');
-        if (!r.ok) return;
+        if (!r.ok) throw new Error(`El servidor respondio ${r.status}`);
         const d = await r.json();
         pantallas.value = new Set(d.pantallas || []);
         loVeTodo.value = Boolean(d.loVeTodo);
         cargado.value = true;
         guardar();
       } catch {
-        // Sin red se sigue con lo que hubiera en disco. Es preferible un menu de hace un rato
-        // a uno vacio: lo que protege de verdad esta en el servidor, no aqui.
+        // Sin red se sigue con lo que hubiera en disco, si lo habia. Lo que no se puede es
+        // dar el intento por cerrado: se suelta la promesa para que el siguiente lo repita.
+        promesa = null;
       }
     })();
     return promesa;
   }
 
+  /** Vuelve a preguntar, ignorando la copia en disco. La usa el aviso de cambio de permisos. */
+  function recargar() {
+    promesa = null;
+    cargado.value = false;
+    return asegurar();
+  }
+
   /**
    * ¿Puede ver esta pantalla?
    *
-   * Mientras no se sepa (primer arranque, sin copia en disco) se responde que SI. Es
-   * deliberado: decir que no dejaria al usuario mirando un menu vacio durante la primera
-   * peticion, y entrar a una ruta que no le toca no le da acceso a nada — el servidor
-   * responde 403 igual.
+   * Mientras no se sepa, se responde que NO —salvo Inicio, para que la aplicacion no quede
+   * inservible— y esto es un cambio a conciencia respecto de como estaba antes.
+   *
+   * Antes se respondia que SI, con el argumento de que esconder un enlace no protege nada y
+   * el servidor responde 403 igual. Lo segundo sigue siendo cierto; lo primero resulto ser el
+   * problema. En el APK, si la peticion de permisos fallaba —telefono sin señal al abrir, que
+   * es la situacion normal— el usuario se quedaba con TODO el menu a la vista: un vendedor
+   * veia Usuarios, Roles y el Editor del plano. No podia hacer nada con ellos, pero la
+   * aplicacion le estaba mintiendo sobre lo que es su trabajo, y eso se reporto como un fallo
+   * grave y con razon.
+   *
+   * El coste de fallar cerrado es un parpadeo en el PRIMER arranque de cada instalacion. Del
+   * segundo en adelante la copia en disco lo evita: `hidratar()` deja `cargado` en true antes
+   * de que conteste el servidor.
    */
   const puedeVer = computed(() => (clave) => {
     if (loVeTodo.value) return true;
-    if (!cargado.value) return true;
+    if (!cargado.value) return clave === 'inicio';
     return pantallas.value.has(clave);
   });
 
@@ -92,5 +116,5 @@ export const usePermisosStore = defineStore('permisos', () => {
     }
   }
 
-  return { pantallas, loVeTodo, cargado, asegurar, puedeVer, limpiar };
+  return { pantallas, loVeTodo, cargado, asegurar, recargar, puedeVer, limpiar };
 });

@@ -36,9 +36,28 @@ onUnmounted(() => window.removeEventListener('keydown', onTecla));
   position: fixed; inset: 0; z-index: 900; display: grid; place-items: center; padding: calc(1rem + var(--safe-top)) calc(1rem + var(--safe-right)) calc(1rem + var(--safe-bottom)) calc(1rem + var(--safe-left));
   background: rgba(2, 6, 23, 0.5); backdrop-filter: blur(2px);
 }
-.dialogo { width: 100%; max-height: 90vh; overflow: auto; box-shadow: var(--sombra-md); }
-.cabecera { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.1rem 0.6rem; }
-.cabecera h2 { margin: 0; font-size: 1.15rem; }
-.cuerpo { padding: 0.4rem 1.1rem 1rem; display: flex; flex-direction: column; gap: 0.8rem; }
-.pie { display: flex; justify-content: flex-end; gap: 0.5rem; padding: 0.8rem 1.1rem; border-top: 1px solid var(--border); }
+/*
+ * Se desplaza el CUERPO, no el dialogo entero.
+ *
+ * Con `overflow: auto` en el dialogo, el titulo y los botones del pie se iban hacia arriba
+ * junto con el contenido. En una ficha larga —la de una venta, con entidad, casetas y
+ * responsables— eso dejaba los botones de imprimir y compartir escondidos al final de un
+ * desplazamiento, que es justo lo contrario de tenerlos a mano.
+ */
+.dialogo {
+  width: 100%; max-height: 90vh; box-shadow: var(--sombra-md);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.cabecera { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.1rem 0.6rem; }
+.cabecera h2 { margin: 0; font-size: 1.15rem; overflow-wrap: anywhere; }
+.cuerpo { flex: 1; min-height: 0; overflow: auto; padding: 0.4rem 1.1rem 1rem; display: flex; flex-direction: column; gap: 0.8rem; }
+.pie { flex: none; display: flex; justify-content: flex-end; gap: 0.5rem; flex-wrap: wrap; padding: 0.8rem 1.1rem; border-top: 1px solid var(--border); }
+
+/* En el telefono el dialogo ocupa casi toda la pantalla y los botones del pie van a lo ancho:
+   tres botones con palabras no caben en una fila de 400 px sin quedar en dos letras. */
+@media (max-width: 560px) {
+  .dialogo { max-height: 92vh; }
+  .pie { flex-direction: column-reverse; }
+  .pie > * { width: 100%; }
+}
 </style>

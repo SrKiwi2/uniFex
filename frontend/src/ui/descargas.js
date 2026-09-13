@@ -89,6 +89,52 @@ function aBase64(blob) {
  * tienen que ser los mismos se pida desde donde se pida: al registrar la venta o despues desde
  * "Mis ventas".
  */
+/**
+ * Compartir el recibo por WhatsApp, correo o lo que el telefono tenga.
+ *
+ * Es lo que de verdad se hace con el papel: el cliente casi nunca quiere un PDF en la carpeta
+ * Documentos del telefono del VENDEDOR, quiere el recibo en su WhatsApp. Bajarlo y luego
+ * buscarlo en el gestor de archivos para adjuntarlo son cuatro pasos que sobran.
+ *
+ * En el APK se escribe primero en Cache —no en Documentos: aqui el archivo es un intermedio
+ * para el envio, no algo que el vendedor vaya a buscar despues— y se comparte su ruta. En la
+ * web se usa la API del navegador si acepta archivos; donde no (escritorio, sobre todo) se
+ * cae a la descarga de siempre, que es un resultado util y no un error.
+ */
+export async function compartirRecibo(inscripcionId) {
+  const nombre = `nota-venta-${inscripcionId}.pdf`;
+  try {
+    const r = await apiFetch(`/api/app/inscripciones/${inscripcionId}/recibo`);
+    if (!r.ok) throw new Error('El servidor no devolvió el recibo');
+    const blob = await r.blob();
+
+    if (esNativo()) {
+      const { Filesystem, Directory } = await import('@capacitor/filesystem');
+      const { Share } = await import('@capacitor/share');
+      const { uri } = await Filesystem.writeFile({
+        path: nombre, data: await aBase64(blob), directory: Directory.Cache, recursive: true,
+      });
+      await Share.share({ title: 'Recibo de la venta', url: uri });
+      return true;
+    }
+
+    const archivo = new File([blob], nombre, { type: 'application/pdf' });
+    if (navigator.canShare?.({ files: [archivo] })) {
+      await navigator.share({ files: [archivo], title: 'Recibo de la venta' });
+      return true;
+    }
+    // Sin compartir nativo, bajarlo es lo mas parecido a lo que pidio.
+    guardarEnElNavegador(blob, nombre);
+    toast('Tu navegador no puede compartir archivos: el recibo se descargó', 'info');
+    return true;
+  } catch (e) {
+    // Cancelar el menu de compartir lanza AbortError. No es un fallo y no se avisa de nada.
+    if (e?.name === 'AbortError') return false;
+    toast(`No se pudo compartir el recibo: ${e.message}`, 'error');
+    return false;
+  }
+}
+
 export async function descargarRecibo(inscripcionId) {
   try {
     const res = await descargarPdf(`/api/app/inscripciones/${inscripcionId}/recibo`,

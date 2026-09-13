@@ -15,6 +15,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import com.usic.uniFex.model.service.EdicionVentaService;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -56,6 +58,7 @@ public class InscripcionApiController {
 
     private final IInscripcionService inscripcionService;
     private final RegistroVentaService registroVenta;
+    private final EdicionVentaService edicionVenta;
     private final ReciboPdfService reciboPdfService;
     private final CancelarInscripcionService cancelarInscripcion;
     private final ResponsableFotoService responsableFoto;
@@ -258,6 +261,103 @@ public class InscripcionApiController {
         if (veto != null) return veto;
 
         Map<String, Object> cuerpo = new LinkedHashMap<>();
+        cuerpo.put("responsables", responsableFoto.listar(id));
+        cuerpo.put("fotosCompletas", responsableFoto.fotosCompletas(id));
+        return ResponseEntity.ok(cuerpo);
+    }
+
+    /**
+     * Corrige los datos de la entidad y de su responsable legal.
+     *
+     * Es PATCH y no PUT a proposito: llegan solo los campos que se tocaron, y un campo ausente
+     * se deja como estaba. Con PUT, un formulario que no mande el NIT lo borraria.
+     */
+    @PatchMapping("/{id}/entidad")
+    public ResponseEntity<Map<String, Object>> editarEntidad(
+            @PathVariable Long id,
+            @RequestBody EdicionVentaService.DatosEntidad datos) {
+        ResponseEntity<Map<String, Object>> veto = comprobarAcceso(id);
+        if (veto != null) return veto;
+
+        EdicionVentaService.Resultado r = edicionVenta.editarEntidad(id, datos, usuarioActual());
+        return r.ok()
+                ? ResponseEntity.ok(Map.of("ok", true, "mensaje", r.mensaje()))
+                : ResponseEntity.badRequest().body(Map.of("ok", false, "mensaje", r.mensaje()));
+    }
+
+    /** Corrige los datos de una persona responsable de esta venta. */
+    @PatchMapping("/{id}/responsables/{responsableId}")
+    public ResponseEntity<Map<String, Object>> editarResponsable(
+            @PathVariable Long id,
+            @PathVariable Long responsableId,
+            @RequestBody EdicionVentaService.DatosResponsable datos) {
+        ResponseEntity<Map<String, Object>> veto = comprobarAcceso(id);
+        if (veto != null) return veto;
+
+        EdicionVentaService.Resultado r =
+                edicionVenta.editarResponsable(id, responsableId, datos, usuarioActual());
+        return r.ok()
+                ? ResponseEntity.ok(Map.of("ok", true, "mensaje", r.mensaje()))
+                : ResponseEntity.badRequest().body(Map.of("ok", false, "mensaje", r.mensaje()));
+    }
+
+    /**
+     * Todo lo que la ficha de una venta necesita, en UNA peticion.
+     *
+     * Antes hacian falta tres —datos, casetas y responsables— y en un telefono con la red de la
+     * feria eso son tres esperas antes de poder mirar nada. Aqui no hay consulta nueva: se
+     * juntan las que ya existian.
+     */
+    @GetMapping("/{id}/detalle")
+    public ResponseEntity<Map<String, Object>> ficha(@PathVariable Long id) {
+        ResponseEntity<Map<String, Object>> veto = comprobarAcceso(id);
+        if (veto != null) return veto;
+
+        Inscripcion i = inscripcionService.findById(id);
+        if (i == null) {
+            return ResponseEntity.status(404).body(Map.of("ok", false, "mensaje", "La venta no existe"));
+        }
+        var e = i.getEntidad();
+
+        Map<String, Object> entidad = new LinkedHashMap<>();
+        entidad.put("nombre", e == null ? "" : e.getNombre());
+        entidad.put("nit", e == null ? "" : e.getNit());
+        entidad.put("descripcion", e == null ? "" : e.getDescripcion());
+        entidad.put("tipo", e == null || e.getTipoEntidad() == null ? "" : e.getTipoEntidad().getNombre());
+        entidad.put("representanteLegal", e == null ? "" : e.getRepresentanteLegal());
+        entidad.put("ciRepresentante", e == null ? "" : e.getCiRepresentante());
+        entidad.put("celularRepresentante", e == null ? "" : e.getCelularRepresentante());
+
+        Map<String, Object> pago = new LinkedHashMap<>();
+        pago.put("contado", i.isPagoContado());
+        pago.put("entidadBancaria", i.getEntidadBancaria());
+        pago.put("numComprobante", i.getNumComprobante());
+        // El comprobante hace falta SIEMPRE, tambien al contado: es lo que decide si se puede
+        // emitir la credencial. La ficha tiene que decirlo sin que haya que deducirlo.
+        pago.put("conComprobante", i.getImgComprobante() != null && !i.getImgComprobante().isBlank());
+        pago.put("comprobanteUrl", i.getImgComprobante() == null || i.getImgComprobante().isBlank()
+                ? null : "/files/" + i.getImgComprobante());
+
+        List<Map<String, Object>> casetas = i.getInscripcionPuestos().stream()
+                .filter(ip -> ip.getPuesto() != null
+                        && !"X".equalsIgnoreCase(String.valueOf(ip.getEstado())))
+                .map(ip -> {
+                    Map<String, Object> c = new LinkedHashMap<>();
+                    c.put("codigo", ip.getPuesto().getCodigo());
+                    c.put("categoria", ip.getPuesto().getCategoria() == null
+                            ? "" : ip.getPuesto().getCategoria().getNombre());
+                    c.put("color", ip.getPuesto().getCategoria() == null
+                            ? null : ip.getPuesto().getCategoria().getColor());
+                    return c;
+                })
+                .toList();
+
+        Map<String, Object> cuerpo = new LinkedHashMap<>();
+        cuerpo.put("ok", true);
+        cuerpo.put("id", i.getId());
+        cuerpo.put("entidad", entidad);
+        cuerpo.put("pago", pago);
+        cuerpo.put("casetas", casetas);
         cuerpo.put("responsables", responsableFoto.listar(id));
         cuerpo.put("fotosCompletas", responsableFoto.fotosCompletas(id));
         return ResponseEntity.ok(cuerpo);
