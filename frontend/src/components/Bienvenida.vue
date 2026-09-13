@@ -25,14 +25,31 @@ const emit = defineEmits(['fin']);
 // casualidad). BASE_URL trae el prefijo correcto en cada entorno.
 const BASE = import.meta.env.BASE_URL;
 
-/** Lo que dura en pantalla antes de empezar a irse. Optimizado: más rápido para mejor UX. */
-const VISIBLE_MS = 900;
+/**
+ * Lo que dura EN PANTALLA CON EL LOGO YA VISIBLE, no desde que arranca el componente.
+ *
+ * La diferencia es todo el problema que se reporto: el logo es una imagen y en un telefono
+ * modesto tarda en descargarse y decodificarse. Contando desde el arranque, esos milisegundos
+ * se los comia la espera y la animacion se veia a medias, o el logo aparecia justo cuando la
+ * pantalla ya se estaba yendo. Ahora la cuenta empieza cuando la imagen esta lista, asi que
+ * se ve completa siempre, en un telefono rapido y en uno lento.
+ */
+const VISIBLE_MS = 1400;
 /** Lo que tarda en desvanecerse; tiene que coincidir con la transición del CSS. */
 const SALIDA_MS = 300;
+/**
+ * Tope de espera por la imagen. Si no llega —sin red en el primer arranque, archivo que
+ * falta— la aplicacion NO se queda mirando una pantalla negra: sigue igual. La bienvenida es
+ * un adorno y nunca puede ser lo que impide entrar.
+ */
+const ESPERA_MAX_MS = 2500;
 
 const saliendo = ref(false);
+const logo = ref(null);
 let tVisible = null;
 let tSalida = null;
+let tTope = null;
+let arrancada = false;
 
 function terminar() {
   if (saliendo.value) return;
@@ -40,13 +57,31 @@ function terminar() {
   tSalida = setTimeout(() => emit('fin'), SALIDA_MS);
 }
 
-onMounted(() => {
+/** Empieza la cuenta atras. Se llama desde la imagen o desde el tope, lo que pase antes. */
+function arrancarCuenta() {
+  if (arrancada) return;
+  arrancada = true;
+  clearTimeout(tTope);
   tVisible = setTimeout(terminar, VISIBLE_MS);
+}
+
+onMounted(async () => {
+  // Por si la imagen ya estaba en cache: entonces `load` no vuelve a dispararse.
+  const img = logo.value;
+  if (img?.complete && img.naturalWidth > 0) {
+    arrancarCuenta();
+  } else if (img?.decode) {
+    // `decode()` espera a que este DESCODIFICADA, no solo descargada. Sin eso, en un telefono
+    // lento el primer fotograma aun puede pintarse sin la imagen.
+    img.decode().then(arrancarCuenta).catch(arrancarCuenta);
+  }
+  tTope = setTimeout(arrancarCuenta, ESPERA_MAX_MS);
 });
 
 onUnmounted(() => {
   clearTimeout(tVisible);
   clearTimeout(tSalida);
+  clearTimeout(tTope);
 });
 </script>
 
@@ -54,7 +89,11 @@ onUnmounted(() => {
   <div class="bienvenida" :class="{ saliendo }" @click="terminar" role="presentation">
     <div class="halo"></div>
     <div class="marca">
-      <img :src="`${BASE}logo-fexpo.png`" alt="FEXPO UAP" width="640" height="433" />
+      <!-- `fetchpriority=high` y sin `loading=lazy`: es lo unico que hay en pantalla, asi
+           que compite con el resto del arranque por el ancho de banda y tiene que ganar. -->
+      <img ref="logo" :src="`${BASE}logo-fexpo.png`" alt="FEXPO UAP"
+           width="640" height="433" fetchpriority="high" decoding="async"
+           @load="arrancarCuenta" @error="arrancarCuenta" />
       <div class="barra"><span></span></div>
     </div>
   </div>

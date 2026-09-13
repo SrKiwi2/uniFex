@@ -11,6 +11,11 @@
     <link rel="icon" type="image/png" sizes="32x32" href="%BASE_URL%favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="%BASE_URL%favicon-16.png" />
     <link rel="apple-touch-icon" href="%BASE_URL%apple-touch-icon.png" />
+    <!-- El logo de la bienvenida se pide YA, antes de que el navegador termine de leer y
+         ejecutar el paquete de JavaScript que lo iba a pedir. Son 230 KB y es lo unico que
+         se ve en los primeros segundos: sin esto, en un telefono modesto la animacion se
+         quedaba esperando su propia imagen. -->
+    <link rel="preload" as="image" href="%BASE_URL%logo-fexpo.png" fetchpriority="high" />
     <meta name="theme-color" content="#083D14" />
     <!-- `viewport-fit=cover` no es decorativo: sin el, env(safe-area-inset-*) devuelve 0 y
          TODO el codigo que ya lo usaba (barra inferior, avisos) no hacia nada. Desde que el
@@ -20,6 +25,38 @@
     <title>FEXPO UAP — Casetas</title>
   </head>
   <body>
+    <!--
+      Arranque INMEDIATO, sin esperar a Vue.
+
+      Esto no duplica la bienvenida por gusto. El componente Vue no existe hasta que el
+      navegador descarga, analiza y ejecuta el paquete de JavaScript, y en un telefono modesto
+      con la red de la feria eso es un rato mirando una pantalla en blanco: la animacion "a
+      veces no se veia" porque llegaba tarde a su propio arranque. Este bloque esta en el HTML,
+      asi que se pinta con el primer fotograma, antes de que exista ningun script.
+
+      Es el mismo negro y el mismo logo que el componente, asi que el relevo no tiene costura.
+      Lo quita `App.vue` en cuanto monta.
+    -->
+    <div id="arranque">
+      <img src="%BASE_URL%logo-fexpo.png" alt="FEXPO UAP" width="640" height="433"
+           fetchpriority="high" />
+    </div>
+    <style>
+      #arranque {
+        position: fixed; inset: 0; z-index: 3100;
+        display: grid; place-items: center;
+        background: #000;
+      }
+      #arranque img { width: min(72vw, 420px); height: auto; }
+      /* Respira despacio: quieto parece colgado, y con red lenta se mira varios segundos. */
+      @media (prefers-reduced-motion: no-preference) {
+        #arranque img { animation: latido 1.8s ease-in-out infinite; }
+        @keyframes latido {
+          0%, 100% { opacity: 0.85; transform: scale(1); }
+          50%      { opacity: 1;    transform: scale(1.03); }
+        }
+      }
+    </style>
     <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
   </body>

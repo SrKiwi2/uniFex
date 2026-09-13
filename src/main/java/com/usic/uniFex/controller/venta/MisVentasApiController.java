@@ -35,6 +35,7 @@ import lombok.RequiredArgsConstructor;
 public class MisVentasApiController {
 
     private final FuncionesInscripcion funciones;
+    private final com.usic.uniFex.model.dao.IInscripcionDao inscripcionDao;
 
     /** Listado de ventas del usuario + un resumen (cuántas inscripciones y el total vendido). */
     @GetMapping
@@ -55,16 +56,30 @@ public class MisVentasApiController {
                 .distinct()
                 .count();
 
+        /*
+         * Que le falta a cada venta, para que la LISTA lo pueda marcar.
+         *
+         * Sin esto habia que abrir cada venta para descubrir si tenia el comprobante o si a
+         * algun responsable le faltaba la foto, y en una feria con decenas de ventas eso es
+         * trabajo que nadie hace. Va en una sola consulta, no una por fila.
+         */
+        List<Map<String, Object>> pendientes = new java.util.ArrayList<>();
+        for (Object[] f : inscripcionDao.pendientesPorVenta(uid)) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", ((Number) f[0]).longValue());
+            m.put("conComprobante", Boolean.TRUE.equals(f[1]));
+            m.put("sinFoto", f[2] == null ? 0 : ((Number) f[2]).intValue());
+            pendientes.add(m);
+        }
+
         // OJO: aqui NO se puede usar Map.of(). Rechaza valores null con NullPointerException,
-        // y `edicion` es null en el caso normal (sin ?edicion=, que significa "la edicion
-        // activa"). Esa NPE se convertia en un 500 que la cadena web transformaba en un 302
-        // al login: el navegador seguia la redireccion a otro origen y el vendedor solo veia
-        // un error de CORS y "NetworkError". Un LinkedHashMap si admite el null.
+        // y `edicion` es null en el caso normal.
         Map<String, Object> cuerpo = new LinkedHashMap<>();
         cuerpo.put("cantidad", inscripciones);
         cuerpo.put("total", total);
         cuerpo.put("edicion", edicion);
         cuerpo.put("items", items);
+        cuerpo.put("pendientes", pendientes);
         return ResponseEntity.ok(cuerpo);
     }
 

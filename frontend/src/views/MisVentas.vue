@@ -3,6 +3,9 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 import { apiFetch } from '../api';
 import { toast } from '../ui/toast';
 import { descargarRecibo, compartirRecibo } from '../ui/descargas';
+import { alerta, aviso } from '../ui/alerta';
+import { mostrarCarga, ocultarCarga } from '../ui/cargando';
+import { url as urlApi } from '../config';
 import { usePuestosStore } from '../stores/puestos.js';
 import UiModal from '../components/UiModal.vue';
 import FotosResponsables from '../components/FotosResponsables.vue';
@@ -26,6 +29,24 @@ const enviando = ref(false);       // peticion de solicitud en vuelo
 const cancelandoId = ref(null);    // venta cuya cancelacion (ya aprobada) esta en vuelo
 
 const bs = (n) => 'Bs ' + Number(n || 0).toLocaleString('es-BO', { minimumFractionDigits: 2 });
+
+/** Por inscripcion: { conComprobante, sinFoto }. Lo manda el listado. */
+const faltantes = ref({});
+
+/**
+ * Que le falta a esta venta, en palabras cortas y en orden de urgencia.
+ *
+ * Sin el comprobante no se emite ninguna credencial, asi que va primero. La lista lo enseña
+ * para que no haga falta abrir venta por venta a ver cual tiene trabajo pendiente.
+ */
+function faltaDe(id) {
+  const f = faltantes.value[id];
+  if (!f) return [];
+  const falta = [];
+  if (!f.conComprobante) falta.push('comprobante');
+  if (f.sinFoto > 0) falta.push(f.sinFoto === 1 ? '1 foto' : `${f.sinFoto} fotos`);
+  return falta;
+}
 
 /** Nombre de la edición que se está mostrando (para el encabezado). */
 const edicionVisible = computed(() => {
@@ -70,6 +91,11 @@ async function cargar() {
     const d = await r.json();
     items.value = d.items || [];
     resumen.value = { cantidad: d.cantidad || 0, total: d.total || 0 };
+    // Lo que le falta a cada venta, para poder marcarlo EN LA LISTA. Llega en la misma
+    // respuesta: preguntarlo por fila serian decenas de peticiones.
+    const m = {};
+    for (const p of d.pendientes || []) m[p.id] = p;
+    faltantes.value = m;
   } catch (e) {
     toast(e.message, 'error');
   } finally {
@@ -194,6 +220,8 @@ async function confirmarSubidaComprobante(archivo) {
   if (!archivo || !id) return;
 
   subiendo.value = id;
+  // Subir una foto con la red de la feria puede tardar bastante y no hay nada que lo delate.
+  mostrarCarga('Subiendo el comprobante…');
   try {
     const datos = new FormData();
     datos.append('archivo', archivo);
@@ -201,13 +229,15 @@ async function confirmarSubidaComprobante(archivo) {
       method: 'POST', body: datos,
     });
     const d = await r.json().catch(() => ({}));
-    if (!r.ok || !d.ok) { toast(d.mensaje || 'No se pudo subir el comprobante', 'error'); return; }
-    toast('Comprobante adjuntado', 'ok');
+    if (!r.ok || !d.ok) { await alerta(d.mensaje || 'No se pudo subir el comprobante', 'error', 0); return; }
     await cargarPendientes();
     if (ficha.value?.id === id) await abrirFicha(id);
+    ocultarCarga();
+    await aviso('Ya consta el comprobante de pago de esta venta.', 'ok', 3000, 'Comprobante adjuntado');
   } catch (e) {
-    toast(e.message, 'error');
+    await alerta(e.message, 'error', 0);
   } finally {
+    ocultarCarga();
     subiendo.value = null;
     idParaComprobante.value = null;
     archivoSeleccionado.value = null;
@@ -240,17 +270,21 @@ const editando = ref(null);      // 'entidad' | id del responsable | null
 const guardando = ref(false);
 const borrador = reactive({});
 
+/** El comprobante que ya se subió, a tamaño mirable. Antes solo se podía reemplazar. */
+const verComprobante = ref(false);
+
 async function abrirFicha(id) {
   ficha.value = null;
   cargandoFicha.value = true;
   editando.value = null;
+  verComprobante.value = false;
   try {
     const r = await apiFetch(`/api/app/inscripciones/${id}/detalle`);
     const d = await r.json().catch(() => ({}));
-    if (!r.ok || d.ok === false) { toast(d.mensaje || 'No se pudo abrir la venta', 'error'); return; }
+    if (!r.ok || d.ok === false) { await alerta(d.mensaje || 'No se pudo abrir la venta', 'error', 0); return; }
     ficha.value = d;
   } catch (e) {
-    toast(e.message, 'error');
+    await alerta(e.message, 'error', 0);
   } finally {
     cargandoFicha.value = false;
   }
@@ -294,20 +328,25 @@ async function guardarEdicion() {
   const id = ficha.value.id;
   const esEntidad = editando.value === 'entidad';
   guardando.value = true;
+  mostrarCarga('Guardando los cambios…');
   try {
     const ruta = esEntidad
       ? `/api/app/inscripciones/${id}/entidad`
       : `/api/app/inscripciones/${id}/responsables/${editando.value}`;
     const r = await apiFetch(ruta, { method: 'PATCH', body: JSON.stringify({ ...borrador }) });
     const d = await r.json().catch(() => ({}));
-    if (!r.ok || d.ok === false) { toast(d.mensaje || 'No se pudo guardar', 'error'); return; }
-    toast(d.mensaje || 'Guardado', 'ok');
+    if (!r.ok || d.ok === false) { await alerta(d.mensaje || 'No se pudo guardar', 'error', 0); return; }
     editando.value = null;
     // Se recarga la ficha y la lista: el nombre de la entidad sale en las dos.
     await Promise.all([abrirFicha(id), cargar()]);
+    ocultarCarga();
+    await aviso(esEntidad ? 'Los datos de la entidad quedaron actualizados.'
+                          : 'Los datos del responsable quedaron actualizados.',
+                'ok', 3000, 'Cambios guardados');
   } catch (e) {
-    toast(e.message, 'error');
+    await alerta(e.message, 'error', 0);
   } finally {
+    ocultarCarga();
     guardando.value = false;
   }
 }
@@ -316,6 +355,10 @@ async function guardarEdicion() {
 function comprobanteDesdeFicha() {
   if (ficha.value) elegirComprobante(ficha.value.id);
 }
+
+/** El backend devuelve `/files/...`; en el APK hay que anteponerle el servidor. */
+const urlArchivo = (ruta) => (ruta ? urlApi(ruta) : '');
+const esPdf = (ruta) => /\.pdf($|\?)/i.test(ruta || '');
 
 /** Cuantos responsables no tienen foto todavia: es lo que frena la credencial. */
 const sinFoto = computed(() =>
@@ -424,9 +467,13 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
         Aún no tienes ventas confirmadas.
       </div>
       <ul v-else class="ventas">
-        <li v-for="ins in inscripciones" :key="ins.id" class="venta" @click="abrirFicha(ins.id)">
+        <li v-for="ins in inscripciones" :key="ins.id" class="venta"
+            :class="{ pendiente: faltaDe(ins.id).length }" @click="abrirFicha(ins.id)">
           <div class="principal">
             <strong class="nombre">{{ ins.entidad }}</strong>
+            <!-- Que le falta, dicho en la propia fila. Antes habia que abrir cada venta para
+                 descubrirlo, y con decenas de ventas eso no lo hace nadie. -->
+            <span v-for="f in faltaDe(ins.id)" :key="f" class="badge badge-danger">falta {{ f }}</span>
             <span v-if="solicitudes[ins.id]" class="badge solicitud"
                   :class="`solicitud-${solicitudes[ins.id].estado.toLowerCase()}`"
                   :title="solicitudes[ins.id].respuesta || solicitudes[ins.id].motivo">
@@ -458,7 +505,7 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
       <div v-if="cargandoFicha" class="vacio">Cargando…</div>
       <div v-else-if="ficha" class="ficha">
         <!-- Lo que falta, primero: es sobre lo que hay que actuar. -->
-        <div v-if="!ficha.pago.conComprobante || sinFoto" class="pendiente">
+        <div v-if="!ficha.pago.conComprobante || sinFoto" class="falta-credencial">
           <strong>Falta para la credencial:</strong>
           <ul>
             <li v-if="!ficha.pago.conComprobante">el comprobante de pago</li>
@@ -467,9 +514,9 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
         </div>
 
         <!-- ENTIDAD -->
-        <section class="grupo">
+        <section class="grupo g-entidad">
           <header>
-            <h3>Entidad</h3>
+            <h3><span class="ico">🏢</span>Entidad</h3>
             <button v-if="editando !== 'entidad'" class="btn btn-fantasma btn-sm"
                     @click="editarEntidad">✏️ Modificar</button>
           </header>
@@ -511,8 +558,8 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
         </section>
 
         <!-- CASETAS -->
-        <section class="grupo">
-          <header><h3>Casetas</h3></header>
+        <section class="grupo g-casetas">
+          <header><h3><span class="ico">🏬</span>Casetas</h3></header>
           <div v-if="!ficha.casetas.length" class="muted">Sin casetas registradas.</div>
           <div v-else class="puestos">
             <span v-for="(c, i) in ficha.casetas" :key="i" class="chip-puesto"
@@ -522,9 +569,48 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
           </div>
         </section>
 
+        <!-- PAGO Y COMPROBANTE -->
+        <section class="grupo g-pago">
+          <header>
+            <h3><span class="ico">🧾</span>Pago</h3>
+            <span class="badge" :class="ficha.pago.conComprobante ? 'badge-ok' : 'badge-danger'">
+              {{ ficha.pago.conComprobante ? 'con comprobante' : 'sin comprobante' }}
+            </span>
+          </header>
+          <dl class="datos">
+            <div><dt>Forma</dt><dd>{{ ficha.pago.contado ? 'Al contado' : 'Crédito' }}</dd></div>
+            <div v-if="ficha.pago.entidadBancaria"><dt>Banco</dt><dd>{{ ficha.pago.entidadBancaria }}</dd></div>
+            <div v-if="ficha.pago.numComprobante"><dt>N.º comprobante</dt><dd>{{ ficha.pago.numComprobante }}</dd></div>
+          </dl>
+
+          <!-- El comprobante SE VE. Antes solo se ofrecia reemplazarlo, asi que no habia forma
+               de comprobar que lo subido fuera lo correcto sin bajarlo por otro camino. -->
+          <div v-if="ficha.pago.conComprobante" class="comprobante">
+            <button class="btn btn-sm" @click="verComprobante = !verComprobante">
+              {{ verComprobante ? 'Ocultar comprobante' : '👁 Ver comprobante' }}
+            </button>
+            <a class="btn btn-fantasma btn-sm" :href="urlArchivo(ficha.pago.comprobanteUrl)"
+               target="_blank" rel="noopener">Abrir aparte</a>
+            <div v-if="verComprobante" class="visor-comp">
+              <img v-if="!esPdf(ficha.pago.comprobanteUrl)" :src="urlArchivo(ficha.pago.comprobanteUrl)"
+                   alt="Comprobante de pago" />
+              <p v-else class="muted">
+                El comprobante es un PDF. Tócalo en «Abrir aparte» para verlo.
+              </p>
+            </div>
+          </div>
+          <p v-else class="muted">
+            Todavía no se subió el comprobante. Sin él no se puede emitir la credencial.
+          </p>
+        </section>
+
         <!-- RESPONSABLES -->
-        <section class="grupo">
-          <header><h3>Responsables</h3></header>
+        <section class="grupo g-responsables">
+          <header>
+            <h3><span class="ico">👥</span>Responsables</h3>
+            <span v-if="sinFoto" class="badge badge-danger">{{ sinFoto }} sin foto</span>
+            <span v-else-if="ficha.responsables.length" class="badge badge-ok">fotos completas</span>
+          </header>
           <div v-if="!ficha.responsables.length" class="muted">Sin responsables registrados.</div>
           <ul v-else class="responsables">
             <li v-for="r in ficha.responsables" :key="r.id">
@@ -630,6 +716,12 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
   padding: 0.85rem 1.1rem; border-bottom: 1px solid var(--border); cursor: pointer;
 }
 .venta:last-child { border-bottom: none; }
+/* Franja ambar a la izquierda: se recorre la lista con la vista y las que tienen trabajo
+   pendiente saltan sin tener que leer las insignias una por una. */
+.venta.pendiente {
+  border-left: 4px solid var(--tramite);
+  background: color-mix(in srgb, var(--tramite) 5%, transparent);
+}
 .venta:hover, .venta:focus-within { background: var(--panel-2); }
 .principal { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; min-width: 0; }
 .nombre { font-size: 1.02rem; }
@@ -644,14 +736,47 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
 
 /* ---- ficha de la venta ---- */
 .ficha { display: flex; flex-direction: column; gap: 1.1rem; }
-.pendiente {
+/*
+ * OJO con el nombre: esta clase se llamaba `.pendiente` a secas y chocaba con `.venta.pendiente`
+ * de la lista. El selector sin calificar alcanzaba tambien a las filas, asi que una venta con
+ * trabajo pendiente salia con el nombre de la entidad y el importe en ROJO, como si la venta
+ * estuviera mal. Dos cosas distintas no pueden compartir un nombre tan generico.
+ */
+.falta-credencial {
   padding: 0.7rem 0.9rem; border-radius: var(--radio-sm);
   background: var(--danger-suave); color: var(--danger); font-size: 0.9rem;
 }
-.pendiente ul { margin: 0.25rem 0 0; padding-left: 1.1rem; }
-.grupo { display: flex; flex-direction: column; gap: 0.6rem; }
-.grupo > header { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
-.grupo h3 { margin: 0; font-size: 0.95rem; }
+.falta-credencial ul { margin: 0.25rem 0 0; padding-left: 1.1rem; }
+/*
+ * Cada bloque con su color y su icono.
+ *
+ * La ficha lleva cuatro cosas distintas —quien es, que compro, si pago y quien atiende— y
+ * puestas una detras de otra en el mismo gris se leian como un muro. La franja de color de la
+ * izquierda y el icono dan el "donde estoy" de un vistazo, sin tener que leer el titulo.
+ */
+.grupo {
+  display: flex; flex-direction: column; gap: 0.6rem;
+  padding: 0.75rem 0.9rem; border-radius: var(--radio-sm);
+  background: var(--panel-2); border-left: 3px solid var(--borde-grupo, var(--border));
+}
+.grupo > header { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
+.grupo h3 {
+  margin: 0; font-size: 0.95rem; display: flex; align-items: center; gap: 0.45rem;
+  color: var(--borde-grupo, var(--texto));
+}
+.grupo h3 .ico { font-size: 1.05rem; }
+.g-entidad      { --borde-grupo: var(--acento); }
+.g-casetas      { --borde-grupo: #0ea5e9; }
+.g-pago         { --borde-grupo: var(--tramite); }
+.g-responsables { --borde-grupo: #a855f7; }
+
+/* ---- comprobante ---- */
+.comprobante { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.visor-comp { flex-basis: 100%; margin-top: 0.3rem; }
+.visor-comp img {
+  width: 100%; max-height: 60vh; object-fit: contain;
+  border-radius: var(--radio-sm); border: 1px solid var(--border); background: var(--panel);
+}
 .datos { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin: 0; }
 .datos dt { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 700; }
 .datos dd { margin: 0.1rem 0 0; font-size: 0.93rem; overflow-wrap: anywhere; }

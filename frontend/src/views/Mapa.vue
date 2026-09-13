@@ -123,7 +123,13 @@ const sinHabilitadas = computed(() =>
   && ![...tienda.asignaciones.values()].some((a) => a.vendedorId === auth.id));
 
 /** ¿La reserva en tramite de esta caseta es de quien esta mirando? */
-const esMia = (p) => p.estado === 'T' && p.reservadoPor != null && p.reservadoPor === auth.id;
+/*
+ * `Number(...)` en los dos lados a proposito: el id viaja por JSON y por localStorage, y de
+ * ahi puede volver como texto. Con `===` estricto, "12" y 12 no casan y la caseta recien
+ * agregada al carrito dejaba de reconocerse como propia — se veia en tramite, como la de otro.
+ */
+const esMia = (p) => p.estado === 'T' && p.reservadoPor != null && auth.id != null
+  && Number(p.reservadoPor) === Number(auth.id);
 
 /**
  * Texto de la caseta al pasar por encima. Lleva el precio a proposito: el vendedor
@@ -402,7 +408,7 @@ onUnmounted(() => {
         <button
           v-for="p in ubicados"
           :key="p.id"
-          v-memo="[p.estado, p.reservadoPor === auth.id, conFoto.has(p.id), p.mapaX, p.mapaY, p.mapaEscala, p.mapaRotacion, p.tamanoMapa, p.color, p.forma, p.codigo, puedoVender(p)]"
+          v-memo="[p.estado, esMia(p), conFoto.has(p.id), p.mapaX, p.mapaY, p.mapaEscala, p.mapaRotacion, p.tamanoMapa, p.color, p.forma, p.codigo, puedoVender(p)]"
           class="pin"
           :class="[CLASE_ESTADO[p.estado], `forma-${p.forma || 'cuadrado'}`,
                    { mia: esMia(p), 'con-foto': conFoto.has(p.id), ajena: !puedoVender(p) }]"

@@ -1,8 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- allowBackup="false" a proposito.
+         Con la copia automatica encendida, Android RESTAURA los datos de la aplicacion al
+         reinstalarla o al estrenar telefono, y eso incluye el almacenamiento del WebView: el
+         token de sesion y el menu guardado. El sintoma fue exactamente ese — desinstalar,
+         instalar la version nueva, y que la aplicacion abriera con el menu completo como si
+         hubiera sesion iniciada, para expulsar al usuario al tocar la primera opcion, porque
+         el token restaurado ya habia caducado.
+         Ademas no es algo que convenga respaldar: es la sesion de un vendedor y datos de
+         expositores viajando a una copia en la nube que no controlamos. Reinstalar tiene que
+         empezar limpio. -->
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"

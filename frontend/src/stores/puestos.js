@@ -144,7 +144,13 @@ export const usePuestosStore = defineStore('puestos', () => {
    * este store no dependa del de autenticacion.
    */
   function carritoDe(idUsuario) {
-    return puestos.value.filter((p) => p.estado === 'T' && p.reservadoPor === idUsuario);
+    // Se comparan NUMEROS. El id llega por JSON y desde localStorage, asi que uno de los dos
+    // lados puede ser texto; con `===` estricto el carrito salia vacio aunque la caseta
+    // estuviera bien reservada a su nombre.
+    if (idUsuario == null) return [];
+    const mio = Number(idUsuario);
+    return puestos.value.filter((p) => p.estado === 'T' && p.reservadoPor != null
+      && Number(p.reservadoPor) === mio);
   }
 
   /**

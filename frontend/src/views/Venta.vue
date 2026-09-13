@@ -7,6 +7,9 @@ import { usePuestosStore } from '../stores/puestos';
 import { toast } from '../ui/toast';
 import { descargarRecibo } from '../ui/descargas';
 import { guardarBorrador, leerBorrador, borrarBorrador } from '../ui/borrador';
+import { partirNombre } from '../ui/nombres';
+import { mostrarCarga, ocultarCarga, textoCarga } from '../ui/cargando';
+import { alerta, aviso, alertaConAccion } from '../ui/alerta';
 
 /*
  * Registro de una venta. Es la pantalla que convierte un carrito de casetas en una
@@ -40,6 +43,93 @@ const perdidas = ref([]);
 const carrito = computed(() => tienda.carritoDe(auth.id));
 const total = computed(() => carrito.value.reduce((s, p) => s + Number(p.precio || 0), 0));
 
+/**
+ * El carrito agrupado por categoria, que es como el vendedor lo nombra en voz alta.
+ *
+ * "2 casetas · 100 Bs" no dice lo unico que el cliente esta preguntando: CUALES. El numero de
+ * caseta es como se llama a lo que se esta vendiendo ("la 6 y la 7 de PYMES"), y no salia por
+ * ningun lado hasta el ultimo paso. Ahora se agrupa por categoria, con sus numeros y su
+ * subtotal, y eso mismo sirve para la cabecera y para la confirmacion.
+ */
+const porCategoria = computed(() => {
+  const m = new Map();
+  for (const p of carrito.value) {
+    const clave = p.categoria || 'Sin categoría';
+    if (!m.has(clave)) m.set(clave, { categoria: clave, color: p.color, casetas: [], subtotal: 0 });
+    const g = m.get(clave);
+    g.casetas.push(p);
+    g.subtotal += Number(p.precio || 0);
+  }
+  // Los numeros, en orden: "6, 7 y 14" se lee; "14, 6 y 7" hace dudar de si falta alguna.
+  for (const g of m.values()) {
+    g.casetas.sort((a, b) => String(a.codigo).localeCompare(String(b.codigo), 'es', { numeric: true }));
+  }
+  return [...m.values()];
+});
+
+/** "6", "6 y 7", "6, 7 y 14" — como se dice, no como se programa. */
+function listar(codigos) {
+  if (codigos.length === 0) return '';
+  if (codigos.length === 1) return String(codigos[0]);
+  return `${codigos.slice(0, -1).join(', ')} y ${codigos[codigos.length - 1]}`;
+}
+
+const bs = (n) => Number(n || 0).toLocaleString('es-BO');
+
+/*
+ * Ayuda por campo.
+ *
+ * Varios de estos nombres significan cosas distintas segun a quien se le pregunte, y el
+ * vendedor no siempre es el mismo de la semana pasada. Antes la unica forma de saber que iba
+ * en "Objeto" o quien era el "Responsable 1" era preguntarle a alguien. El texto vive aqui, en
+ * un solo sitio, y se abre en el modal que ya existe: ningun componente nuevo.
+ */
+const AYUDAS = {
+  entidadNombre: ['Nombre de la entidad',
+    'El nombre con el que el expositor quiere aparecer en la feria y en su credencial. '
+    + 'Puede ser una empresa, una asociación o un emprendimiento personal.'],
+  tipoEntidad: ['Tipo de entidad',
+    'La clasificación que usa la feria para esa entidad. Si no estás seguro, pregunta en '
+    + 'administración: cambia el trato y a veces el precio.'],
+  nit: ['NIT',
+    'El número de identificación tributaria, si lo tiene. Es opcional: muchos emprendimientos '
+    + 'pequeños no lo tienen y la venta se registra igual.'],
+  rubro: ['Rubro o descripción',
+    'Qué vende o expone, en pocas palabras: "artesanía en cuero", "café", "ropa infantil". '
+    + 'Sale impreso en la credencial y sirve para agrupar por sector.'],
+  responsableLegal: ['Responsable legal',
+    'El DUEÑO de la caseta: a quien hay que llamar por un cobro o un problema. Es obligatorio. '
+    + 'No tiene por qué ser quien atienda la caseta durante la feria.'],
+  ciLegal: ['C.I. del responsable legal',
+    'La cédula de identidad del dueño, solo los números. Es el dato con el que se le identifica '
+    + 'si hay que reclamar algo.'],
+  celularLegal: ['Celular del responsable legal',
+    'El número al que se le puede llamar durante la feria. Es el contacto que verá '
+    + 'administración si necesita ubicarlo.'],
+  fechas: ['Desde y hasta',
+    'Los días que ocupará la caseta, si es un periodo distinto al de toda la feria. Se pueden '
+    + 'dejar en blanco.'],
+  responsable: ['Responsables',
+    'Quién ATIENDE la caseta durante la feria. Son los que reciben credencial y los que entran '
+    + 'por la puerta con ella, así que necesitan foto. Pueden ser hasta dos, y pueden ser '
+    + 'personas distintas del dueño.'],
+  fotoResp: ['Foto del responsable',
+    'Se imprime en su credencial. Es opcional ahora: si no la tomas, la venta se registra igual '
+    + 'y la puedes subir después desde Mis ventas. Pero sin foto no se le puede emitir la '
+    + 'credencial con etiquetas.'],
+  contado: ['Pagó al contado',
+    'Marca esto si te pagó en efectivo, en el momento. OJO: marcarlo dice CÓMO pagó, no que '
+    + 'exista el recibo. El comprobante hay que subirlo igual, o no se le puede acreditar.'],
+  banco: ['Banco y N.º de comprobante',
+    'Si pagó por transferencia o depósito, el banco y el número que figura en el papel. Sirve '
+    + 'para cuadrar el cobro con el extracto.'],
+};
+
+function ayuda(clave) {
+  const [titulo, texto] = AYUDAS[clave] || ['Ayuda', ''];
+  return aviso(texto, 'info', 0, titulo);
+}
+
 // Sin `correo`: no se usaba para nada y era un campo mas que rellenar delante del cliente.
 const personaVacia = () => ({ nombre: '', paterno: '', materno: '', ci: '', celular: '' });
 
@@ -51,8 +141,20 @@ const form = reactive({
   /** El Responsable 1 es el mismo responsable legal: copia sus datos y bloquea los campos. */
   copiaLegal: false,
   responsables: [personaVacia()],
+  /*
+   * Como pago: '' (sin elegir), 'contado' o 'deposito'.
+   *
+   * Antes era una casilla "Pagó al contado", y eso tenia un agujero silencioso: NO marcarla no
+   * significaba "fue deposito", significaba "no se toco la casilla". Las ventas salian con
+   * pagoContado=false por omision y despues nadie sabia si eso era un credito de verdad o un
+   * despiste. Ahora hay que elegir, y confirmar no deja pasar sin eleccion.
+   */
+  formaPago: '',
   entidadBancaria: '', numComprobante: null, pagoContado: false,
 });
+
+/** El comprobante del deposito, si se adjunta ya. Fuera de `form` por lo mismo que las fotos. */
+const comprobante = ref(null);
 
 /*
  * Fotos de los responsables, FUERA de `form` a proposito.
@@ -65,21 +167,82 @@ const fotos = ref([null, null]);
 
 const hayResponsable2 = computed(() => form.responsables.length > 1);
 
-/** Mientras "es el mismo" este marcado, el Responsable 1 sigue al responsable legal. */
+/** `pagoContado` es lo que entiende el servidor; aqui se deriva de la eleccion. */
+watch(() => form.formaPago, (v) => {
+  form.pagoContado = v === 'contado';
+  if (v === 'contado') { form.entidadBancaria = ''; form.numComprobante = null; }
+});
+
+function elegirComprobante(evento) {
+  const archivo = evento.target.files?.[0];
+  evento.target.value = '';
+  if (!archivo) return;
+  if (comprobante.value?.url) URL.revokeObjectURL(comprobante.value.url);
+  comprobante.value = {
+    archivo,
+    url: archivo.type.startsWith('image/') ? URL.createObjectURL(archivo) : null,
+    nombre: archivo.name,
+  };
+}
+
+function quitarComprobante() {
+  if (comprobante.value?.url) URL.revokeObjectURL(comprobante.value.url);
+  comprobante.value = null;
+}
+
+/**
+ * Rellenar el Responsable 1 con los datos del responsable legal.
+ *
+ * El responsable legal se escribe como UN campo con el nombre completo (asi lo guarda
+ * `entidad`), y aqui hacen falta nombre, paterno y materno por separado. Antes se copiaba la
+ * cadena entera a "nombre" y los apellidos quedaban vacios: la credencial salia con el nombre
+ * completo en el hueco del nombre y sin apellidos. Ahora se reparte (ver `ui/nombres.js`).
+ *
+ * Y los campos NO se bloquean. La division acierta casi siempre, pero un "DE LA CRUZ" la
+ * rompe, y bloquear los campos convertia un error de un segundo en un dato imposible de
+ * corregir sin desmarcar la casilla. Se rellena y se deja tocar.
+ */
+function copiarDelLegal() {
+  const r = form.responsables[0];
+  if (!r) return;
+  const partido = partirNombre(form.representanteLegal);
+  r.nombre = partido.nombre;
+  r.paterno = partido.paterno;
+  r.materno = partido.materno;
+  r.ci = form.ciRepresentante;
+  r.celular = form.celularRepresentante;
+}
+
+/**
+ * Al marcar la casilla: si el Responsable 1 ya tiene algo escrito, se PREGUNTA.
+ *
+ * Antes se sobreescribia sin avisar, y era facil llegar ahi por accidente: se rellenan los
+ * datos de quien atiende la caseta, se marca la casilla por curiosidad y se pierde lo
+ * tecleado, sin forma de recuperarlo. Vaciar el trabajo de alguien nunca puede ser el efecto
+ * secundario de un toque.
+ */
+async function alMarcarCopia(evento) {
+  const marcado = evento.target.checked;
+  if (!marcado) { form.copiaLegal = false; return; }
+
+  const r = form.responsables[0];
+  if (r && algoEscrito(r)) {
+    // Se deja sin marcar mientras se decide: si cancela, la casilla no debe quedar activa.
+    form.copiaLegal = false;
+    const sigue = await alertaConAccion(
+      'El Responsable 1 ya tiene datos escritos. Si continúas se reemplazan por los del '
+      + 'responsable legal.',
+      'advertencia', null, 0);
+    if (!sigue) return;
+  }
+  form.copiaLegal = true;
+  copiarDelLegal();
+}
+
+/** Mientras la casilla siga marcada, el Responsable 1 sigue al responsable legal. */
 watch(
-  () => [form.copiaLegal, form.representanteLegal, form.ciRepresentante, form.celularRepresentante],
-  () => {
-    if (!form.copiaLegal) return;
-    const r = form.responsables[0];
-    if (!r) return; // un borrador recuperado puede llegar sin la lista todavia
-    // El responsable legal se pide como nombre completo en un solo campo (asi lo guarda
-    // `entidad`), asi que va entero al nombre y los apellidos quedan vacios.
-    r.nombre = form.representanteLegal;
-    r.paterno = '';
-    r.materno = '';
-    r.ci = form.ciRepresentante;
-    r.celular = form.celularRepresentante;
-  },
+  () => [form.representanteLegal, form.ciRepresentante, form.celularRepresentante],
+  () => { if (form.copiaLegal) copiarDelLegal(); },
 );
 
 // ---- validacion por paso ----
@@ -112,11 +275,22 @@ const faltantes = computed(() => {
     pide('r0.nombre', 'Nombre del Responsable 1', (r0.nombre || '').trim());
     pide('r0.ci', 'C.I. del Responsable 1', (r0.ci || '').trim());
     const r1 = form.responsables[1];
-    // Un Responsable 2 a medias es peor que ninguno: o se completa o se quita.
+    /*
+     * Del segundo responsable solo se exige el NOMBRE.
+     *
+     * El C.I. era obligatorio y frenaba ventas por un dato que muchas veces no esta a mano: el
+     * segundo suele ser un familiar o un empleado que ni siquiera esta en el mostrador. Sin
+     * C.I. se registra igual y se completa despues desde Mis ventas; lo que no se puede es
+     * dejarlo sin nombre, porque entonces no hay a quien acreditar.
+     */
     if (r1 && algoEscrito(r1)) {
       pide('r1.nombre', 'Nombre del Responsable 2', r1.nombre.trim());
-      pide('r1.ci', 'C.I. del Responsable 2', r1.ci.trim());
     }
+  }
+  if (paso.value === 2) {
+    // Sin forma de pago la venta queda sin decir como se cobro, y eso no se deduce despues:
+    // o fue efectivo o fue un deposito, y son cobros que se cuadran distinto.
+    pide('formaPago', 'Cómo pagó (contado o depósito)', form.formaPago);
   }
   return falta;
 });
@@ -232,9 +406,28 @@ const mayus = (v) => (typeof v === 'string' ? v.trim().toUpperCase() : v);
 
 async function registrar() {
   if (enviando.value) return;
-  if (!carrito.value.length) { toast('No tienes casetas seleccionadas.', 'error'); return; }
+  if (!carrito.value.length) { alerta('No tienes casetas seleccionadas.', 'error'); return; }
+
+  /*
+   * El ultimo paso tambien se valida.
+   *
+   * "Siguiente" comprobaba lo suyo, pero "Registrar venta" no comprobaba nada: era el unico
+   * boton que salia del formulario sin pasar por la validacion, asi que lo que se pidiera en
+   * el paso de confirmar —la forma de pago— se colaba vacio.
+   */
+  intentado.value = true;
+  if (faltantes.value.size) {
+    nextTick(() => {
+      document.querySelector('.faltan')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+    return;
+  }
+  intentado.value = false;
   enviando.value = true;
   perdidas.value = [];
+  // Registrar es lo mas lento del circuito y lo que mas se repite con mala red. Sin aviso, el
+  // vendedor concluia que la aplicacion se colgo y volvia a pulsar.
+  mostrarCarga('Registrando la venta…');
   try {
     // Se manda el Responsable 2 solo si de verdad lo rellenaron: un bloque vacio haria
     // fallar la validacion del servidor por "cada responsable necesita nombre".
@@ -268,31 +461,68 @@ async function registrar() {
 
     if (r.status === 409) {
       // Otro vendedor gano una caseta. La venta NO se registro (el servidor revirtio todo),
-      // asi que se refresca el mapa y se le explica que paso sin perderle lo escrito.
-      toast(d.mensaje || 'Una caseta ya no está disponible', 'error');
+      // asi que se refresca el mapa y se le explica que paso sin perderle lo escrito. Va en
+      // modal y no en aviso pequeño: es lo unico de esta pantalla que obliga a decidir algo.
+      await alerta(d.mensaje || 'Una caseta ya no está disponible', 'error', 0);
       await tienda.recargar();
       paso.value = 2;
       return;
     }
     if (!r.ok || !d.ok) {
-      toast(d.mensaje || 'No se pudo registrar la venta', 'error');
+      await alerta(d.mensaje || 'No se pudo registrar la venta', 'error', 0);
       return;
     }
 
-    // La venta ya existe. Las fotos van despues y no pueden hacerla fracasar.
+    // La venta ya existe. Lo que se sube despues no puede hacerla fracasar: si algo falla,
+    // la venta sigue hecha y se completa desde Mis ventas.
+    let comprobanteOk = true;
+    if (comprobante.value?.archivo) {
+      textoCarga.value = 'Subiendo el comprobante…';
+      try {
+        const datos = new FormData();
+        datos.append('archivo', comprobante.value.archivo);
+        if (form.entidadBancaria) datos.append('entidadBancaria', form.entidadBancaria);
+        if (form.numComprobante) datos.append('numComprobante', String(form.numComprobante));
+        const rc = await apiFetch(`/api/app/inscripciones/${d.inscripcionId}/comprobante`,
+                                  { method: 'POST', body: datos });
+        comprobanteOk = rc.ok;
+      } catch {
+        comprobanteOk = false;
+      }
+    }
+
+    textoCarga.value = 'Subiendo las fotos…';
     const todas = await subirFotos(d.inscripcionId);
     borrarBorrador(auth.id);
-    toast(`Venta registrada: ${Number(d.total).toLocaleString('es-BO')} Bs`, 'ok');
-    if (!todas) {
-      toast('Alguna foto no se subió. Puedes completarla desde Mis ventas.', 'info');
-    }
+
+    textoCarga.value = 'Preparando el recibo…';
     // El recibo se baja SOLO, que es el momento en que el cliente lo está esperando. Si algo
     // falla no se toca la venta: ya está hecha, y se avisa de dónde volver a pedirlo.
     await descargarRecibo(d.inscripcionId);
+    ocultarCarga();
+
+    /*
+     * La confirmacion va en el modal del centro y NO en el aviso de la esquina.
+     *
+     * Registrar una venta es el momento mas importante de la aplicacion y el aviso pequeño de
+     * arriba se perdia: aparecia y se iba mientras el vendedor miraba el telefono del cliente.
+     * Aqui hay que enterarse, asi que ocupa el centro, dice el importe y espera un toque —o se
+     * va solo a los 6 s, para no estorbar a quien ya lo leyo.
+     */
+    const casetas = listar(carrito.value.map((p) => p.codigo));
+    const pendiente = [
+      todas ? null : 'alguna foto',
+      comprobanteOk ? null : 'el comprobante',
+    ].filter(Boolean).join(' y ');
+    await aviso(
+      `Caseta${carrito.value.length === 1 ? '' : 's'} ${casetas} · ${bs(d.total)} Bs`
+      + (pendiente ? `\n\nNo se pudo subir ${pendiente}. Puedes completarlo desde Mis ventas.` : ''),
+      'ok', 6000, '¡Venta registrada!');
     router.push({ path: '/mis-ventas', query: { registrada: d.inscripcionId } });
   } catch (e) {
-    toast(e.message, 'error');
+    await alerta(e.message, 'error', 0);
   } finally {
+    ocultarCarga();
     enviando.value = false;
   }
 }
@@ -337,6 +567,7 @@ onMounted(async () => {
 onUnmounted(() => {
   // Las previsualizaciones son URLs de objeto: sin revocarlas se quedan en memoria.
   fotos.value.forEach((f) => f?.url && URL.revokeObjectURL(f.url));
+  if (comprobante.value?.url) URL.revokeObjectURL(comprobante.value.url);
 });
 </script>
 
@@ -345,12 +576,26 @@ onUnmounted(() => {
     <!-- Resumen siempre visible: en el movil, saber cuanto se esta cobrando no puede
          depender de bajar hasta el final del formulario. -->
     <header class="resumen card">
-      <div>
-        <strong>{{ carrito.length }}</strong> caseta{{ carrito.length === 1 ? '' : 's' }}
-        <span class="muted"> · </span>
-        <strong class="total">{{ total.toLocaleString('es-BO') }} Bs</strong>
+      <div class="lineas">
+        <!-- Que se esta vendiendo, con nombre y numero. Es lo que el vendedor le esta
+             diciendo al cliente mientras rellena, y antes no salia hasta el ultimo paso. -->
+        <div v-for="g in porCategoria" :key="g.categoria" class="grupo-cab">
+          <span class="punto" :style="{ background: g.color || 'var(--acento)' }"></span>
+          <span class="cat">{{ g.categoria }}</span>
+          <span class="nums">
+            caseta{{ g.casetas.length === 1 ? '' : 's' }}
+            {{ listar(g.casetas.map((c) => c.codigo)) }}
+          </span>
+          <!-- El subtotal solo cuando hay mas de una categoria. Con una sola es el mismo
+               numero que el total, y repetirlo hace dudar de si son dos cobros distintos. -->
+          <span v-if="porCategoria.length > 1" class="sub-bs">{{ bs(g.subtotal) }} Bs</span>
+        </div>
+        <div class="total-cab">
+          <span>Total</span>
+          <strong class="total">{{ bs(total) }} Bs</strong>
+        </div>
       </div>
-      <router-link to="/mapa" class="btn btn-fantasma btn-sm">← Volver al mapa</router-link>
+      <router-link to="/mapa" class="btn btn-fantasma btn-sm volver">← Volver al mapa</router-link>
     </header>
 
     <p v-if="!carrito.length" class="vacio card">
@@ -377,12 +622,12 @@ onUnmounted(() => {
       <!-- Paso 1: entidad -->
       <section v-show="paso === 0" class="card bloque">
         <label class="campo">
-          <span>Nombre de la entidad *</span>
+          <span>Nombre de la entidad *<button type="button" class="ayuda" @click.prevent="ayuda('entidadNombre')" aria-label="Qué es esto">?</button></span>
           <input class="control mayus" :class="{ falta: falta('entidadNombre') }"
                  v-model="form.entidadNombre" placeholder="Ej. Artesanías Illimani" />
         </label>
         <label class="campo">
-          <span>Tipo de entidad *</span>
+          <span>Tipo de entidad *<button type="button" class="ayuda" @click.prevent="ayuda('tipoEntidad')" aria-label="Qué es esto">?</button></span>
           <select class="control" :class="{ falta: falta('tipoEntidadId') }" v-model="form.tipoEntidadId">
             <option :value="null" disabled>Elige una opción…</option>
             <option v-for="t in tiposEntidad" :key="t.id" :value="t.id">{{ t.nombre }}</option>
@@ -390,11 +635,11 @@ onUnmounted(() => {
         </label>
         <div class="dos">
           <label class="campo">
-            <span>NIT</span>
+            <span>NIT<button type="button" class="ayuda" @click.prevent="ayuda('nit')" aria-label="Qué es esto">?</button></span>
             <input class="control" v-model="form.nit" inputmode="numeric" placeholder="Solo números" />
           </label>
           <label class="campo">
-            <span>Rubro o descripción</span>
+            <span>Rubro o descripción<button type="button" class="ayuda" @click.prevent="ayuda('rubro')" aria-label="Qué es esto">?</button></span>
             <input class="control mayus" v-model="form.descripcion" placeholder="Qué vende o expone" />
           </label>
         </div>
@@ -406,20 +651,21 @@ onUnmounted(() => {
         <h3 class="sub">
           Responsable legal
           <span class="muted">— el dueño de la caseta</span>
+          <button type="button" class="ayuda" @click.prevent="ayuda('responsableLegal')" aria-label="Qué es esto">?</button>
         </h3>
         <label class="campo">
-          <span>Nombre completo *</span>
+          <span>Nombre completo *<button type="button" class="ayuda" @click.prevent="ayuda('responsableLegal')" aria-label="Qué es esto">?</button></span>
           <input class="control mayus" :class="{ falta: falta('representanteLegal') }"
                  v-model="form.representanteLegal" placeholder="Ej. María Quispe Mamani" />
         </label>
         <div class="dos">
           <label class="campo">
-            <span>C.I. *</span>
+            <span>C.I. *<button type="button" class="ayuda" @click.prevent="ayuda('ciLegal')" aria-label="Qué es esto">?</button></span>
             <input class="control" :class="{ falta: falta('ciRepresentante') }"
                    v-model="form.ciRepresentante" inputmode="numeric" placeholder="Ej. 8765432" />
           </label>
           <label class="campo">
-            <span>Celular *</span>
+            <span>Celular *<button type="button" class="ayuda" @click.prevent="ayuda('celularLegal')" aria-label="Qué es esto">?</button></span>
             <input class="control" :class="{ falta: falta('celularRepresentante') }"
                    v-model="form.celularRepresentante" type="tel" inputmode="tel" placeholder="Ej. 71234567" />
           </label>
@@ -440,6 +686,7 @@ onUnmounted(() => {
         <p class="nota">
           Quién <strong>atiende</strong> la caseta durante la feria. Son los que reciben
           credencial, por eso se les puede tomar la foto aquí mismo.
+          <button type="button" class="ayuda" @click.prevent="ayuda('responsable')" aria-label="Saber más">?</button>
         </p>
 
         <template v-for="(r, i) in form.responsables" :key="i">
@@ -447,39 +694,41 @@ onUnmounted(() => {
           <h3 class="sub">Responsable {{ i + 1 }}</h3>
 
           <label v-if="i === 0" class="fila-check">
-            <input type="checkbox" v-model="form.copiaLegal" />
+            <input type="checkbox" :checked="form.copiaLegal" @change="alMarcarCopia" />
             Es el mismo responsable legal
           </label>
+          <p v-if="i === 0 && form.copiaLegal" class="nota">
+            Se repartió el nombre completo en nombre y apellidos. Si quedó mal, corrígelo aquí
+            mismo: los campos siguen editables.
+          </p>
 
           <div class="dos">
             <label class="campo">
               <span>Nombre {{ i === 0 ? '*' : '' }}</span>
               <input class="control mayus" :class="{ falta: falta(`r${i}.nombre`) }"
-                     :disabled="i === 0 && form.copiaLegal"
                      v-model="r.nombre" placeholder="Ej. María" />
             </label>
             <label class="campo">
               <span>C.I. {{ i === 0 ? '*' : '' }}</span>
               <input class="control" :class="{ falta: falta(`r${i}.ci`) }"
-                     :disabled="i === 0 && form.copiaLegal"
                      v-model="r.ci" inputmode="numeric" placeholder="Ej. 8765432" />
             </label>
           </div>
           <div class="dos">
             <label class="campo">
               <span>Apellido paterno</span>
-              <input class="control mayus" :disabled="i === 0 && form.copiaLegal"
+              <input class="control mayus"
                      v-model="r.paterno" placeholder="Ej. Quispe" />
             </label>
             <label class="campo">
               <span>Apellido materno</span>
-              <input class="control mayus" :disabled="i === 0 && form.copiaLegal"
+              <input class="control mayus"
                      v-model="r.materno" placeholder="Ej. Mamani" />
             </label>
           </div>
           <label class="campo">
             <span>Celular</span>
-            <input class="control" type="tel" inputmode="tel" :disabled="i === 0 && form.copiaLegal"
+            <input class="control" type="tel" inputmode="tel"
                    v-model="r.celular" placeholder="Ej. 71234567" />
           </label>
 
@@ -498,6 +747,7 @@ onUnmounted(() => {
               </label>
               <button v-if="fotos[i]" class="btn btn-peligro btn-sm" @click="quitarFoto(i)">Quitar</button>
               <span class="muted opcional">Opcional</span>
+              <button type="button" class="ayuda" @click.prevent="ayuda('fotoResp')" aria-label="Qué es esto">?</button>
             </div>
           </div>
         </template>
@@ -510,44 +760,108 @@ onUnmounted(() => {
 
       <!-- Paso 3: confirmar -->
       <section v-show="paso === 2" class="card bloque">
-        <h3 class="sub">Casetas</h3>
-        <ul class="casetas">
-          <li v-for="p in carrito" :key="p.id" :class="{ perdida: perdidas.includes(p.id) }">
-            <span class="sw" :style="{ background: p.color || '#94a3b8' }"></span>
-            <span class="nom">{{ p.categoria }} {{ p.codigo }}</span>
-            <span class="muted">{{ p.tamano }}</span>
-            <span class="precio">{{ Number(p.precio || 0).toLocaleString('es-BO') }} Bs</span>
-            <button class="btn btn-fantasma btn-sm" title="Quitar" @click="quitarCaseta(p)">✕</button>
-          </li>
-        </ul>
+        <h3 class="sub">Qué se está vendiendo</h3>
+        <!-- Agrupado por categoria y con subtotal: es la factura que el vendedor va a cantar
+             en voz alta, no un listado de filas sueltas. -->
+        <div v-for="g in porCategoria" :key="g.categoria" class="grupo-conf">
+          <header>
+            <span class="sw" :style="{ background: g.color || '#94a3b8' }"></span>
+            <strong>{{ g.categoria }}</strong>
+            <span class="sub-bs">{{ bs(g.subtotal) }} Bs</span>
+          </header>
+          <ul class="casetas">
+            <li v-for="p in g.casetas" :key="p.id" :class="{ perdida: perdidas.includes(p.id) }">
+              <span class="nom">Caseta {{ p.codigo }}</span>
+              <span class="muted">{{ p.tamano }}</span>
+              <span class="precio">{{ bs(p.precio) }} Bs</span>
+              <button class="btn btn-fantasma btn-sm" title="Quitar" @click="quitarCaseta(p)">✕</button>
+            </li>
+          </ul>
+        </div>
+
+        <div class="cuenta">
+          <div class="linea">
+            <span>{{ carrito.length }} caseta{{ carrito.length === 1 ? '' : 's' }}</span>
+            <span>{{ bs(total) }} Bs</span>
+          </div>
+          <div class="linea grande">
+            <span>Total a cobrar</span>
+            <strong>{{ bs(total) }} Bs</strong>
+          </div>
+        </div>
 
         <div class="separador"></div>
 
-        <h3 class="sub">Pago</h3>
-        <label class="fila-check">
-          <input type="checkbox" v-model="form.pagoContado" />
-          Pagó al contado
-        </label>
-        <div v-if="!form.pagoContado" class="dos">
-          <label class="campo">
-            <span>Banco</span>
-            <input class="control mayus" v-model="form.entidadBancaria" placeholder="Ej. Banco Unión" />
-          </label>
-          <label class="campo">
-            <span>N.º de comprobante</span>
-            <input class="control" type="number" inputmode="numeric" v-model.number="form.numComprobante" placeholder="Solo números" />
-          </label>
+        <h3 class="sub">
+          Pago
+          <button type="button" class="ayuda" @click.prevent="ayuda('contado')" aria-label="Qué es esto">?</button>
+        </h3>
+
+        <!-- Dos botones y no una casilla. Con la casilla, "no marcada" queria decir dos cosas
+             a la vez —fue deposito, o nadie la toco— y la venta salia igual. Aqui hay que
+             elegir, y confirmar no deja pasar sin eleccion. -->
+        <div class="formas" :class="{ falta: falta('formaPago') }" role="radiogroup"
+             aria-label="Cómo pagó">
+          <button type="button" class="forma" :class="{ activa: form.formaPago === 'contado' }"
+                  role="radio" :aria-checked="form.formaPago === 'contado'"
+                  @click="form.formaPago = 'contado'">
+            <span class="ico">💵</span>
+            <strong>Al contado</strong>
+            <small>Efectivo, en el momento</small>
+          </button>
+          <button type="button" class="forma" :class="{ activa: form.formaPago === 'deposito' }"
+                  role="radio" :aria-checked="form.formaPago === 'deposito'"
+                  @click="form.formaPago = 'deposito'">
+            <span class="ico">🏦</span>
+            <strong>Depósito</strong>
+            <small>Transferencia o banco</small>
+          </button>
         </div>
-        <!-- El recibo hace falta SIEMPRE, tambien al contado: marcar contado dice como se
-             pago, no que exista el papel. Sin el no se acredita al expositor, asi que el
-             aviso no puede desaparecer cuando se tilda la casilla. -->
-        <p class="nota">
-          <template v-if="form.pagoContado">
-            Aunque sea al contado, hay que subir la foto del recibo.
-          </template>
-          <template v-else>La foto del comprobante se sube después.</template>
-          Se hace desde <strong>Mis pendientes</strong>; registrar ahora asegura las casetas.
-        </p>
+
+        <!-- Los datos del banco solo cuando hacen falta: con "al contado" son ruido. -->
+        <template v-if="form.formaPago === 'deposito'">
+          <div class="dos">
+            <label class="campo">
+              <span>Banco<button type="button" class="ayuda" @click.prevent="ayuda('banco')" aria-label="Qué es esto">?</button></span>
+              <input class="control mayus" v-model="form.entidadBancaria" placeholder="Ej. Banco Unión" />
+            </label>
+            <label class="campo">
+              <span>N.º de depósito</span>
+              <input class="control" type="number" inputmode="numeric"
+                     v-model.number="form.numComprobante" placeholder="Solo números" />
+            </label>
+          </div>
+        </template>
+
+        <!-- El comprobante se puede adjuntar YA, en las dos formas de pago: es el momento en
+             que el cliente lo tiene en la mano. Sigue siendo opcional para no frenar la venta,
+             pero se dice sin rodeos que hace falta y para que. -->
+        <div class="comprobante-adj">
+          <div class="cabecera-adj">
+            <strong>Comprobante de pago</strong>
+            <span class="badge" :class="comprobante ? 'badge-ok' : 'badge-aviso'">
+              {{ comprobante ? 'adjuntado' : 'pendiente' }}
+            </span>
+          </div>
+          <p class="nota">
+            Hace falta <strong>siempre</strong>, también al contado: sin él no se le puede
+            emitir la credencial al expositor. Si lo tienes ahora, adjúntalo; si no, se sube
+            después desde <strong>Mis ventas</strong>.
+          </p>
+          <div class="acciones-adj">
+            <input id="comprobante-venta" class="oculto" type="file"
+                   accept="image/*,application/pdf" @change="elegirComprobante" />
+            <label for="comprobante-venta" class="btn btn-sm">
+              📎 {{ comprobante ? 'Cambiar' : 'Adjuntar comprobante' }}
+            </label>
+            <button v-if="comprobante" type="button" class="btn btn-peligro btn-sm"
+                    @click="quitarComprobante">Quitar</button>
+          </div>
+          <div v-if="comprobante" class="previa-adj">
+            <img v-if="comprobante.url" :src="comprobante.url" alt="Comprobante elegido" />
+            <span v-else class="muted">📄 {{ comprobante.nombre }}</span>
+          </div>
+        </div>
       </section>
 
 <!-- Franja de botones: siempre a la vista, pegada justo encima de la barra de opciones. -->
@@ -589,10 +903,81 @@ onUnmounted(() => {
 /* El total se queda a la vista al desplazar: es el dato que el vendedor esta cantando en voz
    alta. `top` cuenta con la barra superior, que tambien es pegajosa. */
 .resumen {
-  display: flex; align-items: center; justify-content: space-between; gap: 0.8rem;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 0.8rem;
   padding: 0.8rem 1rem; position: sticky; top: 0; z-index: 5;
 }
-.resumen .total { font-variant-numeric: tabular-nums; font-size: 1.05rem; }
+.lineas { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; flex: 1; }
+.grupo-cab { display: flex; align-items: baseline; gap: 0.35rem; flex-wrap: wrap; font-size: 0.9rem; }
+.grupo-cab .punto { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.grupo-cab .cat { font-weight: 700; }
+.grupo-cab .nums { color: var(--muted); }
+.grupo-cab .sub-bs { margin-left: auto; font-variant-numeric: tabular-nums; }
+.total-cab {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem;
+  border-top: 1px solid var(--border); padding-top: 0.3rem; margin-top: 0.15rem;
+  font-size: 0.88rem; color: var(--muted);
+}
+.resumen .total { font-variant-numeric: tabular-nums; font-size: 1.15rem; color: var(--texto); }
+.volver { flex: none; white-space: nowrap; }
+
+/* ---- confirmar ---- */
+.grupo-conf { display: flex; flex-direction: column; gap: 0.2rem; }
+.grupo-conf > header { display: flex; align-items: center; gap: 0.5rem; }
+.grupo-conf > header .sub-bs { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 700; }
+.cuenta {
+  display: flex; flex-direction: column; gap: 0.3rem;
+  padding: 0.7rem 0.9rem; border-radius: var(--radio-sm); background: var(--panel-2);
+}
+.cuenta .linea { display: flex; justify-content: space-between; gap: 0.8rem; font-size: 0.9rem; color: var(--muted); }
+.cuenta .linea.grande { font-size: 1.1rem; color: var(--texto); font-weight: 700; }
+.cuenta .linea.grande strong { font-variant-numeric: tabular-nums; }
+
+/* ---- forma de pago ---- */
+.formas { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+.formas.falta { outline: 2px solid var(--danger); outline-offset: 4px; border-radius: var(--radio-sm); }
+.forma {
+  display: flex; flex-direction: column; align-items: center; gap: 0.15rem;
+  padding: 0.85rem 0.6rem; border-radius: var(--radio-sm);
+  border: 2px solid var(--border); background: var(--panel); color: var(--texto);
+  cursor: pointer; transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+  font: inherit; text-align: center;
+}
+.forma .ico { font-size: 1.5rem; line-height: 1.1; }
+.forma strong { font-size: 1rem; }
+.forma small { color: var(--muted); font-size: 0.78rem; }
+.forma:active { transform: scale(0.98); }
+.forma.activa {
+  border-color: var(--acento);
+  background: color-mix(in srgb, var(--acento) 12%, var(--panel));
+}
+.forma.activa strong { color: var(--acento); }
+
+/* ---- comprobante adjunto en el registro ---- */
+.comprobante-adj {
+  display: flex; flex-direction: column; gap: 0.5rem;
+  padding: 0.8rem 0.9rem; border-radius: var(--radio-sm); background: var(--panel-2);
+  border-left: 3px solid var(--tramite);
+}
+.cabecera-adj { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+.badge-aviso {
+  background: color-mix(in srgb, var(--tramite) 16%, transparent);
+  color: var(--tramite); font-weight: 700;
+}
+.acciones-adj { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.acciones-adj label.btn { cursor: pointer; }
+.previa-adj img {
+  width: 100%; max-height: 200px; object-fit: contain; border-radius: var(--radio-sm);
+  border: 1px solid var(--border); background: var(--panel);
+}
+
+/* El "?" de cada campo: discreto en reposo, grande para el dedo. */
+.ayuda {
+  display: inline-grid; place-items: center; width: 22px; height: 22px; margin-left: 0.35rem;
+  border-radius: 50%; border: 1px solid var(--border); background: var(--panel-2);
+  color: var(--muted); font-size: 0.75rem; font-weight: 800; cursor: pointer;
+  vertical-align: middle; flex: none;
+}
+.ayuda:hover, .ayuda:focus-visible { border-color: var(--acento); color: var(--acento); }
 
 .vacio { padding: 2rem 1rem; text-align: center; color: var(--muted); }
 
@@ -716,6 +1101,19 @@ onUnmounted(() => {
   /* Casilla grande: con la de por defecto (13px) hay que apuntar con la uña. */
   .fila-check input[type='checkbox'] { width: 24px; height: 24px; }
   .nota { font-size: 0.95rem; }
+  /* Letra mas grande en el telefono: es la pantalla que mas se teclea, de pie y a menudo con
+     el sol encima. Los tamaños de escritorio obligaban a acercarse. */
+  .campo > span { font-size: 0.95rem; font-weight: 650; }
+  .control { font-size: 1.05rem; min-height: 50px; }
+  select.control { min-height: 50px; }
+  .grupo-cab { font-size: 0.98rem; }
+  .resumen .total { font-size: 1.3rem; }
+  .cuenta .linea { font-size: 0.98rem; }
+  .cuenta .linea.grande { font-size: 1.25rem; }
+  .ayuda { width: 28px; height: 28px; font-size: 0.9rem; }
+  .forma { padding: 1rem 0.6rem; }
+  .forma strong { font-size: 1.05rem; }
+  .acciones-adj .btn { min-height: 46px; }
   .faltan { font-size: 1rem; }
   /* Se pulsan de pie y delante del cliente: mas altos que el minimo tactil a proposito. */
   .acciones .btn { min-height: 56px; font-size: 1.08rem; font-weight: 700; }

@@ -167,4 +167,31 @@ public interface IInscripcionDao extends JpaRepository <Inscripcion, Long> {
             order by i.fechaCompra desc
            """)
     List<Inscripcion> pendientesDeComprobante(@Param("usuarioId") Long usuarioId);
+
+      /**
+       * Que le falta a cada venta de un vendedor, en UNA consulta.
+       *
+       * La lista de "Mis ventas" sale de una stored function que no sabe nada de comprobantes
+       * ni de fotos, asi que no habia forma de marcar en la lista cuales tienen trabajo
+       * pendiente: habia que abrir cada una para descubrirlo. Preguntarlo por fila serian
+       * decenas de viajes a la base para pintar una lista.
+       *
+       * Devuelve (id, tieneComprobante, responsablesSinFoto).
+       */
+      @Query(value = """
+              SELECT i.id                                                         AS id,
+                     (i.img_comprobante IS NOT NULL AND i.img_comprobante <> '')  AS con_comprobante,
+                     COALESCE(SUM(CASE WHEN r.id IS NOT NULL
+                                        AND (p.foto IS NULL OR p.foto = '')
+                                       THEN 1 ELSE 0 END), 0)                     AS sin_foto
+                FROM inscripcion i
+                LEFT JOIN responsable r ON r.id_entidad = i.id_entidad
+                                       AND (r."_estado" IS NULL OR r."_estado" <> 'X')
+                LEFT JOIN persona p     ON p.id = r.id_persona
+               WHERE i."_registro_id_usuario" = :usuarioId
+                 AND (i."_estado" IS NULL OR i."_estado" <> 'X')
+               GROUP BY i.id, i.img_comprobante
+              """, nativeQuery = true)
+      List<Object[]> pendientesPorVenta(@Param("usuarioId") Long usuarioId);
+
 }

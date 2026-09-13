@@ -51,6 +51,17 @@ const T = (await (await fetch(API + '/api/auth/login', {
 })).json().catch(() => ({}))).token;
 if (!paso('login', !!T)) process.exit(1);
 
+/*
+ * Barrido de arranque: las ventas de prueba de pasadas cortadas a la mitad siguen vivas, y
+ * entonces la lista tiene varias filas "ZZ ..." y las comprobaciones miran la que no es.
+ */
+for (const c of ((await api(T, '/api/app/credenciales')).cuerpo || [])) {
+  if (/^ZZ /.test(c.entidad || '') && c.inscripcionId) {
+    await api(T, `/api/app/inscripciones/${c.inscripcionId}/cancelar`, { method: 'POST',
+      body: JSON.stringify({ motivo: 'Limpieza de pruebas de mis-ventas' }) });
+  }
+}
+
 // Una venta propia con dos responsables: es lo que hace falta para probar la ficha entera.
 const libre = ((await api(T, '/api/app/puestos')).cuerpo || []).find((p) => p.estado === 'L');
 if (!paso('hay una caseta libre', !!libre)) process.exit(1);
@@ -158,6 +169,32 @@ try {
          const t=f.textContent; return /ZZ VENTA FICHA/.test(t) && /Bs/.test(t); })()`));
   paso('y dice que se puede tocar',
        /Ver detalle/.test(await ch.evaluar(`${FILA}?.textContent || ''`)));
+
+  /*
+   * Lo que le FALTA, en la propia fila. Antes habia que abrir venta por venta para descubrir
+   * cual no tenia comprobante o le faltaba una foto, y con decenas de ventas eso no lo hace
+   * nadie: el trabajo pendiente se quedaba sin hacer porque no se veia.
+   */
+  // Se leen las INSIGNIAS, no el texto de la fila entero: concatenar todo pega la ultima
+  // palabra de una con la primera de la siguiente y las comprobaciones se vuelven adivinanza.
+  const avisos = await ch.evaluar(
+      `JSON.stringify([...(${FILA}?.querySelectorAll('.badge-danger') || [])].map(b => b.textContent.trim()))`);
+  const lista = JSON.parse(avisos || '[]');
+  paso('la fila avisa de que falta el comprobante',
+       lista.some((x) => /falta comprobante/i.test(x)), avisos);
+  paso('y de cuantas fotos faltan', lista.some((x) => /^falta \d+ fotos?$/i.test(x)), avisos);
+  paso('y se distingue de un vistazo, sin leer',
+       await ch.evaluar(`${FILA}?.classList.contains('pendiente')`));
+  /*
+   * El nombre de la entidad NO va en rojo. Paso: la caja "falta para la credencial" de la
+   * ficha usaba la clase `.pendiente` a secas, el selector alcanzaba tambien a las filas de la
+   * lista y una venta con trabajo pendiente se veia como una venta erronea.
+   */
+  paso('pero el nombre de la entidad no se pinta como si fuera un error',
+       await ch.evaluar(`(() => { const n=${FILA}?.querySelector('.nombre');
+         return n ? getComputedStyle(n).color !== 'rgb(220, 38, 38)' : false; })()`),
+       await ch.evaluar(`(() => { const n=${FILA}?.querySelector('.nombre');
+         return n ? getComputedStyle(n).color : '(sin nombre)'; })()`));
 
   await ch.evaluar(`${FILA}?.click()`);
   await ch.esperar(2000);
