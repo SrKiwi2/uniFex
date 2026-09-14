@@ -26,13 +26,13 @@ import { toast } from './toast.js';
  * telefono y a enseñar en la puerta. En el movil se guarda en Documentos como PNG —visible
  * desde la galeria y adjuntable por WhatsApp, que es como se reparte— y en la web se descarga.
  */
-export async function descargarCredencialVirtual(responsableId, nombre) {
-  const archivo = `credencial-${(nombre || responsableId).toString().replace(/[^\w -]/g, '').trim() || responsableId}.png`;
+export async function descargarCredencialVirtual(responsableId, nombre, carpeta = null) {
+  const archivo = `credencial-${nombreSeguro(nombre || responsableId)}.png`;
   try {
     const res = await descargarArchivo(
-      `/api/app/credenciales/${responsableId}/virtual`, archivo);
+      `/api/app/credenciales/${responsableId}/virtual`, archivo, { carpeta });
     toast(res.destino === 'telefono'
-      ? `Credencial guardada en Documentos (${archivo})`
+      ? (res.carpeta ? `Guardada en Documentos › ${res.carpeta}` : `Credencial guardada en Documentos`)
       : 'Credencial descargada', 'ok');
     return true;
   } catch (e) {
@@ -53,9 +53,11 @@ export async function descargarPdf(ruta, nombreArchivo, opciones = {}) {
  * blob + `<a download>` en la web, Filesystem en el telefono.
  */
 export async function descargarArchivo(ruta, nombreArchivo, opciones = {}) {
+  // `carpeta` no viaja al servidor: es donde se guarda, no que se pide.
+  const { carpeta, ...peticion } = opciones;
   // `opciones` permite pedirlo por POST con un cuerpo: las credenciales se generan a partir
   // de una seleccion que puede ser de cientos de ids, y eso no cabe en una URL.
-  const r = await apiFetch(ruta, opciones);
+  const r = await apiFetch(ruta, peticion);
   if (!r.ok) {
     // El servidor explica en texto plano por que no hay documento (por ejemplo, que ninguna
     // de las credenciales pedidas cumple los requisitos). Decirlo es mas util que un generico.
@@ -65,9 +67,15 @@ export async function descargarArchivo(ruta, nombreArchivo, opciones = {}) {
   const blob = await r.blob();
 
   if (esNativo()) {
-    return guardarEnElTelefono(blob, nombreArchivo);
+    return guardarEnElTelefono(blob, nombreArchivo, carpeta);
   }
-  guardarEnElNavegador(blob, nombreArchivo);
+  /*
+   * En la web no hay carpeta que valga: el navegador decide donde cae y `download` ignora
+   * cualquier ruta que se le ponga. Se antepone el nombre de la entidad al archivo, que
+   * persigue lo mismo —que los de una misma venta queden juntos al ordenar por nombre— con lo
+   * unico que el navegador deja controlar.
+   */
+  guardarEnElNavegador(blob, carpeta ? `${nombreSeguro(carpeta)} - ${nombreArchivo}` : nombreArchivo);
   return { destino: 'navegador' };
 }
 
@@ -90,19 +98,48 @@ function guardarEnElNavegador(blob, nombreArchivo) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
-async function guardarEnElTelefono(blob, nombreArchivo) {
+/**
+ * Nombre de carpeta o de archivo que Android acepte.
+ *
+ * Los nombres de entidad traen barras ("EMPRESA / SERVICIO"), dos puntos y acentos, y una
+ * barra dentro del nombre crearia una carpeta anidada donde no toca. Se quedan letras,
+ * numeros, espacios, guiones y puntos; el resto pasa a guion y se recorta, porque Android no
+ * garantiza nombres muy largos en todos los sistemas de archivos.
+ */
+export function nombreSeguro(v) {
+  return String(v || '')
+    .replace(/[^\p{L}\p{N} .\-_]/gu, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+    .slice(0, 60) || 'Sin nombre';
+}
+
+async function guardarEnElTelefono(blob, nombreArchivo, carpeta) {
   // El import es dinamico para que la web no cargue el plugin, que ahi no sirve de nada.
   const { Filesystem, Directory } = await import('@capacitor/filesystem');
   const datos = await aBase64(blob);
+  /*
+   * Una CARPETA POR VENTA, con el nombre de la entidad.
+   *
+   * Al registrar una venta caen varios archivos de golpe: el recibo y una credencial por cada
+   * responsable. Sueltos en Documentos, mezclados con todo lo demas del telefono y con los de
+   * las otras ventas del dia, encontrarlos era el trabajo. Juntos en una carpeta que se llama
+   * como el expositor, se encuentran leyendo.
+   *
+   * `recursive: true` crea la carpeta si no existe; si ya existe, escribe dentro. Por eso una
+   * segunda descarga de la misma venta cae junto a la primera en vez de duplicar nada.
+   */
+  const ruta = carpeta ? `${nombreSeguro(carpeta)}/${nombreArchivo}` : nombreArchivo;
   // Documents y no Cache: en Cache el archivo es invisible para el usuario y Android lo borra
   // cuando quiere. En Documentos queda donde lo va a buscar.
   const { uri } = await Filesystem.writeFile({
-    path: nombreArchivo,
+    path: ruta,
     data: datos,
     directory: Directory.Documents,
     recursive: true,
   });
-  return { destino: 'telefono', uri };
+  return { destino: 'telefono', uri, carpeta: carpeta ? nombreSeguro(carpeta) : null };
 }
 
 /** El plugin recibe base64, no un blob. Se le quita la cabecera `data:...;base64,`. */
@@ -168,12 +205,12 @@ export async function compartirRecibo(inscripcionId) {
   }
 }
 
-export async function descargarRecibo(inscripcionId) {
+export async function descargarRecibo(inscripcionId, carpeta = null) {
   try {
     const res = await descargarPdf(`/api/app/inscripciones/${inscripcionId}/recibo`,
-                                   `nota-venta-${inscripcionId}.pdf`);
+                                   `nota-venta-${inscripcionId}.pdf`, { carpeta });
     toast(res.destino === 'telefono'
-      ? `Recibo guardado en Documentos (nota-venta-${inscripcionId}.pdf)`
+      ? (res.carpeta ? `Recibo guardado en Documentos › ${res.carpeta}` : 'Recibo guardado en Documentos')
       : 'Recibo descargado', 'ok');
     return true;
   } catch (e) {

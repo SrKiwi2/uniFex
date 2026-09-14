@@ -249,8 +249,9 @@ async function confirmarSubidaComprobante(archivo) {
  * Baja el recibo. Va por el mismo helper que el registro de la venta para que se comporte
  * igual en los dos sitios: en el APK, abrir un blob en una pestaña no hace nada.
  */
-function verRecibo(id) {
-  return descargarRecibo(id);
+function verRecibo(id, entidad = null) {
+  // Misma carpeta que el dia de la venta: se busca por el nombre del expositor, no por fecha.
+  return descargarRecibo(id, entidad);
 }
 
 // ---------------------------------------------------------------- ficha de la venta
@@ -665,7 +666,7 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
           📤 Compartir
         </button>
         <button class="btn btn-primario btn-grande" :disabled="!ficha"
-                @click="ficha && verRecibo(ficha.id)">
+                @click="ficha && verRecibo(ficha.id, ficha.entidad?.nombre)">
           🧾 Imprimir recibo
         </button>
       </template>

@@ -500,14 +500,18 @@ async function registrar() {
         for (const r of lista) if (r.tieneFoto) conCredencial.push(r);
       } catch { /* sin la lista no se baja ninguna: la venta ya esta hecha */ }
     }
+    // Todo lo de esta venta cae en UNA carpeta con el nombre de la entidad: el recibo y una
+    // credencial por responsable. Sueltos en Documentos, mezclados con los de las otras ventas
+    // del dia, encontrarlos despues era el trabajo.
+    const carpeta = mayus(form.entidadNombre);
     for (const r of conCredencial) {
-      await descargarCredencialVirtual(r.id, r.nombre);
+      await descargarCredencialVirtual(r.id, r.nombre, carpeta);
     }
 
     textoCarga.value = 'Preparando el recibo…';
     // El recibo se baja SOLO, que es el momento en que el cliente lo está esperando. Si algo
     // falla no se toca la venta: ya está hecha, y se avisa de dónde volver a pedirlo.
-    await descargarRecibo(d.inscripcionId);
+    await descargarRecibo(d.inscripcionId, carpeta);
     ocultarCarga();
 
     /*
@@ -528,7 +532,8 @@ async function registrar() {
     if (conCredencial.length) {
       sobreCredenciales = `\n\nSe descargó ${conCredencial.length === 1
         ? 'la credencial virtual'
-        : `${conCredencial.length} credenciales virtuales`}. Ya se puede${conCredencial.length === 1 ? '' : 'n'} mandar al expositor.`;
+        : `${conCredencial.length} credenciales virtuales`}. Ya se puede${conCredencial.length === 1 ? '' : 'n'} mandar al expositor.`
+        + `\n\nEstán en Documentos, en la carpeta «${carpeta}», junto con el recibo.`;
     } else {
       sobreCredenciales = '\n\nLa credencial virtual se descarga desde Credenciales, en cuanto '
         + 'estén el comprobante y la foto del responsable.';

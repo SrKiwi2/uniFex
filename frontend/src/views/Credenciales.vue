@@ -72,7 +72,11 @@ async function bajarVirtual(lista) {
   mostrarCarga(aptas.length === 1 ? 'Generando la credencial…'
                                   : `Generando ${aptas.length} credenciales…`);
   try {
-    for (const c of aptas) await descargarCredencialVirtual(c.responsableId, c.nombre);
+    // A la carpeta de su entidad, la misma en la que cayeron el recibo y las demas: asi lo
+    // que se descarga hoy se junta con lo que se descargo el dia de la venta.
+    for (const c of aptas) {
+      await descargarCredencialVirtual(c.responsableId, c.nombre, c.entidad);
+    }
     await cargar();
   } finally {
     ocultarCarga();
