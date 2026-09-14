@@ -219,8 +219,9 @@ titulo('Almacen de casetas: copia en disco y resincronizacion');
 
   asignado = [{ puestoId: 3, vendedorId: 9, vendedor: 'ANA PEREZ', celular: '70000000' }];
   await t.recargar();
+  // Una LISTA por caseta: la misma caseta puede llevarla mas de un vendedor (V32).
   paso('el store guarda quien responde por cada caseta',
-       t.asignaciones.get(3)?.vendedor === 'ANA PEREZ', JSON.stringify([...t.asignaciones]));
+       t.asignaciones.get(3)?.[0]?.vendedor === 'ANA PEREZ', JSON.stringify([...t.asignaciones]));
 
 
   t.desconectar();
@@ -597,7 +598,11 @@ titulo('Casetas asignadas a otro vendedor');
   const ficha = leer('frontend/src/components/CasetaDetalle.vue');
   paso('la ficha no ofrece vender una caseta ajena', /if \(!props\.vendible\) return null;/.test(ficha));
   paso('pero si da el contacto del companiero',
-       ficha.includes('asignacion.vendedor') && ficha.includes('`tel:${telefono}`'));
+       ficha.includes('a.vendedor') && ficha.includes('`tel:${telefono(a.celular)}`'));
+  // Varios: la caseta puede llevarla mas de uno y hay que poder llamar a cualquiera de ellos,
+  // no solo al primero que devolviera el servidor.
+  paso('y los lista a TODOS, no solo al primero',
+       /v-for="a in asignaciones"/.test(ficha));
 }
 
 // ---------------------------------------------------------------- cambios en vivo y datos
@@ -650,7 +655,11 @@ titulo('Cambios en vivo y consumo de datos');
   paso('los cambios de asignacion se aplican sin volver a pedir nada',
        store.includes('function aplicarAsignaciones') && !/aplicarAsignaciones[\s\S]{0,400}apiFetch/.test(store));
   paso('y la copia en disco se mantiene coherente',
-       /aplicarAsignaciones[\s\S]{0,700}guardarCache\(\)/.test(store));
+       /aplicarAsignaciones[\s\S]{0,1400}guardarCache\(\)/.test(store));
+  // Una copia guardada por la version anterior trae UN vendedor por caseta, no una lista. En un
+  // telefono ya instalado esa copia sobrevive a la actualizacion.
+  paso('y la copia vieja (un vendedor por caseta) no rompe el arranque',
+       /Array\.isArray\(v\) \? v : \[v\]/.test(store));
   paso('ws.js escucha el topic', leer('frontend/src/ws.js').includes("'/topic/asignaciones'"));
 }
 

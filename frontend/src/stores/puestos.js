@@ -26,7 +26,10 @@ export const usePuestosStore = defineStore('puestos', () => {
   /** true mientras lo que se ve sale de la copia en disco y aun no lo confirmo el servidor. */
   const desdeCache = ref(false);
   /**
-   * Quien responde por cada caseta: puestoId -> { vendedorId, vendedor, celular }.
+   * Quien responde por cada caseta: puestoId -> [{ vendedorId, vendedor, celular }, ...].
+   *
+   * Es una LISTA por caseta, no un vendedor suelto: la misma caseta puede estar habilitada a
+   * varios, y la vende quien la reserva primero. Una caseta que no lleva nadie no tiene entrada.
    *
    * Va aparte de la lista de casetas porque cambia con OTRO ritmo —se toca desde la pantalla
    * de Vendedores, no con cada venta— y porque meterlo en PuestoEstadoDTO cargaria el nombre
@@ -120,8 +123,15 @@ export const usePuestosStore = defineStore('puestos', () => {
       puestos.value = guardado.lista;
       ultimaLista = guardado.lista;
       // Sin las asignaciones, el arranque en frio pintaria de gris hasta las casetas propias.
+      //
+      // La copia guardada por una version anterior tiene UN vendedor por caseta, no una lista.
+      // En un telefono ya instalado esa copia sobrevive a la actualizacion, asi que se normaliza
+      // al leerla: sin esto, la primera pantalla tras actualizar reventaba al preguntar si la
+      // caseta era suya, y el mapa se quedaba en blanco hasta que contestara el servidor.
       if (Array.isArray(guardado.asignaciones)) {
-        asignaciones.value = new Map(guardado.asignaciones);
+        asignaciones.value = new Map(guardado.asignaciones.map(
+          ([id, v]) => [id, Array.isArray(v) ? v : [v]],
+        ));
       }
       desdeCache.value = true;
       return true;
@@ -230,15 +240,21 @@ export const usePuestosStore = defineStore('puestos', () => {
    * Es la mitad que faltaba: hasta ahora, reasignar casetas desde Vendedores no se veia en un
    * mapa ya abierto hasta la siguiente resincronizacion. Ahora el cambio entra al instante y
    * sin pedir nada, porque el mensaje trae la informacion, no un aviso de "vuelve a pedirlo".
-   * Un `vendedorId` nulo significa que la caseta se quedo sin vendedor.
+   * El servidor manda la lista COMPLETA de habilitados de cada caseta que toco, no el cambio
+   * suelto, asi que aqui se REEMPLAZA la entrada entera en vez de sumar o restar de a uno. Si se
+   * fuera sumando, dos mensajes cruzados dejarian la lista a medias. Una fila con `vendedorId`
+   * nulo es la forma de decir "esta caseta ya no la lleva nadie".
    */
   function aplicarAsignaciones(cambios) {
     if (!Array.isArray(cambios) || !cambios.length) return;
     const m = new Map(asignaciones.value);
+    // Primero se vacian las casetas mencionadas: lo que llegue despues las vuelve a llenar, y
+    // las que solo traian la fila nula se quedan sin entrada, que es justo lo que significa.
+    for (const a of cambios) if (a?.puestoId != null) m.delete(a.puestoId);
     for (const a of cambios) {
-      if (a?.puestoId == null) continue;
-      if (a.vendedorId == null) m.delete(a.puestoId);
-      else m.set(a.puestoId, a);
+      if (a?.puestoId == null || a.vendedorId == null) continue;
+      if (!m.has(a.puestoId)) m.set(a.puestoId, []);
+      m.get(a.puestoId).push(a);
     }
     asignaciones.value = m;
     // La copia en disco tiene que quedar coherente, o el proximo arranque en frio pintaria
@@ -280,7 +296,14 @@ export const usePuestosStore = defineStore('puestos', () => {
         if (rAsig && rAsig.status !== 304 && rAsig.ok) {
           etagAsignaciones = rAsig.headers.get('ETag') || etagAsignaciones;
           const filas = await rAsig.json().catch(() => []);
-          asignaciones.value = new Map(filas.map((a) => [a.puestoId, a]));
+          // Una fila por pareja (caseta, vendedor): se agrupan por caseta.
+          const m = new Map();
+          for (const a of filas) {
+            if (a?.puestoId == null) continue;
+            if (!m.has(a.puestoId)) m.set(a.puestoId, []);
+            m.get(a.puestoId).push(a);
+          }
+          asignaciones.value = m;
         }
 
         desdeCache.value = false;

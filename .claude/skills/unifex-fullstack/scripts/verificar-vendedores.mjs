@@ -11,10 +11,14 @@
  *   - esconder una caseta en el mapa NO impedia venderla: ni el carrito ni el registro
  *     de la venta comprobaban la asignacion.
  *
- * Regla: un vendedor ve EXACTAMENTE las casetas que se le seleccionaron, ni una mas.
- * Sin seleccion no ve ninguna. Nadie vende hasta que
- * administracion le habilita una categoria o unas casetas, y el mapa se lo dice con
- * palabras en vez de dejarlo mirando un plano vacio.
+ * Regla: un vendedor VENDE exactamente las casetas que se le seleccionaron, ni una mas (el
+ * plano lo ve entero, con las ajenas en gris). Sin seleccion no vende ninguna, y el mapa se lo
+ * dice con palabras en vez de dejarlo mirando un plano en gris sin explicacion.
+ *
+ * Una caseta puede estar habilitada a VARIOS vendedores (V32): varios atienden el mismo sector
+ * y registra quien cierra el trato primero. Lo que impide venderla dos veces no es la
+ * habilitacion sino la reserva, y por eso esta prueba lo comprueba de las dos formas: que los
+ * dos la tengan habilitada, y que en cuanto uno la reserva al otro ya le salga ocupada.
  *
  * OJO al desplegar: los vendedores que ya existan se quedan sin mapa hasta que se les
  * asigne algo. Hay que configurarlos antes de subirlo.
@@ -75,7 +79,7 @@ ok(Array.isArray(r.cuerpo) && r.cuerpo.length === 0,
 
 // B) Una caseta suelta, SIN su categoria: el caso que antes no funcionaba nunca
 const catalogo = (await api(T,'/api/app/vendedores/puestos-asignables')).cuerpo || [];
-const libres = new Set(catalogo.filter(p => !p.asignadoAId).map(p => p.id));
+const libres = new Set(catalogo.filter(p => !(p.habilitados || []).length).map(p => p.id));
 const obj = todas.find(p => p.estado === 'L' && libres.has(p.id));
 ok(!!obj, 'hay una caseta libre y sin dueño para la prueba', obj?.codigo);
 // PUT, no POST: la seleccion se manda entera y el servidor calcula altas y bajas. Con POST
@@ -155,7 +159,9 @@ ok(!!fila?.persona?.nombre && !!fila?.rol?.nombre,
    'cada vendedor trae persona y rol (los pinta la tabla)', `${fila?.persona?.nombre} / ${fila?.rol?.nombre}`);
 
 
-// ---- Asignacion por lote y exclusividad (el modal agrupado) ----
+const lleva = (p, uid) => (p.habilitados || []).some((h) => h.id === uid);
+
+// ---- Asignacion por lote y casetas COMPARTIDAS (el modal agrupado) ----
 const otro = (await api(T,'/api/app/usuarios',{method:'POST',body:JSON.stringify({
   username:`vo${marca}`,password:'ClaveVendedor9',rolId:rolAdm.id,personaId:null,
   persona:{nombre:'OTRO',paterno:'VENDEDOR',materno:'',ci:`VO${marca}`,correo:'',celular:''}})})).cuerpo?.usuario?.id;
@@ -165,12 +171,42 @@ r = await api(T,`/api/app/vendedores/${otro}/puestos`,{method:'PUT',body:JSON.st
 ok(r.estado===200 && r.cuerpo?.asignadas===libresIds.length,
    'PUT guarda un lote entero en una sola peticion', `asignadas=${r.cuerpo?.asignadas}`);
 
-// Exclusividad: nadie mas puede tomarlas (es lo que hace que "a otro usuario ni le salgan").
-r = await api(T,`/api/app/vendedores/${vid}/puestos`,{method:'PUT',body:JSON.stringify({puestoIds:libresIds.slice(0,3)})});
-ok(r.cuerpo?.asignadas===0 && r.cuerpo?.noDisponibles?.length===3,
-   'otro vendedor NO puede tomar casetas ya asignadas', r.cuerpo?.mensaje);
+/*
+ * Compartir: la MISMA caseta habilitada a dos vendedores. Hasta V32 esto era imposible (un
+ * indice unico lo impedia) y la prueba afirmaba lo contrario. En la feria varios vendedores
+ * atienden el mismo sector; lo que impide venderla dos veces no es la habilitacion, es la
+ * reserva, y eso se comprueba tres pasos mas abajo.
+ */
+const compartidas = libresIds.slice(0,3);
+r = await api(T,`/api/app/vendedores/${vid}/puestos`,{method:'PUT',
+    body:JSON.stringify({puestoIds:[obj.id, ...compartidas]})});
+ok(r.cuerpo?.asignadas===compartidas.length && (r.cuerpo?.noDisponibles||[]).length===0,
+   'la misma caseta se habilita a DOS vendedores', r.cuerpo?.mensaje);
+
+r = await api(T,'/api/app/vendedores/puestos-asignables');
+const compartida = (r.cuerpo||[]).find(p => p.id === compartidas[0]);
+ok(lleva(compartida, vid) && lleva(compartida, otro),
+   'y el catalogo la muestra con los dos', (compartida?.habilitados||[]).map(h=>h.username).join(' + '));
+
+r = await api(V,'/api/app/mis-puestos');
+ok((r.cuerpo||[]).some(p => p.id === compartidas[0]),
+   'al segundo vendedor le sale entre las suyas', `${r.cuerpo?.length} suya(s)`);
+
+/*
+ * Lo que de verdad protege la venta: quien reserva primero se la lleva. Los dos estan
+ * habilitados y los dos lo intentan; solo uno puede.
+ */
+const otroToken = (await login(`vo${marca}`,'ClaveVendedor9')).token;
+r = await api(V,`/api/app/puestos/carrito`,{method:'POST',body:JSON.stringify({ids:[compartidas[0]]})});
+ok(r.estado===200 && (r.cuerpo?.logradas ?? r.cuerpo?.reservadas) !== 0,
+   'el primero de los dos la reserva', `HTTP ${r.estado}`);
+r = await api(otroToken,`/api/app/puestos/${compartidas[0]}/reservar`,{method:'POST'});
+ok(r.estado !== 200,
+   'y al otro, habilitado igual, ya le sale ocupada', `HTTP ${r.estado}`);
+await api(V,`/api/app/puestos/${compartidas[0]}/liberar`,{method:'POST'});
 
 // Quitar y sumar en el MISMO guardado, que es lo que hace el boton Guardar del modal.
+await api(T,`/api/app/vendedores/${vid}/puestos`,{method:'PUT',body:JSON.stringify({puestoIds:[obj.id]})});
 const mitad = libresIds.slice(0,6);
 r = await api(T,`/api/app/vendedores/${otro}/puestos`,{method:'PUT',body:JSON.stringify({puestoIds:mitad})});
 ok(r.cuerpo?.quitadas===libresIds.length-mitad.length && r.cuerpo?.asignadas===0,
@@ -178,15 +214,15 @@ ok(r.cuerpo?.quitadas===libresIds.length-mitad.length && r.cuerpo?.asignadas===0
 
 // El catalogo dice de quien es cada una, que es lo que el modal usa para esconderlas.
 r = await api(T,'/api/app/vendedores/puestos-asignables');
-ok((r.cuerpo||[]).filter(p => p.asignadoAId === otro).length === mitad.length,
-   'el catalogo marca a quien pertenece cada caseta', `${mitad.length} de ese vendedor`);
+ok((r.cuerpo||[]).filter(p => lleva(p, otro)).length === mitad.length,
+   'el catalogo marca quien lleva cada caseta', `${mitad.length} de ese vendedor`);
 
 // Al dar de baja al vendedor, sus casetas vuelven al catalogo. Sin esto quedaban bloqueadas
 // para siempre: la baja es logica, la fila del usuario se queda y la asignacion con ella.
 await api(T,`/api/app/usuarios/${otro}`,{method:'DELETE'});
 r = await api(T,'/api/app/vendedores/puestos-asignables');
-ok((r.cuerpo||[]).filter(p => p.asignadoAId === otro).length === 0,
-   'al eliminar un vendedor, sus casetas vuelven a estar disponibles');
+ok((r.cuerpo||[]).filter(p => lleva(p, otro)).length === 0,
+   'al eliminar un vendedor, sus casetas dejan de figurar a su nombre');
 
 await api(T,`/api/app/usuarios/${vid}`,{method:'DELETE'});
 console.log(`\n== ${fallos === 0 ? 'Todo en orden' : fallos + ' fallo(s)'} ==\n`);

@@ -19,8 +19,12 @@ const props = defineProps({
   ocupado: { type: Boolean, default: false },
   /** false cuando la caseta esta asignada a otro vendedor: se informa, no se vende. */
   vendible: { type: Boolean, default: true },
-  /** { vendedorId, vendedor, celular } del vendedor que la lleva, o null si no la lleva nadie. */
-  asignacion: { type: Object, default: null },
+  /**
+   * Los vendedores habilitados para esta caseta: [{ vendedorId, vendedor, celular }, ...].
+   * Vacio = todavia no la lleva nadie. Son varios porque una caseta puede habilitarse a mas
+   * de un vendedor; la vende quien la reserve primero.
+   */
+  asignaciones: { type: Array, default: () => [] },
 });
 const emit = defineEmits(['cerrar', 'agregar', 'quitar']);
 
@@ -68,17 +72,20 @@ watch(() => props.puesto?.id, async (id) => {
 
 const precio = computed(() => Number(props.puesto?.precio || 0));
 
-/** Deja el celular listo para `tel:`: sin espacios ni guiones. */
-const telefono = computed(() => (props.asignacion?.celular || '').replace(/[^\d+]/g, ''));
+/** Deja un celular listo para `tel:`: sin espacios ni guiones. */
+const telefono = (celular) => (celular || '').replace(/[^\d+]/g, '');
 
-const copiado = ref(false);
-async function copiarContacto() {
-  const a = props.asignacion;
+/**
+ * Cual se copio, por id: con varios vendedores en pantalla, un unico "copiado" pondria el
+ * visto en todos los botones a la vez y no se sabria cual se copio.
+ */
+const copiado = ref(null);
+async function copiarContacto(a) {
   if (!a) return;
   try {
     await navigator.clipboard.writeText(`${a.vendedor}${a.celular ? ' — ' + a.celular : ''}`);
-    copiado.value = true;
-    setTimeout(() => { copiado.value = false; }, 2000);
+    copiado.value = a.vendedorId;
+    setTimeout(() => { if (copiado.value === a.vendedorId) copiado.value = null; }, 2000);
   } catch {
     // Sin permiso de portapapeles queda el enlace de llamada, que es lo que mas se usa.
   }
@@ -126,19 +133,24 @@ async function copiarContacto() {
 
           <!-- Caseta de otro vendedor: en vez de un "no puedes", el contacto de quien si la
                lleva. Es el motivo de que estas casetas hayan vuelto al mapa: el cliente esta
-               parado delante de una y el vendedor tiene que poder decirle a quien llamar. -->
+               parado delante de una y el vendedor tiene que poder decirle a quien llamar.
+               Pueden ser VARIOS: la caseta se habilita a quien haga falta y la vende el que
+               la reserve primero, asi que se listan todos con su telefono. -->
           <div v-if="!vendible" class="ajena">
-            <template v-if="asignacion">
-              <p class="quien">La vende <strong>{{ asignacion.vendedor }}</strong></p>
-              <div v-if="asignacion.celular" class="contacto">
-                <a class="btn btn-primario grande" :href="`tel:${telefono}`">
-                  📞 {{ asignacion.celular }}
+            <template v-if="asignaciones.length">
+              <p class="quien">
+                {{ asignaciones.length > 1 ? 'La venden' : 'La vende' }}
+                <strong>{{ asignaciones.map((a) => a.vendedor).join(', ') }}</strong>
+              </p>
+              <div v-for="a in asignaciones" :key="a.vendedorId" class="contacto">
+                <a v-if="a.celular" class="btn btn-primario grande" :href="`tel:${telefono(a.celular)}`">
+                  📞 {{ a.celular }}<template v-if="asignaciones.length > 1"> · {{ a.vendedor }}</template>
                 </a>
-                <button class="btn" @click="copiarContacto">
-                  {{ copiado ? '✓ Copiado' : 'Copiar contacto' }}
+                <p v-else class="motivo">{{ a.vendedor }} no tiene celular registrado.</p>
+                <button v-if="a.celular" class="btn" @click="copiarContacto(a)">
+                  {{ copiado === a.vendedorId ? '✓ Copiado' : 'Copiar contacto' }}
                 </button>
               </div>
-              <p v-else class="motivo">Este vendedor no tiene celular registrado.</p>
             </template>
             <p v-else class="motivo">Esta caseta todavía no tiene vendedor asignado.</p>
           </div>
