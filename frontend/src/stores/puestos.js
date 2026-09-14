@@ -167,7 +167,69 @@ export const usePuestosStore = defineStore('puestos', () => {
    * Aplica un PuestoEstadoDTO recibido por WebSocket.
    * Cubre alta, cambio y baja (`activo: false`), que es lo que necesita el editor.
    */
+  /**
+   * Cola de lo que llega del servidor, para aplicarlo AGRUPADO: un solo repintado por
+   * fotograma en vez de uno por mensaje.
+   *
+   * Meter un lote al carrito son N casetas y el servidor difunde N mensajes, cada uno en su
+   * propio turno del bucle de eventos. Sin agrupar, cada mensaje dispara su pasada de render:
+   * Vue vuelve a evaluar el `v-memo` de las ~400 casetas del plano N veces seguidas. Medido con
+   * la CPU frenada 6x (un telefono modesto), un lote de 20 tardaba 309 ms en terminar de
+   * marcarse en la pantalla del otro vendedor, creciendo en linea recta con el tamaño del lote
+   * —~15 ms por caseta—, aunque el aviso hubiera llegado a los 16 ms. La espera no era la red:
+   * era repintar el plano veinte veces.
+   *
+   * Se guarda por id y gana el ULTIMO mensaje de cada caseta: cada uno trae el estado completo
+   * de esa caseta, asi que el mas nuevo no necesita a los anteriores.
+   *
+   * Medido en el mismo equipo, con la CPU frenada 6x: un lote de 20 pasa de ~243 ms a ~72 ms
+   * y deja de crecer con el tamaño del lote; una caseta suelta se queda como estaba (~24 ms).
+   * El guion que lo mide es `medir-tiempo-real.mjs`, en los scripts de la habilidad.
+   */
+  let enCola = null;
+  let vaciadoPedido = false;
+
+  /** Abre la ventana de agrupado hasta el proximo fotograma. Sin `requestAnimationFrame` —en
+   *  las pruebas con Node no existe— no hay bucle de pintado, asi que no hay nada que agrupar. */
+  function abrirVentana() {
+    const raf = globalThis.requestAnimationFrame;
+    if (typeof raf !== 'function') return;
+    vaciadoPedido = true;
+    raf(() => { vaciadoPedido = false; vaciarCola(); });
+  }
+
+  function vaciarCola() {
+    if (!enCola) return;
+    const lote = enCola;
+    enCola = null;
+    for (const dto of lote.values()) aplicar(dto);
+  }
+
+  /**
+   * Un mensaje del servidor.
+   *
+   * El PRIMERO se aplica en el acto y los que lleguen detras, hasta el siguiente fotograma, se
+   * agrupan. Agrupar tambien el primero costaba un fotograma de espera a la caseta suelta —que
+   * es el caso mas frecuente, el vendedor que toca una— sin ganar nada: no hay ninguna ráfaga
+   * con la que juntarla. Asi, una caseta sola se pinta igual de rapido que antes y un lote de
+   * veinte cuesta dos pasadas de render en vez de veinte.
+   */
+  function aplicarDelServidor(dto) {
+    if (!dto || dto.id == null) return;
+    if (!vaciadoPedido) {
+      aplicar(dto);
+      abrirVentana();
+      return;
+    }
+    if (!enCola) enCola = new Map();
+    enCola.set(dto.id, dto);
+  }
+
   function aplicar(dto) {
+    // Un cambio local (reservar, soltar) va DESPUES de lo que el servidor ya mando, o un
+    // mensaje encolado de hace un instante pisaria el cambio optimista y el pin parpadearia
+    // de vuelta a libre durante un fotograma.
+    if (enCola) vaciarCola();
     const i = puestos.value.findIndex((p) => p.id === dto.id);
     if (dto.activo === false) {
       if (i >= 0) puestos.value.splice(i, 1);
@@ -407,7 +469,9 @@ export const usePuestosStore = defineStore('puestos', () => {
       // La medicion se cierra AQUI y no dentro de aplicar(), porque aplicar() lo usa
       // tambien la escritura optimista: si estuviera dentro, cada medicion se cerraria
       // a los 0 ms contra su propio pintado local en vez de contra el aviso del servidor.
-      (dto) => { cerrarMedicion(dto.id); aplicar(dto); },
+      // La medicion se cierra con la LLEGADA del mensaje, no con su pintado: mide el camino
+      // servidor -> cliente, que es lo que ese numero significa.
+      (dto) => { cerrarMedicion(dto.id); aplicarDelServidor(dto); },
       (motivo) => {
         enVivo.value = false;
         cliente = null;
@@ -464,6 +528,9 @@ export const usePuestosStore = defineStore('puestos', () => {
     desdeCache.value = false;
     ultimaSync.value = 0;
     asignaciones.value = new Map();
+    // Un lote a medio aplicar no puede sobrevivir al cierre de sesion: se pintaria encima de
+    // la lista del siguiente usuario.
+    enCola = null;
     ultimaLista = [];
     // Las etiquetas se olvidan al cerrar sesion: la respuesta del siguiente usuario puede ser
     // otra, y arrastrar la etiqueta vieja pediria un 304 sobre datos que no son los suyos.
@@ -476,7 +543,7 @@ export const usePuestosStore = defineStore('puestos', () => {
 
   return {
     puestos, cargando, error, enVivo, desdeCache, ultimaSync, ubicadas, carritoDe, asignaciones,
-    aplicar, aplicarAsignaciones, protegerLocales, cargar, recargar, conectar, asegurar, desconectar,
+    aplicar, aplicarDelServidor, aplicarAsignaciones, protegerLocales, cargar, recargar, conectar, asegurar, desconectar,
     registrarNotificaciones, reintentar, sinAsignaciones,
   };
 });
