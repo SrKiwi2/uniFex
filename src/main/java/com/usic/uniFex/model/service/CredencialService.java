@@ -112,6 +112,15 @@ public class CredencialService {
                 .toList();
     }
 
+    /** Las credenciales de una venta concreta, una por responsable. */
+    @Transactional(readOnly = true)
+    public List<CredencialDTO> porInscripcion(Long inscripcionId) {
+        if (inscripcionId == null) return List.of();
+        return listar(null).stream()
+                .filter(c -> inscripcionId.equals(c.inscripcionId()))
+                .toList();
+    }
+
     private CredencialDTO de(CredencialFilaView f) {
         // Ojo: `pago_contado` NO cuenta como comprobante. Antes si contaba, y el resultado era
         // que una venta al contado llegaba a la acreditacion sin ningun respaldo documental.

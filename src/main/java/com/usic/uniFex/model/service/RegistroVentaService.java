@@ -1,5 +1,6 @@
 package com.usic.uniFex.model.service;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -9,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -32,6 +34,7 @@ import com.usic.uniFex.model.entity.Persona;
 import com.usic.uniFex.model.entity.Puesto;
 import com.usic.uniFex.model.entity.Responsable;
 import com.usic.uniFex.model.entity.TipoEntidad;
+import com.usic.uniFex.model.dto.PlantillaCredencial;
 import com.usic.uniFex.model.repository.FuncionesInscripcion;
 
 import lombok.RequiredArgsConstructor;
@@ -82,6 +85,13 @@ public class RegistroVentaService {
     private final PuestoEventPublisher publisher;
     private final FileStorageService storage;
     private final AuditoriaService auditoria;
+    private final WhatsAppService whatsApp;
+    private final ReciboPdfService reciboPdf;
+    private final CredencialPdfService credencialPdf;
+    private final CredencialService credencialService;
+    private final CredencialCodigoService credencialCodigo;
+    @Value("${app.base-url:http://localhost:7676}")
+    private String baseUrl;
 
     // ------------------------------------------------------------------ entrada
 
@@ -253,6 +263,7 @@ public class RegistroVentaService {
                 usuarioId, origen);
 
         difundirTrasCommit(ocupados);
+        enviarWhatsAppTrasCommit(entidad.getCelularRepresentante(), entidad.getNombre(), inscripcion.getId());
         log.info("Venta registrada inscripcion={} casetas={} total={} usuario={}",
                 inscripcion.getId(), ocupados.size(), total, usuarioId);
 
@@ -407,6 +418,61 @@ public class RegistroVentaService {
                 publisher.publicarVarios(ocupados);
             }
         });
+    }
+
+    /**
+     * Envía el WhatsApp de bienvenida tras confirmar la transacción.
+     *
+     * Se hace en afterCommit para no enviar el mensaje si la venta se revierte.
+     */
+    private void enviarWhatsAppTrasCommit(String celular, String nombreEntidad, Long inscripcionId) {
+        if (!whatsApp.habilitado()) {
+            log.debug("WhatsApp deshabilitado; no se generan PDFs para inscripcion {}", inscripcionId);
+            return;
+        }
+        if (celular == null || celular.isBlank()) {
+            log.debug("Sin celular de responsable legal; no se envía WhatsApp para inscripción {}", inscripcionId);
+            return;
+        }
+        // Normalizar: quitar +, espacios, guiones
+        String normalizado = celular.replaceAll("[^0-9]", "");
+        // Si empieza con 0 (prefijo nacional), quitarlo para formato internacional
+        if (normalizado.startsWith("0")) normalizado = normalizado.substring(1);
+        // Asumimos Bolivia (591) si no tiene código de país y tiene 8 dígitos
+        if (normalizado.length() == 8) normalizado = "591" + normalizado;
+
+        final String numeroFinal = normalizado;
+        Runnable envio = () -> enviarWhatsAppVentaConPdfs(numeroFinal, nombreEntidad, inscripcionId);
+
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            envio.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                envio.run();
+            }
+        });
+    }
+
+    private void enviarWhatsAppVentaConPdfs(String celular, String nombreEntidad, Long inscripcionId) {
+        try {
+            ByteArrayOutputStream salidaRecibo = new ByteArrayOutputStream();
+            reciboPdf.generarRecibo(inscripcionId, salidaRecibo);
+
+            PlantillaCredencial plantilla = PlantillaCredencial.POR_DEFECTO;
+            List<byte[]> credenciales = credencialService.porInscripcion(inscripcionId).stream()
+                    .map(c -> credencialPdf.generar(List.of(c), plantilla,
+                            CredencialPdfService.ANCHO_CM_POR_DEFECTO, baseUrl, credencialCodigo))
+                    .toList();
+
+            whatsApp.enviarBienvenidaVentaConPdfs(celular, nombreEntidad, inscripcionId,
+                    salidaRecibo.toByteArray(), credenciales, baseUrl);
+        } catch (Exception e) {
+            log.warn("No se pudieron generar/enviar PDFs por WhatsApp para inscripcion {}: {}",
+                    inscripcionId, e.getMessage());
+        }
     }
 
     /** La auditoria de JPA esta apagada en este proyecto: hay que sellar a mano. */
