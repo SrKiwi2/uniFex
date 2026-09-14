@@ -109,18 +109,27 @@ public class WhatsAppService {
      * @return true si 2xx
      */
     public boolean enviarDocumento(String numero, byte[] pdfBytes, String fileName, String caption) {
+        return enviarMedia(numero, pdfBytes, fileName, caption, "document", "application/pdf");
+    }
+
+    public boolean enviarImagen(String numero, byte[] imagenBytes, String fileName, String caption) {
+        return enviarMedia(numero, imagenBytes, fileName, caption, "image", "image/png");
+    }
+
+    private boolean enviarMedia(String numero, byte[] bytes, String fileName, String caption,
+                                String mediatype, String mimetype) {
         if (!habilitado()) {
-            log.debug("WhatsApp deshabilitado o sin configuración; no se envía documento a {}", numero);
+            log.debug("WhatsApp deshabilitado o sin configuración; no se envía archivo a {}", numero);
             return false;
         }
-        if (numero == null || numero.isBlank() || pdfBytes == null || pdfBytes.length == 0) {
-            log.warn("Parámetros inválidos para enviar documento a {}", numero);
+        if (numero == null || numero.isBlank() || bytes == null || bytes.length == 0) {
+            log.warn("Parámetros inválidos para enviar archivo a {}", numero);
             return false;
         }
 
         try {
-            var payload = new DocumentoPayload(numero, "document", "application/pdf",
-                    caption != null ? caption : "", Base64.getEncoder().encodeToString(pdfBytes), fileName);
+            var payload = new DocumentoPayload(numero, mediatype, mimetype,
+                    caption != null ? caption : "", Base64.getEncoder().encodeToString(bytes), fileName);
             RequestBody requestBody = RequestBody.create(mapper.writeValueAsString(payload), JSON);
 
             String url = apiBaseUrl + "sendMedia/" + instance;
@@ -133,15 +142,15 @@ public class WhatsAppService {
             try (Response response = client.newCall(request).execute()) {
                 String respBody = response.body() != null ? response.body().string() : "";
                 if (response.isSuccessful()) {
-                    log.info("WhatsApp documento enviado a {} ({})", numero, fileName);
+                    log.info("WhatsApp archivo enviado a {} ({})", numero, fileName);
                     return true;
                 } else {
-                    log.warn("WhatsApp documento falló ({}) a {}: {}", response.code(), numero, respBody);
+                    log.warn("WhatsApp archivo falló ({}) a {}: {}", response.code(), numero, respBody);
                     return false;
                 }
             }
         } catch (IOException e) {
-            log.error("Error enviando WhatsApp documento a {}: {}", numero, e.getMessage());
+            log.error("Error enviando WhatsApp archivo a {}: {}", numero, e.getMessage());
             return false;
         }
     }
@@ -149,13 +158,13 @@ public class WhatsAppService {
     /**
      * Envía el mensaje de bienvenida post-venta con PDFs adjuntos:
      * - 1 recibo de compra
-     * - N credenciales (una por responsable)
+     * - N credenciales virtuales (una por responsable)
      *
      * Requiere inyectar {@link ReciboPdfService} y {@link CredencialPdfService} desde el llamador,
      * o generar los PDFs aparte y pasarlos como bytes.
      */
     public void enviarBienvenidaVentaConPdfs(String celular, String nombreEntidad, Long inscripcionId,
-                                             byte[] reciboPdf, java.util.List<byte[]> credencialesPdf,
+                                             byte[] reciboPdf, java.util.List<byte[]> credencialesPng,
                                              String baseUrl) {
         if (!habilitado()) {
             log.debug("WhatsApp deshabilitado; solo se loguea la intención de envío a {}", celular);
@@ -169,7 +178,7 @@ public class WhatsAppService {
                 "Hola " + (nombreEntidad != null ? nombreEntidad : "expositor") + ",",
                 "Tu inscripción ha sido registrada con éxito.",
                 "",
-                "📎 Adjunto encontrarás tu recibo y tus credenciales en PDF.",
+                "📎 Adjunto encontrarás tu recibo en PDF y tus credenciales virtuales.",
                 "Registra este número para recibir cualquier novedad de la feria.",
                 "",
                 "Mensaje enviado desde el sistema automatizado de la Universidad Amazónica de Pando.",
@@ -183,13 +192,13 @@ public class WhatsAppService {
                     "📄 Recibo de compra - Inscripción #" + inscripcionId);
         }
 
-        // 3. Credenciales PDF (una por responsable)
-        if (credencialesPdf != null) {
-            for (int i = 0; i < credencialesPdf.size(); i++) {
-                byte[] credPdf = credencialesPdf.get(i);
-                if (credPdf != null && credPdf.length > 0) {
-                    enviarDocumento(celular, credPdf,
-                            "credencial-" + inscripcionId + "-" + (i + 1) + ".pdf",
+        // 3. Credenciales virtuales (una por responsable), iguales a las descargables.
+        if (credencialesPng != null) {
+            for (int i = 0; i < credencialesPng.size(); i++) {
+                byte[] credencial = credencialesPng.get(i);
+                if (credencial != null && credencial.length > 0) {
+                    enviarImagen(celular, credencial,
+                            "credencial-" + inscripcionId + "-" + (i + 1) + ".png",
                             "🎫 Credencial #" + (i + 1) + " - Inscripción #" + inscripcionId);
                 }
             }

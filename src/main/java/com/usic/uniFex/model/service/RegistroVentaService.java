@@ -88,9 +88,8 @@ public class RegistroVentaService {
     private final AuditoriaService auditoria;
     private final WhatsAppService whatsApp;
     private final ReciboPdfService reciboPdf;
-    private final CredencialPdfService credencialPdf;
+    private final CredencialImagenService credencialImagen;
     private final CredencialService credencialService;
-    private final CredencialCodigoService credencialCodigo;
     @Value("${app.base-url:http://localhost:7676}")
     private String baseUrl;
 
@@ -465,8 +464,7 @@ public class RegistroVentaService {
 
             PlantillaCredencial plantilla = PlantillaCredencial.POR_DEFECTO;
             List<byte[]> credenciales = credencialService.porInscripcion(inscripcionId).stream()
-                    .map(c -> credencialPdf.generar(List.of(c), plantilla,
-                            CredencialPdfService.ANCHO_CM_POR_DEFECTO, baseUrl, credencialCodigo))
+                    .map(c -> credencialImagen.generar(c, plantilla, baseUrl))
                     .toList();
 
             whatsApp.enviarBienvenidaVentaConPdfs(celular, nombreEntidad, inscripcionId,
