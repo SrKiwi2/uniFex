@@ -82,11 +82,13 @@ public class CredencialImagenService {
             dibujarQr(g, plantilla.qr(), w, h, codigos.urlPublica(urlBase, c.codigo()));
             dibujarFoto(g, plantilla.foto(), w, h, c);
 
-            texto(g, plantilla.nombre(), w, h, c.nombre(), plantilla);
-            texto(g, plantilla.empresa(), w, h, empresa(c), plantilla);
-            texto(g, plantilla.ci(), w, h, c.ci(), plantilla);
-            texto(g, plantilla.codigo(), w, h, c.casetas(), plantilla);
-            texto(g, plantilla.zona(), w, h, c.categoria(), plantilla);
+            // Solo el nombre y la empresa admiten dos lineas: son los unicos que se alargan.
+            // Un C.I. o un numero de caseta partido en dos seria ilegible, no mas legible.
+            texto(g, plantilla.nombre(), w, h, c.nombre(), plantilla, 2);
+            texto(g, plantilla.empresa(), w, h, empresa(c), plantilla, 2);
+            texto(g, plantilla.ci(), w, h, c.ci(), plantilla, 1);
+            texto(g, plantilla.codigo(), w, h, c.casetas(), plantilla, 1);
+            texto(g, plantilla.zona(), w, h, c.categoria(), plantilla, 1);
 
             g.dispose();
             ByteArrayOutputStream salida = new ByteArrayOutputStream();
@@ -134,12 +136,27 @@ public class CredencialImagenService {
      */
     private void dibujarFoto(Graphics2D g, Caja caja, int w, int h, CredencialDTO c) {
         if (caja == null) return;
-        BufferedImage foto = leerFoto(c.fotoUrl());
-        if (foto == null) return;   // sin foto se deja el hueco de la plantilla, no un cuadro gris
+        int ladoHueco = (int) Math.round(caja.ancho() * w);
+        int xh = (int) Math.round(caja.x() * w);
+        int yh = (int) Math.round(caja.y() * h);
 
-        int lado = (int) Math.round(caja.ancho() * w);
-        int x = (int) Math.round(caja.x() * w);
-        int y = (int) Math.round(caja.y() * h);
+        BufferedImage foto = leerFoto(c.fotoUrl());
+        if (foto == null) {
+            /*
+             * SIN FOTO SE TAPA EL HUECO, no se deja como esta.
+             *
+             * La plantilla trae una foto de muestra impresa en el circulo —una persona
+             * cualquiera—, asi que no dibujar nada no deja un hueco vacio: deja la cara de un
+             * desconocido en la credencial de otro. Es peor que no tener foto, porque parece
+             * un dato y no lo es. Se pone una silueta neutra que se lee como "falta la foto".
+             */
+            siluetaSinFoto(g, xh, yh, ladoHueco);
+            return;
+        }
+
+        int lado = ladoHueco;
+        int x = xh;
+        int y = yh;
 
         BufferedImage redonda = new BufferedImage(lado, lado, BufferedImage.TYPE_INT_ARGB);
         Graphics2D gf = redonda.createGraphics();
@@ -157,6 +174,30 @@ public class CredencialImagenService {
         gf.dispose();
 
         g.drawImage(redonda, x, y, null);
+    }
+
+    /**
+     * La silueta de "sin foto": un circulo gris con un muñeco, del estilo de cualquier
+     * aplicacion cuando no hay imagen de perfil.
+     *
+     * Se dibuja con dos formas y no con un archivo de imagen: es una cabeza y unos hombros, y
+     * traer un PNG para eso seria un recurso mas que mantener, que puede faltar en el jar y
+     * que solo se ve cuando algo esta incompleto.
+     */
+    private void siluetaSinFoto(Graphics2D g, int x, int y, int lado) {
+        g.setColor(new Color(0xE3, 0xE7, 0xEC));
+        g.fill(new Ellipse2D.Float(x, y, lado, lado));
+
+        g.setColor(new Color(0xA8, 0xB2, 0xBF));
+        // Cabeza: un circulo centrado en el tercio superior.
+        float dCabeza = lado * 0.34f;
+        g.fill(new Ellipse2D.Float(x + (lado - dCabeza) / 2f, y + lado * 0.17f, dCabeza, dCabeza));
+        // Hombros: un ovalo ancho recortado por el borde inferior del circulo.
+        java.awt.Shape antes = g.getClip();
+        g.setClip(new Ellipse2D.Float(x, y, lado, lado));
+        float anchoH = lado * 0.62f;
+        g.fill(new Ellipse2D.Float(x + (lado - anchoH) / 2f, y + lado * 0.58f, anchoH, lado * 0.55f));
+        g.setClip(antes);
     }
 
     /**
@@ -183,13 +224,30 @@ public class CredencialImagenService {
     }
 
     /**
-     * Escribe un valor dentro de su caja, encogiendo la letra hasta que quepa.
+     * Un UNICO tamaño de letra para todos los valores.
      *
-     * Los nombres de entidad de esta feria llegan a los 60 caracteres. Con un tamaño fijo se
-     * salian de la caja y pisaban la siguiente; recortarlos con "..." esconderia justo el dato
-     * que se viene a leer.
+     * Antes cada campo se dibujaba al mayor tamaño que le cupiera, y el resultado era una
+     * credencial con cuatro tamaños distintos: el C.I., que es corto, salia enorme al lado del
+     * nombre de la entidad, que encogia. Se lee peor y parece descuidada. Con una medida fija
+     * —una fraccion del alto de la credencial— todos los valores salen iguales, y solo se
+     * encoge el que de verdad no quepa.
      */
-    private void texto(Graphics2D g, Caja caja, int w, int h, String valor, PlantillaCredencial p) {
+    private static final double TAM_BASE = 0.030;   // del alto de la imagen
+
+    /**
+     * Escribe un valor dentro de su caja, en una o dos lineas.
+     *
+     * El nombre completo es el campo que se desborda: "AXEL RAUL DURI CHIPUNAVI" ocupa la caja
+     * entera y uno mas largo se saldria. Antes la unica salida era encoger la letra hasta que
+     * cupiera, y con nombres de cinco palabras eso la dejaba ilegible. Ahora se parte en dos
+     * lineas por un espacio, que es lo que haria cualquiera a mano, y solo si con dos lineas
+     * sigue sin caber se reduce el tamaño.
+     *
+     * Nunca crece de alto por su cuenta: las dos lineas se reparten el alto de la caja
+     * declarada en la plantilla, asi que el texto no invade el recuadro de abajo.
+     */
+    private void texto(Graphics2D g, Caja caja, int w, int h, String valor,
+                       PlantillaCredencial p, int maxLineas) {
         if (caja == null || valor == null || valor.isBlank()) return;
         String v = p.mayusculas() ? valor.trim().toUpperCase() : valor.trim();
 
@@ -198,28 +256,61 @@ public class CredencialImagenService {
         int ancho = (int) Math.round(caja.ancho() * w);
         int alto = (int) Math.round(caja.alto() * h);
 
-        /*
-         * Se empieza por el 72% del alto de la caja, no por el alto entero.
-         *
-         * Con el alto completo, un valor corto como un C.I. salia a tamaño maximo y uno largo
-         * como el nombre de la entidad encogia mucho: la credencial quedaba con cuatro tamaños
-         * distintos y se veia descuidada. El tope deja aire arriba y abajo y hace que los
-         * valores cortos —que son la mayoria— salgan todos iguales.
-         */
-        int tam = Math.max(12, (int) Math.round(alto * 0.72));
-        Font fuente;
-        java.awt.FontMetrics fm;
-        do {
-            fuente = new Font(Font.SANS_SERIF, Font.BOLD, tam);
-            fm = g.getFontMetrics(fuente);
-            if (fm.stringWidth(v) <= ancho) break;
+        int tam = (int) Math.round(h * TAM_BASE);
+        Font fuente = new Font(Font.SANS_SERIF, Font.BOLD, tam);
+        java.util.List<String> lineas = partir(g, v, fuente, ancho, maxLineas);
+
+        // Si ni siquiera partido entra, se encoge. Es el ultimo recurso, no el primero.
+        while (tam > 12 && !cabe(g, lineas, fuente, ancho)) {
             tam -= 2;
-        } while (tam > 10);
+            fuente = new Font(Font.SANS_SERIF, Font.BOLD, tam);
+            lineas = partir(g, v, fuente, ancho, maxLineas);
+        }
 
         g.setFont(fuente);
         g.setColor(TINTA);
-        int baseY = y + (alto + fm.getAscent() - fm.getDescent()) / 2;
-        int baseX = p.centrado() ? x + (ancho - fm.stringWidth(v)) / 2 : x;
-        g.drawString(v, baseX, baseY);
+        java.awt.FontMetrics fm = g.getFontMetrics(fuente);
+        // Las lineas se centran verticalmente en la caja, juntas: con interlineado del alto
+        // completo, dos lineas se salen por abajo.
+        int salto = (int) Math.round(fm.getHeight() * 0.92);
+        int altoTexto = fm.getAscent() - fm.getDescent() + salto * (lineas.size() - 1);
+        int baseY = y + (alto + altoTexto) / 2 - salto * (lineas.size() - 1);
+
+        for (String linea : lineas) {
+            int baseX = p.centrado() ? x + (ancho - fm.stringWidth(linea)) / 2 : x;
+            g.drawString(linea, baseX, baseY);
+            baseY += salto;
+        }
+    }
+
+    /** Reparte el texto en como mucho `maxLineas`, cortando por espacios. */
+    private java.util.List<String> partir(Graphics2D g, String v, Font f, int ancho, int maxLineas) {
+        java.awt.FontMetrics fm = g.getFontMetrics(f);
+        if (maxLineas <= 1 || fm.stringWidth(v) <= ancho) return java.util.List.of(v);
+
+        java.util.List<String> lineas = new java.util.ArrayList<>();
+        StringBuilder actual = new StringBuilder();
+        for (String palabra : v.split("\\s+")) {
+            String tentativa = actual.isEmpty() ? palabra : actual + " " + palabra;
+            if (fm.stringWidth(tentativa) <= ancho || actual.isEmpty()) {
+                actual.setLength(0);
+                actual.append(tentativa);
+            } else if (lineas.size() + 1 < maxLineas) {
+                lineas.add(actual.toString());
+                actual.setLength(0);
+                actual.append(palabra);
+            } else {
+                // Ya no quedan lineas: lo que falta se queda en la ultima y, si se pasa de
+                // ancho, lo resolvera el encogido de fuera.
+                actual.append(' ').append(palabra);
+            }
+        }
+        lineas.add(actual.toString());
+        return lineas;
+    }
+
+    private boolean cabe(Graphics2D g, java.util.List<String> lineas, Font f, int ancho) {
+        java.awt.FontMetrics fm = g.getFontMetrics(f);
+        return lineas.stream().allMatch(l -> fm.stringWidth(l) <= ancho);
     }
 }

@@ -65,7 +65,8 @@ if (!paso('venta de prueba creada', !!insId, JSON.stringify(venta.cuerpo).slice(
 
 const ch = await abrirChrome(Number(arg('puerto', '9260')));
 // Localiza la fila de la venta de prueba por su entidad, no por posicion.
-const FILA = `[...document.querySelectorAll('.fila')].find(f => /ZZ PRUEBA PANTALLA/.test(f.textContent))`;
+const ENTIDAD = `[...document.querySelectorAll('.entidad')].find(f => /ZZ PRUEBA PANTALLA/.test(f.textContent))`;
+const FILA = `(${ENTIDAD})?.querySelector('.fila')`;
 
 try {
   await ch.enviar('Emulation.setDeviceMetricsOverride',
@@ -90,11 +91,23 @@ try {
 
   // Por defecto el filtro es "listas", asi que la incompleta no deberia estar. Se pasa a
   // "pendientes", que es la pestaña donde trabaja el verificador.
-  paso('la incompleta NO aparece entre las listas', !(await ch.evaluar(`!!(${FILA})`)));
+  paso('la incompleta NO aparece entre las listas', !(await ch.evaluar(`!!(${ENTIDAD})`)));
   await ch.evaluar(`[...document.querySelectorAll('.resumen .tarjeta')]
       .find(b => /falta/i.test(b.textContent))?.click()`);
   await ch.esperar(800);
-  paso('aparece al pasar a pendientes', await ch.evaluar(`!!(${FILA})`));
+  paso('aparece al pasar a pendientes', await ch.evaluar(`!!(${ENTIDAD})`));
+
+  /*
+   * Agrupado por VENTA: la cabecera dice de que entidad es y donde esta, y dentro van sus
+   * responsables. Antes era una lista plana de personas y encontrar las de una misma empresa
+   * entre 800 filas habia que hacerlo a ojo.
+   */
+  paso('la tarjeta lleva la entidad con su caseta y su categoria',
+       await ch.evaluar(`(() => { const e=${ENTIDAD}; if(!e) return false;
+         const t=e.querySelector('.cab-ent')?.textContent || '';
+         return /ZZ PRUEBA PANTALLA/.test(t) && /caseta/i.test(t); })()`),
+       await ch.evaluar(`(${ENTIDAD})?.querySelector('.cab-ent')?.textContent.replace(/\s+/g,' ').trim() || ''`));
+  paso('y dentro va su responsable', await ch.evaluar(`!!(${FILA})`));
 
   const insignias = await ch.evaluar(`(${FILA})?.querySelector('.estado')?.textContent.trim().replace(/\\s+/g,' ')`);
   paso('dice exactamente que le falta, y no "Lista"',
@@ -129,21 +142,27 @@ try {
        catalogo.length > 0 && opciones === catalogo.length,
        `${opciones} en pantalla, ${catalogo.length} en el servidor`);
 
-  // Una credencial es de una PERSONA: una entidad con tres responsables son tres credenciales.
-  // El boton de imprimirlas juntas solo tiene sentido —y solo debe salir— cuando hay mas de una;
-  // con una sola haria exactamente lo mismo que el de al lado.
+  /*
+   * Una credencial es de una PERSONA: una entidad con tres responsables son tres credenciales.
+   * El boton que las baja todas juntas vive en la CABECERA de la entidad y solo tiene sentido
+   * —y solo debe salir— cuando hay mas de un responsable; con uno solo haria exactamente lo
+   * mismo que el boton de su fila.
+   */
   const todas = (await api(T, '/api/app/credenciales')).cuerpo || [];
   const porInscripcion = {};
   todas.forEach((c) => { porInscripcion[c.inscripcionId] = (porInscripcion[c.inscripcionId] || 0) + 1; });
-  const esperadas = todas.filter((c) => porInscripcion[c.inscripcionId] > 1).length;
+  const conVarios = new Set(Object.entries(porInscripcion)
+      .filter(([, n]) => n > 1).map(([id]) => id)).size;
   await ch.evaluar(`[...document.querySelectorAll('.resumen .tarjeta')]
       .find(b => /en total/i.test(b.textContent))?.click()`);
   await ch.esperar(800);
-  const conBoton = await ch.evaluar(
-      "[...document.querySelectorAll('.fila')].filter(f => f.textContent.includes('\\u{1F3AB}')).length");
-  paso('el boton de la inscripcion entera sale exactamente donde hay varios responsables',
-       conBoton === esperadas,
-       `${conBoton} filas con boton de ${todas.length}, esperadas ${esperadas}`);
+  const cabeceras = await ch.evaluar(
+      "[...document.querySelectorAll('.entidad .cab-ent')].filter(c => c.querySelector('.btn')).length");
+  paso('el boton de la entidad entera sale exactamente donde hay varios responsables',
+       cabeceras === conVarios,
+       `${cabeceras} entidades con boton, esperadas ${conVarios}`);
+  paso('y cada tarjeta dice cuantos responsables tiene',
+       await ch.evaluar("[...document.querySelectorAll('.cuenta-ent')].every(e => /responsable/.test(e.textContent))"));
 
   // "Imprimir igual" es para lo INCOMPLETO: ofrecerlo en una credencial lista invita a dejar
   // constancia de una impresion forzada que no lo era. Sale de un v-if/v-else, y basta con
@@ -164,8 +183,10 @@ try {
   await ch.evaluar(`[...document.querySelectorAll('.resumen .tarjeta')]
       .find(b => /falta/i.test(b.textContent))?.click()`);
   await ch.esperar(800);
-  paso('la fila se marca como impresa incompleta',
-       /impresa incompleta/i.test(await ch.evaluar(`(${FILA})?.querySelector('.estado')?.textContent || ''`)));
+  // "Entregada" y no "impresa": la credencial virtual no se imprime, se manda al telefono.
+  paso('la fila se marca como entregada incompleta',
+       /entregada incompleta/i.test(await ch.evaluar(`(${FILA})?.querySelector('.estado')?.textContent || ''`)),
+       await ch.evaluar(`(${FILA})?.querySelector('.estado')?.textContent.replace(/\s+/g,' ').trim() || ''`));
 
   await ch.evaluar(`(${FILA})?.querySelector('.estado button')?.click()`);
   await ch.esperar(1200);

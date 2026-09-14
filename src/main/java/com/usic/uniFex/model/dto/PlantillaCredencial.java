@@ -136,17 +136,20 @@ public record PlantillaCredencial(
             true,    // lleva la foto de la persona: sin ella no se emite
             false,   // los valores van alineados a la izquierda, bajo su etiqueta impresa
             true,
-            // Dentro del marco punteado de arriba a la derecha (x 0.489..0.958, y 0.020..0.285),
-            // con holgura para que el QR no toque el borde: un QR pegado al marco confunde a
-            // algunos lectores.
-            new Caja(0.512, 0.034, 0.415, 0.415),
+            // Casi todo el marco punteado de arriba a la derecha (x 0.489..0.958, y 0.020..0.285).
+            // Se deja un margen pequeño y no mas: un QR pegado al borde confunde a algunos
+            // lectores, pero uno pequeño obliga a acercar el telefono, y en la puerta eso es
+            // tiempo. 0.44 del ancho son 396 px de lado, que se leen de lejos.
+            new Caja(0.503, 0.029, 0.440, 0.440),
             new Caja(0.1422, 0.5119, 0.808, 0.053),   // NOMBRE COMPLETO
             new Caja(0.1422, 0.6006, 0.809, 0.054),   // EMPRESA / SERVICIO
             new Caja(0.1422, 0.6900, 0.808, 0.054),   // # CEDULA DE IDENTIDAD
             new Caja(0.1433, 0.7794, 0.311, 0.054),   // COD. PUESTO
             new Caja(0.4800, 0.7794, 0.471, 0.054),   // ZONA (la categoria)
-            // El hueco circular de la izquierda: centro (0.345, 0.360), diametro 0.366 del ancho.
-            new Caja(0.1622, 0.2569, 0.3656, 0.2056));
+            // El hueco circular de la izquierda: centro (0.345, 0.360). Se ocupa un poco mas
+            // que el circulo dibujado (0.40 en vez de 0.366) para que la cara se vea de lejos
+            // y para tapar del todo la foto de muestra que la plantilla trae impresa.
+            new Caja(0.1450, 0.2472, 0.4000, 0.2250));
 
     /**
      * Todas las plantillas que se pueden elegir, en el orden en que salen en la pantalla.

@@ -167,6 +167,40 @@ const visibles = computed(() => {
     `${c.nombre} ${c.entidad} ${c.ci} ${c.categoria} ${c.casetas}`.toLowerCase().includes(q));
 });
 
+/**
+ * Las credenciales visibles, AGRUPADAS POR VENTA.
+ *
+ * Una credencial es de una persona, pero el trabajo se organiza por entidad: quien llega al
+ * mostrador es un expositor con sus dos o tres responsables, y se lleva las de todos de una
+ * vez. Con la lista plana habia que buscar a mano cuales de las 800 filas eran de la misma
+ * empresa, y eso con nombres de personas que no se parecen entre si.
+ *
+ * Se agrupa lo VISIBLE, no todo: asi el filtro y la busqueda siguen mandando, y una entidad
+ * aparece mientras alguna de sus credenciales encaje.
+ */
+const porEntidad = computed(() => {
+  const m = new Map();
+  for (const c of visibles.value) {
+    if (!m.has(c.inscripcionId)) {
+      m.set(c.inscripcionId, {
+        inscripcionId: c.inscripcionId,
+        entidad: c.entidad,
+        rubro: c.rubro,
+        categoria: c.categoria,
+        casetas: c.casetas,
+        responsables: [],
+      });
+    }
+    m.get(c.inscripcionId).responsables.push(c);
+  }
+  for (const g of m.values()) {
+    // El titular primero: es quien firma y por quien se pregunta.
+    g.responsables.sort((a, b) => (b.esTitular ? 1 : 0) - (a.esTitular ? 1 : 0));
+    g.listasVirtual = g.responsables.filter((x) => x.listo?.[ID_VIRTUAL]).length;
+  }
+  return [...m.values()];
+});
+
 /** Cuantas de las visibles se pueden imprimir: es lo que dice si el boton hace algo. */
 const seleccionadasAptas = computed(() =>
   credenciales.value.filter((c) => seleccion.value.has(c.responsableId) && esListo(c)));
@@ -425,84 +459,108 @@ onMounted(() => {
       <template v-else>Todavía no hay inscripciones en esta edición.</template>
     </div>
 
-    <ul v-else class="lista">
-      <li v-for="c in visibles" :key="c.responsableId" class="fila"
-          :class="{ marcada: seleccion.has(c.responsableId), bloqueada: !esListo(c) }">
-        <label class="marca">
-          <input type="checkbox" :disabled="!esListo(c)"
-                 :checked="seleccion.has(c.responsableId)" @change="alternar(c)" />
-        </label>
+    <!-- Agrupado por VENTA: la cabecera es la entidad con su caseta y su categoria, y dentro
+         van sus responsables. Es como llega el trabajo al mostrador — un expositor con los
+         suyos— y no una lista de 800 personas sueltas entre las que hay que buscar. -->
+    <ul v-else class="entidades">
+      <li v-for="g in porEntidad" :key="g.inscripcionId" class="entidad card">
+        <header class="cab-ent">
+          <div class="quien-ent">
+            <strong class="nom-ent">{{ g.entidad }}</strong>
+            <span class="muted">
+              {{ g.categoria || 'sin categoría' }} ·
+              caseta{{ (g.casetas || '').includes(',') ? 's' : '' }} {{ g.casetas || '—' }}
+              <template v-if="g.rubro"> · {{ g.rubro }}</template>
+            </span>
+          </div>
+          <div class="acc-ent">
+            <span class="cuenta-ent">
+              {{ g.responsables.length }} responsable{{ g.responsables.length === 1 ? '' : 's' }}
+            </span>
+            <!-- El boton de la entidad entera solo tiene sentido con mas de uno: con uno solo
+                 haria lo mismo que el de la fila de abajo. -->
+            <button v-if="g.responsables.length > 1" class="btn btn-primario btn-sm"
+                    :disabled="generando || !g.listasVirtual"
+                    :title="g.listasVirtual
+                      ? `Descargar las ${g.listasVirtual} credenciales de ${g.entidad}`
+                      : 'Ninguna está lista todavía'"
+                    @click="bajarVirtual(g.responsables)">
+              📱 Las {{ g.listasVirtual }}
+            </button>
+          </div>
+        </header>
 
-        <img v-if="c.fotoUrl && !rotas.has(c.responsableId)" :src="c.fotoUrl" :alt="c.nombre"
-             class="foto" @error="rotas = new Set(rotas).add(c.responsableId)" />
-        <div v-else class="foto sinfoto" aria-hidden="true">?</div>
+        <ul class="lista">
+          <li v-for="c in g.responsables" :key="c.responsableId" class="fila"
+              :class="{ marcada: seleccion.has(c.responsableId), bloqueada: !esListo(c) }">
+            <label class="marca">
+              <input type="checkbox" :disabled="!esListo(c)"
+                     :checked="seleccion.has(c.responsableId)" @change="alternar(c)" />
+            </label>
 
-        <div class="quien">
-          <strong>{{ c.nombre }}</strong>
-          <span class="muted">{{ c.entidad }}<template v-if="c.rubro"> · {{ c.rubro }}</template></span>
-        </div>
+            <img v-if="c.fotoUrl && !rotas.has(c.responsableId)" :src="c.fotoUrl" :alt="c.nombre"
+                 class="foto" @error="rotas = new Set(rotas).add(c.responsableId)" />
+            <div v-else class="foto sinfoto" aria-hidden="true">?</div>
 
-        <div class="donde">
-          <span class="cat">{{ c.categoria || '—' }}</span>
-          <span class="casetas">{{ c.casetas || 'sin caseta' }}</span>
-        </div>
+            <div class="quien">
+              <strong>{{ c.nombre }}</strong>
+              <span class="muted">
+                C.I. {{ c.ci || '—' }}
+                <template v-if="c.esTitular"> · titular</template>
+              </span>
+            </div>
 
-        <div class="estado">
-          <span v-if="esListo(c)" class="badge badge-ok">Lista</span>
-          <span v-for="f in faltaDe(c)" :key="f" class="badge badge-danger">{{ f }}</span>
-          <!-- Ya impresa: importa saberlo antes de volver a imprimir, y sobre todo si se
-               imprimio cuando aun faltaba algo. -->
-          <button v-if="c.impresa" class="badge" :class="c.impresaIncompleta ? 'badge-aviso' : 'badge-muted'"
-                  :title="`Impresa ${c.vecesImpresa} vez(ces). Toca para ver quién y cuándo.`"
-                  @click="verHistorial(c)">
-            {{ c.impresaIncompleta ? '⚠ impresa incompleta' : '✓ impresa' }}
-            <template v-if="c.vecesImpresa > 1"> ×{{ c.vecesImpresa }}</template>
-          </button>
-        </div>
+            <div class="estado">
+              <span v-if="esListo(c)" class="badge badge-ok">Lista</span>
+              <span v-for="f in faltaDe(c)" :key="f" class="badge badge-danger">{{ f }}</span>
+              <!-- Ya entregada: importa saberlo antes de volver a generarla, y sobre todo si
+                   se entrego cuando aun faltaba algo. -->
+              <button v-if="c.impresa" class="badge"
+                      :class="c.impresaIncompleta ? 'badge-aviso' : 'badge-muted'"
+                      :title="`Entregada ${c.vecesImpresa} vez(ces). Toca para ver quién y cuándo.`"
+                      @click="verHistorial(c)">
+                {{ c.impresaIncompleta ? '⚠ entregada incompleta' : '✓ entregada' }}
+                <template v-if="c.vecesImpresa > 1"> ×{{ c.vecesImpresa }}</template>
+              </button>
+            </div>
 
-        <!-- Completar lo que falta sin salir de la pantalla. -->
-        <div class="acciones">
-          <template v-if="!c.conComprobante">
-            <input :id="`comp-${c.responsableId}`" class="oculto" type="file"
-                   accept="image/*,application/pdf" @change="subir(c, 'comprobante', $event)" />
-            <label :for="`comp-${c.responsableId}`" class="btn btn-sm"
-                   :class="{ inerte: subiendo === c.responsableId }"
-                   title="Adjuntar el comprobante de pago de esta venta">🧾 Comprobante</label>
-          </template>
-          <template v-if="!c.conFoto">
-            <input :id="`foto-${c.responsableId}`" class="oculto" type="file" accept="image/*"
-                   @change="subir(c, 'foto', $event)" />
-            <label :for="`foto-${c.responsableId}`" class="btn btn-sm"
-                   :class="{ inerte: subiendo === c.responsableId }"
-                   :title="`Adjuntar la foto de ${c.nombre}`">📷 Foto</label>
-          </template>
+            <!-- Completar lo que falta sin salir de la pantalla. -->
+            <div class="acciones">
+              <template v-if="!c.conComprobante">
+                <input :id="`comp-${c.responsableId}`" class="oculto" type="file"
+                       accept="image/*,application/pdf" @change="subir(c, 'comprobante', $event)" />
+                <label :for="`comp-${c.responsableId}`" class="btn btn-sm"
+                       :class="{ inerte: subiendo === c.responsableId }"
+                       title="Adjuntar el comprobante de pago de esta venta">🧾 Comprobante</label>
+              </template>
+              <template v-if="!c.conFoto">
+                <input :id="`foto-${c.responsableId}`" class="oculto" type="file" accept="image/*"
+                       @change="subir(c, 'foto', $event)" />
+                <label :for="`foto-${c.responsableId}`" class="btn btn-sm"
+                       :class="{ inerte: subiendo === c.responsableId }"
+                       :title="`Adjuntar la foto de ${c.nombre}`">📷 Foto</label>
+              </template>
 
-          <!-- La credencial virtual es la accion principal: es la que se entrega. -->
-          <button class="btn btn-primario btn-sm" :disabled="generando || !c.listo?.[ID_VIRTUAL]"
-                  :title="c.listo?.[ID_VIRTUAL]
-                    ? `Descargar la credencial virtual de ${c.nombre}`
-                    : 'Falta el comprobante o la foto'"
-                  @click="bajarVirtual([c])">📱 Credencial</button>
-          <button v-if="virtualesListas(c).length > 1" class="btn btn-sm" :disabled="generando"
-                  :title="`Descargar las ${virtualesListas(c).length} credenciales de ${c.entidad}`"
-                  @click="bajarVirtual(grupoDe(c))">📱 ×{{ virtualesListas(c).length }}</button>
+              <button class="btn btn-primario btn-sm"
+                      :disabled="generando || !c.listo?.[ID_VIRTUAL]"
+                      :title="c.listo?.[ID_VIRTUAL]
+                        ? `Descargar la credencial virtual de ${c.nombre}`
+                        : 'Falta el comprobante o la foto'"
+                      @click="bajarVirtual([c])">📱 Credencial</button>
 
-          <!-- El par v-if / v-else tiene que quedar PEGADO: entre medias, Vue se queda sin
-               el v-if al que engancharse y pinta los dos botones en la misma fila. -->
-          <template v-if="!soloVirtual">
-            <button v-if="esListo(c)" class="btn btn-fantasma btn-sm" :disabled="generando"
-                    title="Imprimir en papel solo esta" @click="imprimir([c.responsableId], 1)">🖨</button>
-            <button v-else class="btn btn-fantasma btn-sm" :disabled="generando"
-                    :title="`Imprimir igual, aunque le falte ${faltaDe(c).join(' y ')}`"
-                    @click="imprimirIgual(c)">🖨 igual</button>
-          </template>
-          <!-- Solo cuando la inscripcion tiene mas de un responsable: con uno solo haria
-               exactamente lo mismo que el boton de al lado. -->
-          <button v-if="!soloVirtual && grupoDe(c).length > 1" class="btn btn-fantasma btn-sm"
-                  :disabled="generando"
-                  :title="`Imprimir en papel las ${grupoDe(c).length} credenciales de ${c.entidad}`"
-                  @click="imprimirInscripcion(c)">🎫 {{ grupoDe(c).length }}</button>
-        </div>
+              <!-- El par v-if / v-else tiene que quedar PEGADO: entre medias, Vue se queda sin
+                   el v-if al que engancharse y pinta los dos botones en la misma fila. -->
+              <template v-if="!soloVirtual">
+                <button v-if="esListo(c)" class="btn btn-fantasma btn-sm" :disabled="generando"
+                        title="Imprimir en papel solo esta"
+                        @click="imprimir([c.responsableId], 1)">🖨</button>
+                <button v-else class="btn btn-fantasma btn-sm" :disabled="generando"
+                        :title="`Imprimir igual, aunque le falte ${faltaDe(c).join(' y ')}`"
+                        @click="imprimirIgual(c)">🖨 igual</button>
+              </template>
+            </div>
+          </li>
+        </ul>
       </li>
     </ul>
 
@@ -574,6 +632,24 @@ onMounted(() => {
 .barra { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 .barra .control { flex: 1; min-width: 220px; }
 
+/* ---- agrupado por entidad ---- */
+.entidades { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
+.entidad { padding: 0; overflow: hidden; }
+.cab-ent {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.8rem;
+  padding: 0.7rem 0.9rem; background: var(--panel-2); border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.quien-ent { display: flex; flex-direction: column; min-width: 0; }
+.nom-ent { font-size: 1rem; }
+.quien-ent .muted { font-size: 0.8rem; }
+.acc-ent { display: flex; align-items: center; gap: 0.6rem; }
+.cuenta-ent { font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+/* Dentro de la tarjeta las filas no llevan borde propio: ya las separa la tarjeta. */
+.entidad .lista { gap: 0; }
+.entidad .fila { border: none; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; }
+.entidad .fila:last-child { border-bottom: none; }
+
 /* ---- lista ---- */
 .vacio { padding: 2.5rem 1rem; text-align: center; color: var(--muted); line-height: 1.5; }
 .lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
@@ -584,7 +660,9 @@ onMounted(() => {
   display: grid; align-items: center; gap: 0.8rem;
   /* La ultima columna da para DOS botones por linea: con 200px, una fila pendiente
      (comprobante, foto, imprimir igual y la inscripcion entera) se partia en tres. */
-  grid-template-columns: auto 46px minmax(0, 1fr) 170px 210px 250px;
+  /* Sin la columna de categoria/caseta: ahora eso vive en la cabecera de la entidad y
+     repetirlo en cada fila era decir tres veces lo mismo. */
+  grid-template-columns: auto 46px minmax(0, 1fr) 210px 250px;
   padding: 0.55rem 0.8rem; border-radius: var(--radio-sm);
   background: var(--panel); border: 1px solid var(--border);
 }
@@ -645,6 +723,8 @@ button.badge { border: none; font-family: inherit; font-weight: 700; cursor: poi
   .ajustes { grid-template-columns: 1fr; }
   .previa { display: none; }
   .fila { grid-template-columns: auto 46px 1fr; row-gap: 0.5rem; }
-  .donde, .estado, .acciones { grid-column: 2 / -1; flex-direction: row; gap: 0.5rem; align-items: center; justify-content: flex-start; }
+  .estado, .acciones { grid-column: 2 / -1; flex-direction: row; gap: 0.5rem; align-items: center; justify-content: flex-start; }
+  .cab-ent { align-items: flex-start; }
+  .acc-ent { flex-basis: 100%; justify-content: space-between; }
 }
 </style>
