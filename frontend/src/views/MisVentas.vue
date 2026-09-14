@@ -10,6 +10,7 @@ import { usePuestosStore } from '../stores/puestos.js';
 import UiModal from '../components/UiModal.vue';
 import FotosResponsables from '../components/FotosResponsables.vue';
 import ArchivoPreview from '../components/ArchivoPreview.vue';
+import CampoCelular from '../components/CampoCelular.vue';
 
 const tienda = usePuestosStore();
 const items = ref([]);       // filas de fn_get_inscripciones: una por (inscripción, categoría)
@@ -546,7 +547,7 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
               <label class="campo"><span>C.I.</span>
                 <input class="control" inputmode="numeric" v-model="borrador.ciRepresentante" /></label>
               <label class="campo"><span>Celular</span>
-                <input class="control" type="tel" inputmode="tel" v-model="borrador.celularRepresentante" /></label>
+                <CampoCelular v-model="borrador.celularRepresentante" /></label>
             </div>
             <div class="acciones-form">
               <button class="btn btn-fantasma" @click="editando = null">Cancelar</button>
@@ -638,7 +639,7 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
                     <input class="control mayus" v-model="borrador.materno" /></label>
                 </div>
                 <label class="campo"><span>Celular</span>
-                  <input class="control" type="tel" inputmode="tel" v-model="borrador.celular" /></label>
+                  <CampoCelular v-model="borrador.celular" /></label>
                 <div class="acciones-form">
                   <button class="btn btn-fantasma" @click="editando = null">Cancelar</button>
                   <button class="btn btn-primario" :disabled="guardando" @click="guardarEdicion">

@@ -134,6 +134,19 @@ try {
        await ch.evaluar(`(() => { const s=${visible};
          return s ? ![...s.querySelectorAll('.campo .control')].some(c=>c.disabled) : false; })()`));
 
+  titulo('El celular se guarda con el codigo de pais');
+  /*
+   * La feria recibe expositores de Bolivia y de Brasil. Antes el celular se guardaba como se
+   * tecleara —ocho digitos sueltos—, y asi un numero brasileño no se puede marcar. Lo que se
+   * comprueba aqui es lo que ACABA EN LA BASE, que es el telefono al que se llama para cobrar.
+   */
+  paso('hay un selector de pais junto al celular',
+       (await ch.evaluar(`document.querySelectorAll('.celular .pais').length`)) >= 1,
+       await ch.evaluar(`document.querySelector('.celular .pais')?.textContent.replace(/\\s+/g,' ').trim() || '(no hay)'`));
+  paso('con Bolivia y Brasil, con su bandera',
+       await ch.evaluar(`(() => { const t=document.querySelector('.celular .pais')?.textContent || '';
+         return /591/.test(t) && /55/.test(t) && /🇧🇴/.test(t) && /🇧🇷/.test(t); })()`));
+
   titulo('El segundo responsable no necesita C.I.');
   await ch.evaluar(`[...document.querySelectorAll('.bloque .btn')].find(b=>/Agregar Responsable 2/.test(b.textContent))?.click()`);
   await ch.esperar(700);
@@ -180,6 +193,32 @@ try {
        await ch.evaluar(`(() => { const s=${visible}; return s ? /Banco/.test(s.textContent) && /depósito/i.test(s.textContent) : false; })()`));
   paso('y se puede adjuntar el comprobante ya, marcado como pendiente',
        /pendiente/.test(await ch.evaluar(`document.querySelector('.comprobante-adj')?.textContent || ''`)));
+
+  titulo('Lo que se guarda lleva el codigo delante');
+  {
+    const libre2 = ((await api(T, '/api/app/puestos')).cuerpo || []).find((p) => p.estado === 'L');
+    const v = await api(T, '/api/app/inscripciones', { method: 'POST', body: JSON.stringify({
+      entidadNombre: 'ZZ CELULAR', nit: '', descripcion: 'P', objeto: '',
+      representanteLegal: 'REP CEL', ciRepresentante: '99123470',
+      celularRepresentante: '59174754979',
+      tipoEntidadId: 1, fechaInicio: null, fechaFin: null,
+      responsables: [{ nombre: 'CEL', paterno: 'BR', materno: '', ci: '99123471',
+                       celular: '5511987654321', correo: null }],
+      entidadBancaria: '', numComprobante: null, pagoContado: true,
+      puestos: libre2 ? [libre2.id] : [] }) });
+    const id = v.cuerpo?.inscripcionId;
+    if (paso('se registra una venta con celulares de los dos paises', !!id)) {
+      const d = (await api(T, `/api/app/inscripciones/${id}/detalle`)).cuerpo;
+      paso('el celular boliviano queda como 591 + numero, sin "+" ni espacios',
+           d?.entidad?.celularRepresentante === '59174754979',
+           d?.entidad?.celularRepresentante);
+      paso('y el brasileño como 55 + numero',
+           d?.responsables?.[0]?.celular === '5511987654321',
+           d?.responsables?.[0]?.celular);
+      await api(T, `/api/app/inscripciones/${id}/cancelar`, { method: 'POST',
+        body: JSON.stringify({ motivo: 'Prueba de celular con codigo' }) });
+    }
+  }
 
   titulo('La ficha deja VER el comprobante');
   // Se registra por API (el formulario ya se probo arriba) y se le adjunta un comprobante.
