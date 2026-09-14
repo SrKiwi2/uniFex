@@ -73,6 +73,21 @@ public final class Roles {
      * expositores es otro. Los endpoints que si son de toda la feria siguen con la primera.
      */
     /**
+     * Quien puede MIRAR el listado global de inscripciones y el detalle de una venta.
+     *
+     * Incluye a VERIFICADOR, y sin eso el modulo quedaba a medias de una forma especialmente
+     * confusa: el permiso de pantalla le daba "Inscripciones" en el menu, entraba, y el listado
+     * respondia 403. Parecia que la aplicacion fallaba cuando lo que pasaba es que dos sitios
+     * decian cosas distintas sobre lo mismo.
+     *
+     * Y tiene sentido que lo vea: acredita, y para acreditar necesita mirar la venta entera
+     * —que se pago, que se adjunto, quienes son los responsables—, no solo la fila de la
+     * credencial. Es mirar, no tocar: cancelar y aprobar siguen siendo de {@link #ADMINISTRA}.
+     */
+    public static final String VE_INSCRIPCIONES =
+            "hasAnyRole('SUPER_USUARIO','ADMINISTRADOR','VERIFICADOR')";
+
+    /**
      * Quien controla la puerta: escanea credenciales y anota entradas y salidas.
      *
      * CONTROL es el rol que existe para esto. Administracion entra tambien porque durante el

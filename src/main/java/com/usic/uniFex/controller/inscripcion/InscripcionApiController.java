@@ -71,7 +71,7 @@ public class InscripcionApiController {
      * quien/cuando las cancelo; por defecto, las activas.
      */
     @GetMapping
-    @PreAuthorize(Roles.ADMINISTRA)
+    @PreAuthorize(Roles.VE_INSCRIPCIONES)
     public List<InscripcionListadoDTO> listar(
             @RequestParam(defaultValue = "false") boolean canceladas) {
         return inscripcionService.listarParaTabla(canceladas);
@@ -83,7 +83,7 @@ public class InscripcionApiController {
      * (quien/cuando/desde donde). Solo administracion.
      */
     @GetMapping("/{id}")
-    @PreAuthorize(Roles.ADMINISTRA)
+    @PreAuthorize(Roles.VE_INSCRIPCIONES)
     public ResponseEntity<InscripcionDetalleDTO> detalle(@PathVariable Long id) {
         InscripcionDetalleDTO d = inscripcionService.detalleParaTabla(id);
         return d == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(d);

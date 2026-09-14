@@ -28,25 +28,25 @@ const router = createRouter({
       path: '/',
       component: () => import('./components/AppLayout.vue'),
       children: [
-        { path: '', component: () => import('./views/Inicio.vue'), meta: { titulo: 'Inicio', requiereAuth: true } },
-        { path: 'mapa', component: () => import('./views/Mapa.vue'), meta: { titulo: 'Mapa de ventas', inmersivo: true, requiereAuth: true } },
-        { path: 'venta', component: () => import('./views/Venta.vue'), meta: { titulo: 'Registrar venta', requiereAuth: true } },
-        { path: 'mis-ventas', component: () => import('./views/MisVentas.vue'), meta: { titulo: 'Mis ventas', requiereAuth: true } },
-        { path: 'tablero', component: () => import('./views/Board.vue'), meta: { titulo: 'Tablero', requiereAuth: true } },
-        { path: 'editor', component: () => import('./views/Editor.vue'), meta: { titulo: 'Editor del plano', inmersivo: true, requiereAuth: true, editaPlano: true } },
-        { path: 'usuarios', component: () => import('./views/Usuarios.vue'), meta: { titulo: 'Usuarios', requiereAuth: true, editaPlano: true } },
-        { path: 'roles', component: () => import('./views/Roles.vue'), meta: { titulo: 'Roles', requiereAuth: true, editaPlano: true } },
-        { path: 'personas', component: () => import('./views/Personas.vue'), meta: { titulo: 'Personas', requiereAuth: true, editaPlano: true } },
-        { path: 'personal-apoyo', component: () => import('./views/PersonalApoyo.vue'), meta: { titulo: 'Personal de apoyo', requiereAuth: true, editaPlano: true, pantalla: 'personal-apoyo' } },
-        { path: 'reportes', component: () => import('./views/Reportes.vue'), meta: { titulo: 'Reportes', requiereAuth: true, editaPlano: true } },
-        { path: 'noches-fexpo', component: () => import('./views/NochesFexpo.vue'), meta: { titulo: 'Noches de FEXPO', requiereAuth: true, editaPlano: true, pantalla: 'noches-fexpo' } },
-        { path: 'inscripciones', component: () => import('./views/Inscripciones.vue'), meta: { titulo: 'Inscripciones', requiereAuth: true, editaPlano: true } },
-        { path: 'interesados', component: () => import('./views/Interesados.vue'), meta: { titulo: 'Interesados en exponer', requiereAuth: true, editaPlano: true, pantalla: 'interesados' } },
-        { path: 'notificaciones', component: () => import('./views/Notificaciones.vue'), meta: { titulo: 'Notificaciones', requiereAuth: true } },
-        { path: 'vendedores', component: () => import('./views/Vendedores.vue'), meta: { titulo: 'Vendedores', requiereAuth: true, editaPlano: true } },
+        { path: '', component: () => import('./views/Inicio.vue'), meta: { titulo: 'Inicio', requiereAuth: true, pantalla: 'inicio'} },
+        { path: 'mapa', component: () => import('./views/Mapa.vue'), meta: { titulo: 'Mapa de ventas', inmersivo: true, requiereAuth: true, pantalla: 'mapa'} },
+        { path: 'venta', component: () => import('./views/Venta.vue'), meta: { titulo: 'Registrar venta', requiereAuth: true, pantalla: 'venta'} },
+        { path: 'mis-ventas', component: () => import('./views/MisVentas.vue'), meta: { titulo: 'Mis ventas', requiereAuth: true, pantalla: 'mis-ventas'} },
+        { path: 'tablero', component: () => import('./views/Board.vue'), meta: { titulo: 'Tablero', requiereAuth: true, pantalla: 'tablero'} },
+        { path: 'editor', component: () => import('./views/Editor.vue'), meta: { titulo: 'Editor del plano', inmersivo: true, requiereAuth: true, pantalla: 'editor'} },
+        { path: 'usuarios', component: () => import('./views/Usuarios.vue'), meta: { titulo: 'Usuarios', requiereAuth: true, pantalla: 'usuarios'} },
+        { path: 'roles', component: () => import('./views/Roles.vue'), meta: { titulo: 'Roles', requiereAuth: true, pantalla: 'roles'} },
+        { path: 'personas', component: () => import('./views/Personas.vue'), meta: { titulo: 'Personas', requiereAuth: true, pantalla: 'personas'} },
+        { path: 'personal-apoyo', component: () => import('./views/PersonalApoyo.vue'), meta: { titulo: 'Personal de apoyo', requiereAuth: true, pantalla: 'personal-apoyo' } },
+        { path: 'reportes', component: () => import('./views/Reportes.vue'), meta: { titulo: 'Reportes', requiereAuth: true, pantalla: 'reportes'} },
+        { path: 'noches-fexpo', component: () => import('./views/NochesFexpo.vue'), meta: { titulo: 'Noches de FEXPO', requiereAuth: true, pantalla: 'noches-fexpo' } },
+        { path: 'inscripciones', component: () => import('./views/Inscripciones.vue'), meta: { titulo: 'Inscripciones', requiereAuth: true, pantalla: 'inscripciones'} },
+        { path: 'interesados', component: () => import('./views/Interesados.vue'), meta: { titulo: 'Interesados en exponer', requiereAuth: true, pantalla: 'interesados' } },
+        { path: 'notificaciones', component: () => import('./views/Notificaciones.vue'), meta: { titulo: 'Notificaciones', requiereAuth: true, pantalla: 'notificaciones'} },
+        { path: 'vendedores', component: () => import('./views/Vendedores.vue'), meta: { titulo: 'Vendedores', requiereAuth: true, pantalla: 'vendedores'} },
         { path: 'credenciales', component: () => import('./views/Credenciales.vue'), meta: { titulo: 'Credenciales', requiereAuth: true, pantalla: 'credenciales' } },
         { path: 'escaner', component: () => import('./views/Escaner.vue'), meta: { titulo: 'Escanear credencial', requiereAuth: true, pantalla: 'escaner' } },
-        { path: 'permisos', component: () => import('./views/Permisos.vue'), meta: { titulo: 'Permisos por rol', requiereAuth: true, editaPlano: true, pantalla: 'permisos' } },
+        { path: 'permisos', component: () => import('./views/Permisos.vue'), meta: { titulo: 'Permisos por rol', requiereAuth: true, pantalla: 'permisos' } },
       ],
     },
   ],
@@ -58,9 +58,15 @@ router.beforeEach(async (to) => {
   if (to.meta.publico) return;
   if (to.meta.requiereAuth && !auth.autenticado) return '/login';
   if (to.path === '/login' && auth.autenticado) return '/';
-  // Esconder las herramientas de administración a quien no puede editar. Es solo comodidad:
-  // el backend responde 403 a las escrituras aunque alguien escriba la ruta a mano.
-  if (to.meta.editaPlano && !auth.puedeEditarPlano) return '/';
+  /*
+   * `editaPlano` ya no decide quien entra a una pantalla.
+   *
+   * Hubo dos porteros para la misma puerta: este, que mira el ROL, y el de abajo, que mira los
+   * PERMISOS. Mientras coincidieron no se noto; en cuanto dejaron de coincidir, un VERIFICADOR
+   * tenia "Inscripciones" en su menu, la tocaba y este `if` lo devolvia al inicio sin decir
+   * nada. Ahora cada ruta declara su `pantalla` y manda la matriz de permisos, que es donde se
+   * configura. Lo que protege de verdad sigue siendo el servidor.
+   */
 
   /*
    * Permisos por rol. Igual que lo de arriba: es COMODIDAD, no seguridad — evita que a alguien

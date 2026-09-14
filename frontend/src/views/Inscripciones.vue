@@ -14,6 +14,9 @@ const cargando = ref(true);
 const filtro = ref('');
 const expandida = ref(null);      // id de la fila desplegada
 const detalle = ref(null);        // respuesta de GET /inscripciones/{id}
+/** Fotos que la base dice tener pero que no estan en disco. Ver CredencialPublica.vue. */
+const fotosRotas = ref(new Set());
+const verComprobante = ref(false);
 
 // --- cancelacion (V10) ---
 const modalCancelar = ref(null);  // inscripcion en espera de confirmacion
@@ -144,6 +147,7 @@ async function confirmarRechazo() {
 
 /** Despliega la fila y pide el detalle completo (incluye la auditoria). */
 async function alternar(id) {
+  verComprobante.value = false;
   if (expandida.value === id) { expandida.value = null; detalle.value = null; return; }
   expandida.value = id;
   detalle.value = null;
@@ -293,10 +297,22 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
                 </div>
                 <div class="bloque">
                   <span class="etq">Responsables</span>
-                  <div v-for="(r, idx) in detalle.responsables" :key="idx">
-                    <strong>{{ r.nombreCompleto || '—' }}</strong>
-                    <span class="chip" :class="r.esTitular ? 'chip-titular' : ''">{{ r.esTitular ? 'Titular' : 'Acompañante' }}</span>
-                    <div class="muted">CI {{ r.ci || '—' }} · {{ r.correo || 'sin correo' }} · {{ r.celular || 'sin celular' }}</div>
+                  <!-- Con su FOTO. Quien acredita viene justamente a comprobar lo adjuntado:
+                       obligarle a abrir otra pantalla para verlo es mandarlo a buscar lo que
+                       vino a mirar. -->
+                  <div v-for="(r, idx) in detalle.responsables" :key="idx" class="resp">
+                    <img v-if="r.fotoUrl && !fotosRotas.has(r.fotoUrl)" :src="url(r.fotoUrl)"
+                         :alt="r.nombreCompleto" class="foto-resp"
+                         @error="fotosRotas = new Set(fotosRotas).add(r.fotoUrl)" />
+                    <div v-else class="foto-resp sinfoto" :title="r.fotoUrl ? 'La foto no está en el servidor' : 'Todavía no tiene foto'">
+                      {{ r.fotoUrl ? '!' : '?' }}
+                    </div>
+                    <div class="datos-resp">
+                      <strong>{{ r.nombreCompleto || '—' }}</strong>
+                      <span class="chip" :class="r.esTitular ? 'chip-titular' : ''">{{ r.esTitular ? 'Titular' : 'Acompañante' }}</span>
+                      <span v-if="!r.fotoUrl" class="badge badge-danger">sin foto</span>
+                      <div class="muted">CI {{ r.ci || '—' }} · {{ r.correo || 'sin correo' }} · {{ r.celular || 'sin celular' }}</div>
+                    </div>
                   </div>
                   <div v-if="!detalle.responsables?.length" class="muted">Sin responsables</div>
                 </div>
@@ -317,8 +333,23 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
                     <span v-if="detalle.numComprobante" class="muted"> · Nº {{ detalle.numComprobante }}</span>
                     <span v-if="detalle.entidadBancaria" class="muted"> · {{ detalle.entidadBancaria }}</span>
                   </div>
-                  <a v-if="detalle.imgComprobante" :href="url(`/files/${detalle.imgComprobante}`)"
-                     target="_blank" rel="noopener" class="btn btn-sm">Ver comprobante ↗</a>
+                  <!-- El comprobante SE VE aqui, no solo se abre en otra pestaña: en el
+                       telefono esa pestaña es salir de la aplicacion y volver. -->
+                  <template v-if="detalle.imgComprobante">
+                    <div class="acciones-comp">
+                      <button class="btn btn-sm" @click="verComprobante = !verComprobante">
+                        {{ verComprobante ? 'Ocultar comprobante' : '👁 Ver comprobante' }}
+                      </button>
+                      <a :href="url(`/files/${detalle.imgComprobante}`)" target="_blank"
+                         rel="noopener" class="btn btn-fantasma btn-sm">Abrir aparte ↗</a>
+                    </div>
+                    <div v-if="verComprobante" class="visor-comp">
+                      <img v-if="!/\.pdf($|\?)/i.test(detalle.imgComprobante)"
+                           :src="url(`/files/${detalle.imgComprobante}`)" alt="Comprobante de pago" />
+                      <p v-else class="muted">El comprobante es un PDF. Ábrelo aparte para verlo.</p>
+                    </div>
+                  </template>
+                  <div v-else class="badge badge-danger">sin comprobante</div>
                   <div class="muted" v-if="detalle.edicion">Edición: {{ detalle.edicion }}</div>
                   <div class="muted" v-if="detalle.fechaCompra">Venta: {{ fechaHora(detalle.fechaCompra) }}</div>
                   <div class="muted" v-if="detalle.promotor">Registró: {{ detalle.promotor }}</div>
@@ -454,6 +485,24 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
 </template>
 
 <style scoped>
+/* ---- lo adjuntado, que es lo que viene a mirar quien acredita ---- */
+.resp { display: flex; align-items: flex-start; gap: 0.6rem; margin-bottom: 0.5rem; }
+.foto-resp {
+  width: 44px; height: 44px; flex: none; border-radius: var(--radio-sm);
+  object-fit: cover; border: 1px solid var(--border);
+}
+.foto-resp.sinfoto {
+  display: grid; place-items: center; background: var(--panel-2);
+  color: var(--muted); font-weight: 700;
+}
+.datos-resp { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.acciones-comp { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.3rem; }
+.visor-comp { margin-top: 0.4rem; }
+.visor-comp img {
+  width: 100%; max-height: 55vh; object-fit: contain;
+  border-radius: var(--radio-sm); border: 1px solid var(--border); background: var(--panel);
+}
+
 .pestanas { display: flex; gap: 0.4rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); }
 .pestana {
   background: transparent; border: none; border-bottom: 2px solid transparent;

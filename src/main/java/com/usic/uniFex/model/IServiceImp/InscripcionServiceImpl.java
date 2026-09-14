@@ -121,12 +121,16 @@ public class InscripcionServiceImpl implements IInscripcionService{
                 .sorted(Comparator.comparing(r -> !r.isEsTitular())) // el titular primero
                 .map(r -> {
                     var p = r.getPersona();
+                    String foto = p != null ? p.getFoto() : null;
                     return new InscripcionDetalleDTO.ResponsableDetalle(
                             p != null ? p.getNombreCompleto() : null,
                             p != null ? p.getCi() : null,
                             p != null ? p.getCorreo() : null,
                             p != null ? p.getCelular() : null,
-                            r.isEsTitular());
+                            r.isEsTitular(),
+                            // Misma forma que en el resto del sistema: la ruta que sirve
+                            // /files/**, no el nombre suelto del archivo.
+                            (foto != null && !foto.isBlank()) ? "/files/" + foto : null);
                 })
                 .collect(Collectors.toList());
 

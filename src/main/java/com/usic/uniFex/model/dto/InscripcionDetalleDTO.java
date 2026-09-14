@@ -42,7 +42,14 @@ public record InscripcionDetalleDTO(
 
     /** Un responsable de la entidad. El primero (esTitular) es el dueño de la caseta. */
     public record ResponsableDetalle(String nombreCompleto, String ci, String correo,
-                                     String celular, boolean esTitular) {
+                                     String celular, boolean esTitular,
+                                     /**
+                                      * Ruta servida en /files/**, o null si todavia no tiene
+                                      * foto. La necesita quien acredita: mirar la venta sin
+                                      * poder ver lo adjuntado obliga a abrir otra pantalla
+                                      * para comprobar justo lo que se viene a comprobar.
+                                      */
+                                     String fotoUrl) {
     }
 
     /** Una caseta vendida, con el precio que se congelo el dia de la venta. */
