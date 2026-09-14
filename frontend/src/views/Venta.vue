@@ -8,6 +8,7 @@ import { toast } from '../ui/toast';
 import { descargarRecibo, descargarCredencialVirtual } from '../ui/descargas';
 import { guardarBorrador, leerBorrador, borrarBorrador } from '../ui/borrador';
 import { partirNombre } from '../ui/nombres';
+import CampoCelular from '../components/CampoCelular.vue';
 import { mostrarCarga, ocultarCarga, textoCarga } from '../ui/cargando';
 import { alerta, aviso, alertaConAccion } from '../ui/alerta';
 
@@ -104,8 +105,9 @@ const AYUDAS = {
     'La cédula de identidad del dueño, solo los números. Es el dato con el que se le identifica '
     + 'si hay que reclamar algo.'],
   celularLegal: ['Celular del responsable legal',
-    'El número al que se le puede llamar durante la feria. Es el contacto que verá '
-    + 'administración si necesita ubicarlo.'],
+    'El número al que se le puede llamar durante la feria. Elige primero el país: Bolivia o '
+    + 'Brasil. El código se guarda junto al número, así que el teléfono queda marcable desde '
+    + 'cualquier sitio.'],
   fechas: ['Desde y hasta',
     'Los días que ocupará la caseta, si es un periodo distinto al de toda la feria. Se pueden '
     + 'dejar en blanco.'],
@@ -498,14 +500,18 @@ async function registrar() {
         for (const r of lista) if (r.tieneFoto) conCredencial.push(r);
       } catch { /* sin la lista no se baja ninguna: la venta ya esta hecha */ }
     }
+    // Todo lo de esta venta cae en UNA carpeta con el nombre de la entidad: el recibo y una
+    // credencial por responsable. Sueltos en Documentos, mezclados con los de las otras ventas
+    // del dia, encontrarlos despues era el trabajo.
+    const carpeta = mayus(form.entidadNombre);
     for (const r of conCredencial) {
-      await descargarCredencialVirtual(r.id, r.nombre);
+      await descargarCredencialVirtual(r.id, r.nombre, carpeta);
     }
 
     textoCarga.value = 'Preparando el recibo…';
     // El recibo se baja SOLO, que es el momento en que el cliente lo está esperando. Si algo
     // falla no se toca la venta: ya está hecha, y se avisa de dónde volver a pedirlo.
-    await descargarRecibo(d.inscripcionId);
+    await descargarRecibo(d.inscripcionId, carpeta);
     ocultarCarga();
 
     /*
@@ -526,7 +532,8 @@ async function registrar() {
     if (conCredencial.length) {
       sobreCredenciales = `\n\nSe descargó ${conCredencial.length === 1
         ? 'la credencial virtual'
-        : `${conCredencial.length} credenciales virtuales`}. Ya se puede${conCredencial.length === 1 ? '' : 'n'} mandar al expositor.`;
+        : `${conCredencial.length} credenciales virtuales`}. Ya se puede${conCredencial.length === 1 ? '' : 'n'} mandar al expositor.`
+        + `\n\nEstán en Documentos, en la carpeta «${carpeta}», junto con el recibo.`;
     } else {
       sobreCredenciales = '\n\nLa credencial virtual se descarga desde Credenciales, en cuanto '
         + 'estén el comprobante y la foto del responsable.';
@@ -685,8 +692,7 @@ onUnmounted(() => {
           </label>
           <label class="campo">
             <span>Celular *<button type="button" class="ayuda" @click.prevent="ayuda('celularLegal')" aria-label="Qué es esto">?</button></span>
-            <input class="control" :class="{ falta: falta('celularRepresentante') }"
-                   v-model="form.celularRepresentante" type="tel" inputmode="tel" placeholder="Ej. 71234567" />
+            <CampoCelular v-model="form.celularRepresentante" :falta="falta('celularRepresentante')" />
           </label>
         </div>
 
@@ -747,8 +753,7 @@ onUnmounted(() => {
           </div>
           <label class="campo">
             <span>Celular</span>
-            <input class="control" type="tel" inputmode="tel"
-                   v-model="r.celular" placeholder="Ej. 71234567" />
+            <CampoCelular v-model="r.celular" />
           </label>
 
           <!-- Foto opcional. Es el unico momento en que la persona esta delante; si no se

@@ -93,7 +93,10 @@ export function erroresDe(eventos) {
       fuera.push(e.params.args.map((a) => a.description || a.value).join(' '));
     }
     if (e.method === 'Log.entryAdded' && e.params.entry.level === 'error') {
-      fuera.push(e.params.entry.text);
+      // Con la URL: "404 (Not Found)" a secas no dice QUE falta, y averiguarlo obliga a
+      // repetir todo el recorrido a mano.
+      const u = e.params.entry.url;
+      fuera.push(u ? `${e.params.entry.text} [${u}]` : e.params.entry.text);
     }
   }
   return fuera;

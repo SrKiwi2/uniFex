@@ -1,6 +1,6 @@
 {
   "appId": "bo.edu.uap.unifex",
-  "appName": "UniFex",
+  "appName": "FexpoUap App",
   "webDir": "dist",
   "android": {
     "allowMixedContent": true
