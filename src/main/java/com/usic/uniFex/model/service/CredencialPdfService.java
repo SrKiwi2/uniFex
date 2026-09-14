@@ -2,10 +2,14 @@ package com.usic.uniFex.model.service;
 
 import java.io.InputStream;
 import java.io.ByteArrayOutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
@@ -59,6 +63,10 @@ public class CredencialPdfService {
      * 1,2 MB del classpath en cada peticion, no.
      */
     private final Map<String, byte[]> cache = new ConcurrentHashMap<>();
+
+    /** Donde viven las fotos subidas. Es la misma raiz que sirve /files/**. */
+    @Value("${app.upload-root:uploads}")
+    private String uploadRoot;
 
     /**
      * Alto / ancho de la plantilla, que es la proporcion con la que se imprime.
@@ -153,8 +161,9 @@ public class CredencialPdfService {
 
         texto(lienzo, fuente, d.nombre(), valor(c.nombre(), d), x0, y0, w, h, d.centrado());
         texto(lienzo, fuente, d.empresa(), valor(empresa, d), x0, y0, w, h, d.centrado());
-        texto(lienzo, fuente, d.ci(), valor(c.ci(), d), x0, y0, w, h, d.centrado());
-        if (d.zona() != null) {
+            texto(lienzo, fuente, d.ci(), valor(c.ci(), d), x0, y0, w, h, d.centrado());
+            dibujarFoto(lienzo, d.foto(), c, x0, y0, w, h);
+            if (d.zona() != null) {
             // La plantilla ya trae "COD. PUESTO" y "ZONA" impresos uno al lado del otro: cada
             // valor va en su caja y no hace falta apilarlos.
             texto(lienzo, fuente, d.codigo(), valor(c.casetas(), d), x0, y0, w, h, d.centrado());
@@ -263,6 +272,36 @@ public class CredencialPdfService {
                 centrado ? x + cajaW / 2f : x,
                 y + (cajaH - tam * 0.70f) / 2f, 0);
         lienzo.endText();
+    }
+
+    private void dibujarFoto(PdfContentByte lienzo, Caja caja, CredencialDTO c,
+                             float x0, float y0, float w, float h) throws Exception {
+        if (caja == null || c.fotoUrl() == null || c.fotoUrl().isBlank()) return;
+        Path ruta = rutaFoto(c.fotoUrl());
+        if (ruta == null) return;
+
+        float cajaW = (float) (caja.ancho() * w);
+        float cajaH = (float) (caja.alto() * h);
+        float x = x0 + (float) (caja.x() * w);
+        float y = y0 + h - (float) (caja.y() * h) - cajaH;
+
+        Image foto = Image.getInstance(ruta.toAbsolutePath().toString());
+        foto.scaleAbsolute(cajaW, cajaH);
+        foto.setAbsolutePosition(x, y);
+        lienzo.addImage(foto);
+    }
+
+    private Path rutaFoto(String fotoUrl) {
+        String relativa = fotoUrl.startsWith("/files/") ? fotoUrl.substring("/files/".length()) : fotoUrl;
+        try {
+            Path base = Paths.get(uploadRoot).toAbsolutePath().normalize();
+            Path destino = base.resolve(relativa).normalize();
+            if (!destino.startsWith(base) || !Files.isRegularFile(destino)) return null;
+            return destino;
+        } catch (RuntimeException e) {
+            log.warn("No se pudo resolver la foto {}: {}", fotoUrl, e.getMessage());
+            return null;
+        }
     }
 
     private byte[] bytes(String recurso) {
