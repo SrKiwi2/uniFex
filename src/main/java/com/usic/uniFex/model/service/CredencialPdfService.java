@@ -154,9 +154,16 @@ public class CredencialPdfService {
         texto(lienzo, fuente, d.nombre(), valor(c.nombre(), d), x0, y0, w, h, d.centrado());
         texto(lienzo, fuente, d.empresa(), valor(empresa, d), x0, y0, w, h, d.centrado());
         texto(lienzo, fuente, d.ci(), valor(c.ci(), d), x0, y0, w, h, d.centrado());
-        // La caseta con su categoria debajo: el numero solo no dice nada si hay trece zonas.
-        codigoConCategoria(lienzo, fuente, d.codigo(), valor(c.casetas(), d),
-                valor(c.categoria(), d), x0, y0, w, h, d.centrado());
+        if (d.zona() != null) {
+            // La plantilla ya trae "COD. PUESTO" y "ZONA" impresos uno al lado del otro: cada
+            // valor va en su caja y no hace falta apilarlos.
+            texto(lienzo, fuente, d.codigo(), valor(c.casetas(), d), x0, y0, w, h, d.centrado());
+            texto(lienzo, fuente, d.zona(), valor(c.categoria(), d), x0, y0, w, h, d.centrado());
+        } else {
+            // La caseta con su categoria debajo: el numero solo no dice nada si hay trece zonas.
+            codigoConCategoria(lienzo, fuente, d.codigo(), valor(c.casetas(), d),
+                    valor(c.categoria(), d), x0, y0, w, h, d.centrado());
+        }
     }
 
     /**

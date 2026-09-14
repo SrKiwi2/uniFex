@@ -5,7 +5,7 @@ import { apiFetch } from '../api';
 import { useAuthStore } from '../stores/auth';
 import { usePuestosStore } from '../stores/puestos';
 import { toast } from '../ui/toast';
-import { descargarRecibo } from '../ui/descargas';
+import { descargarRecibo, descargarCredencialVirtual } from '../ui/descargas';
 import { guardarBorrador, leerBorrador, borrarBorrador } from '../ui/borrador';
 import { partirNombre } from '../ui/nombres';
 import { mostrarCarga, ocultarCarga, textoCarga } from '../ui/cargando';
@@ -381,20 +381,6 @@ async function subirFotos(inscripcionId) {
   }
 }
 
-/** Quita una caseta del carrito sin salir del formulario. */
-async function quitarCaseta(p) {
-  try {
-    const r = await apiFetch('/api/app/puestos/carrito', {
-      method: 'DELETE', body: JSON.stringify({ ids: [p.id] }),
-    });
-    const d = await r.json().catch(() => ({}));
-    if ((d.logradas ?? []).includes(p.id)) {
-      tienda.aplicar({ ...p, estado: 'L', reservadoPor: null });
-    }
-  } catch (e) {
-    toast(e.message, 'error');
-  }
-}
 
 /*
  * Los nombres van en MAYUSCULAS, como el resto del sistema (las entidades y personas que ya
@@ -495,6 +481,27 @@ async function registrar() {
     const todas = await subirFotos(d.inscripcionId);
     borrarBorrador(auth.id);
 
+    /*
+     * La credencial virtual se baja SOLA, aqui mismo.
+     *
+     * Es el momento de la entrega: el expositor esta delante y se le manda la imagen al
+     * telefono. Solo salen las que ya se pueden emitir —con comprobante y con foto—, porque
+     * una credencial sin foto no sirve para identificar a nadie en la puerta. A quien le falte
+     * algo, se le dice donde completarlo en vez de bajarle un papel a medias.
+     */
+    textoCarga.value = 'Preparando las credenciales…';
+    const conCredencial = [];
+    if (comprobanteOk && comprobante.value?.archivo) {
+      try {
+        const rr = await apiFetch(`/api/app/inscripciones/${d.inscripcionId}/responsables`);
+        const lista = (await rr.json())?.responsables || [];
+        for (const r of lista) if (r.tieneFoto) conCredencial.push(r);
+      } catch { /* sin la lista no se baja ninguna: la venta ya esta hecha */ }
+    }
+    for (const r of conCredencial) {
+      await descargarCredencialVirtual(r.id, r.nombre);
+    }
+
     textoCarga.value = 'Preparando el recibo…';
     // El recibo se baja SOLO, que es el momento en que el cliente lo está esperando. Si algo
     // falla no se toca la venta: ya está hecha, y se avisa de dónde volver a pedirlo.
@@ -514,10 +521,22 @@ async function registrar() {
       todas ? null : 'alguna foto',
       comprobanteOk ? null : 'el comprobante',
     ].filter(Boolean).join(' y ');
+
+    let sobreCredenciales = '';
+    if (conCredencial.length) {
+      sobreCredenciales = `\n\nSe descargó ${conCredencial.length === 1
+        ? 'la credencial virtual'
+        : `${conCredencial.length} credenciales virtuales`}. Ya se puede${conCredencial.length === 1 ? '' : 'n'} mandar al expositor.`;
+    } else {
+      sobreCredenciales = '\n\nLa credencial virtual se descarga desde Credenciales, en cuanto '
+        + 'estén el comprobante y la foto del responsable.';
+    }
+
     await aviso(
       `Caseta${carrito.value.length === 1 ? '' : 's'} ${casetas} · ${bs(d.total)} Bs`
+      + sobreCredenciales
       + (pendiente ? `\n\nNo se pudo subir ${pendiente}. Puedes completarlo desde Mis ventas.` : ''),
-      'ok', 6000, '¡Venta registrada!');
+      'ok', 0, '¡Venta registrada!');
     router.push({ path: '/mis-ventas', query: { registrada: d.inscripcionId } });
   } catch (e) {
     await alerta(e.message, 'error', 0);
@@ -769,26 +788,32 @@ onUnmounted(() => {
             <strong>{{ g.categoria }}</strong>
             <span class="sub-bs">{{ bs(g.subtotal) }} Bs</span>
           </header>
+          <!-- Aqui ya no se quita nada. Este paso es para REVISAR antes de cobrar, y una ✕
+               al lado de cada caseta invita a tocarla justo cuando el vendedor esta leyendo la
+               lista en voz alta. Para cambiar la seleccion esta el mapa, que es donde se
+               eligieron. -->
           <ul class="casetas">
             <li v-for="p in g.casetas" :key="p.id" :class="{ perdida: perdidas.includes(p.id) }">
               <span class="nom">Caseta {{ p.codigo }}</span>
               <span class="muted">{{ p.tamano }}</span>
               <span class="precio">{{ bs(p.precio) }} Bs</span>
-              <button class="btn btn-fantasma btn-sm" title="Quitar" @click="quitarCaseta(p)">✕</button>
             </li>
           </ul>
         </div>
 
+        <!-- UN solo total. Antes salia la cuenta dos veces —"2 casetas · 100 Bs" y debajo
+             "Total a cobrar · 100 Bs"— y ver el mismo importe repetido hace dudar de si son
+             dos cobros o si uno es un subtotal de algo. -->
         <div class="cuenta">
-          <div class="linea">
-            <span>{{ carrito.length }} caseta{{ carrito.length === 1 ? '' : 's' }}</span>
-            <span>{{ bs(total) }} Bs</span>
-          </div>
           <div class="linea grande">
             <span>Total a cobrar</span>
             <strong>{{ bs(total) }} Bs</strong>
           </div>
         </div>
+        <p class="nota">
+          ¿Hay que cambiar alguna caseta?
+          <router-link to="/mapa">Vuelve al mapa</router-link> para quitarla o agregar otra.
+        </p>
 
         <div class="separador"></div>
 

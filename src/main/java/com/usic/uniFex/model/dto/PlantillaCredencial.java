@@ -49,8 +49,21 @@ public record PlantillaCredencial(
         /** Entidad y rubro, juntos. */
         Caja empresa,
         Caja ci,
-        /** Numeros de caseta, con la categoria debajo en letra pequeña. */
-        Caja codigo) {
+        /** Numeros de caseta. Con `zona` a null, lleva la categoria debajo en letra pequeña. */
+        Caja codigo,
+        /**
+         * Caja aparte para la categoria, cuando la plantilla la tiene impresa como "ZONA"
+         * junto al codigo de puesto. A null, la categoria va debajo del codigo.
+         */
+        Caja zona,
+        /**
+         * Donde va la foto del responsable, si la plantilla la lleva. A null no se dibuja.
+         *
+         * En la credencial virtual la foto es REDONDA, y eso no se declara aqui: la caja es el
+         * cuadrado que la contiene y el generador la recorta en circulo. Declarar la forma
+         * seria un campo mas que solo usa una plantilla.
+         */
+        Caja foto) {
 
     /** Un rectangulo dentro de la plantilla, en fracciones de su ancho y su alto. */
     public record Caja(double x, double y, double ancho, double alto) {
@@ -71,7 +84,9 @@ public record PlantillaCredencial(
             new Caja(0.165, 0.502, 0.758, 0.048),
             new Caja(0.165, 0.608, 0.758, 0.048),
             new Caja(0.165, 0.713, 0.431, 0.048),
-            new Caja(0.658, 0.713, 0.182, 0.048));
+            new Caja(0.658, 0.713, 0.182, 0.048),
+            null,   // la categoria va debajo del codigo, no en caja propia
+            null);  // el papel no lleva foto
 
     /**
      * Misma plantilla sin etiquetas impresas, con el QR grande y centrado un poco por encima
@@ -93,7 +108,9 @@ public record PlantillaCredencial(
             // Lo unico escrito, dentro de la PRIMERA caja de la plantilla y centrado: la
             // caseta grande con su categoria debajo. Quien necesite saber QUIEN es, escanea
             // el QR; el papel solo dice DE DONDE es.
-            new Caja(0.147, 0.474, 0.794, 0.076));
+            new Caja(0.147, 0.474, 0.794, 0.076),
+            null,
+            null);
 
     /**
      * Todas las plantillas que se pueden elegir, en el orden en que salen en la pantalla.
@@ -102,10 +119,47 @@ public record PlantillaCredencial(
      * catalogo del API, los requisitos por plantilla y los botones de la pantalla recorren esta
      * lista.
      */
-    public static final List<PlantillaCredencial> CATALOGO = List.of(CON_ETIQUETAS, QR_GRANDE);
+    /**
+     * La CREDENCIAL VIRTUAL: la que se entrega de verdad.
+     *
+     * No esta pensada para papel sino para la pantalla del telefono del expositor, que es como
+     * se reparte y como se enseña en la puerta. Por eso es vertical (900x1600, proporcion de
+     * movil) y por eso se genera como IMAGEN y no como PDF sobre hoja carta: un PDF de carta en
+     * un telefono sale diminuto y hay que ampliarlo justo cuando hay cola.
+     *
+     * Las cajas estan MEDIDAS sobre la plantilla, detectando sus recuadros blancos y el marco
+     * punteado del QR, igual que se hizo con las otras.
+     */
+    public static final PlantillaCredencial CREDENCIAL_VIRTUAL = new PlantillaCredencial(
+            "CREDENCIAL_VIRTUAL", "Credencial virtual", "Para el teléfono, con foto y QR",
+            "static/assets/credencialvirtual.jpeg",
+            true,    // lleva la foto de la persona: sin ella no se emite
+            false,   // los valores van alineados a la izquierda, bajo su etiqueta impresa
+            true,
+            // Dentro del marco punteado de arriba a la derecha (x 0.489..0.958, y 0.020..0.285),
+            // con holgura para que el QR no toque el borde: un QR pegado al marco confunde a
+            // algunos lectores.
+            new Caja(0.512, 0.034, 0.415, 0.415),
+            new Caja(0.1422, 0.5119, 0.808, 0.053),   // NOMBRE COMPLETO
+            new Caja(0.1422, 0.6006, 0.809, 0.054),   // EMPRESA / SERVICIO
+            new Caja(0.1422, 0.6900, 0.808, 0.054),   // # CEDULA DE IDENTIDAD
+            new Caja(0.1433, 0.7794, 0.311, 0.054),   // COD. PUESTO
+            new Caja(0.4800, 0.7794, 0.471, 0.054),   // ZONA (la categoria)
+            // El hueco circular de la izquierda: centro (0.345, 0.360), diametro 0.366 del ancho.
+            new Caja(0.1622, 0.2569, 0.3656, 0.2056));
+
+    /**
+     * Todas las plantillas que se pueden elegir, en el orden en que salen en la pantalla.
+     *
+     * <b>Aqui se añade una plantilla nueva, y en ningun otro sitio.</b> El generador, el
+     * catalogo del API, los requisitos por plantilla y los botones de la pantalla recorren esta
+     * lista. La virtual va primera porque es la que se usa a diario.
+     */
+    public static final List<PlantillaCredencial> CATALOGO =
+            List.of(CREDENCIAL_VIRTUAL, CON_ETIQUETAS, QR_GRANDE);
 
     /** La que se usa cuando quien llama no pide ninguna. */
-    public static final PlantillaCredencial POR_DEFECTO = CON_ETIQUETAS;
+    public static final PlantillaCredencial POR_DEFECTO = CREDENCIAL_VIRTUAL;
 
     /**
      * La plantilla con ese id, o vacio si no existe.

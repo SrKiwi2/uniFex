@@ -21,6 +21,7 @@ import com.usic.uniFex.model.dto.CredencialDTO;
 import com.usic.uniFex.model.dto.PlantillaCredencial;
 import com.usic.uniFex.model.service.CredencialCodigoService;
 import com.usic.uniFex.model.service.CredencialPdfService;
+import com.usic.uniFex.model.service.CredencialImagenService;
 import com.usic.uniFex.model.service.CredencialService;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -44,6 +45,7 @@ public class CredencialesApiController {
     private final ICategoriaService categoriaService;
     private final CredencialService credencialService;
     private final CredencialPdfService pdfService;
+    private final CredencialImagenService imagenService;
     private final CredencialCodigoService codigos;
     private final com.usic.uniFex.model.dao.CredencialImpresionDao impresiones;
 
@@ -300,6 +302,50 @@ public class CredencialesApiController {
                 .contentType(MediaType.APPLICATION_PDF)
                 .header("Content-Disposition", "inline; filename=\"" + nombre + "\"")
                 .body(pdf);
+    }
+
+    /**
+     * La credencial virtual de un responsable, como IMAGEN para el telefono.
+     *
+     * Va aparte del PDF a proposito. Esta credencial no se imprime: se manda al telefono del
+     * expositor y se enseña en la puerta desde la pantalla, asi que una hoja carta con la
+     * credencial centrada seria justo lo que no sirve. Es un PNG vertical, del tamaño de la
+     * plantilla.
+     *
+     * Se registra como impresion igual que el PDF: lo que importa del registro es que se
+     * ENTREGO una credencial, no en que soporte.
+     */
+    @GetMapping("/{responsableId}/virtual")
+    @PreAuthorize(Roles.USA_CREDENCIALES)
+    public ResponseEntity<byte[]> virtual(@PathVariable Long responsableId,
+                                          @RequestParam(value = "forzar", defaultValue = "false") boolean forzar) {
+        Long soloMias = alcanceDelUsuario();
+        if (soloMias != null && !credencialService.esDeUsuario(responsableId, soloMias)) {
+            return ResponseEntity.status(403).build();
+        }
+        CredencialDTO c = credencialService.porResponsable(responsableId).orElse(null);
+        if (c == null) return ResponseEntity.notFound().build();
+
+        PlantillaCredencial p = PlantillaCredencial.CREDENCIAL_VIRTUAL;
+        if (!forzar && !c.apto(p.id())) {
+            return ResponseEntity.status(409)
+                    .contentType(MediaType.TEXT_PLAIN)
+                    // Los motivos ya vienen redactados ("sin comprobante", "sin foto"):
+                    // anteponerles "falta" daba "falta sin comprobante", que no se lee.
+                    .body(("Todavía no se puede emitir esta credencial: "
+                            + String.join(" y ", c.faltantes(p.id())) + ".")
+                            .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+
+        byte[] png = imagenService.generar(c, p, raizPublica());
+        impresiones.registrar(c.responsableId(), c.inscripcionId(), p.id(),
+                String.join(", ", c.faltantes(p.id())), usuarioActual());
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_PNG)
+                .header("Content-Disposition",
+                        "inline; filename=\"credencial-" + c.codigo() + ".png\"")
+                .body(png);
     }
 
     /** Quien imprimio esta credencial, cuando, con que plantilla y que faltaba entonces. */

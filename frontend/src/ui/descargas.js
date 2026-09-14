@@ -19,7 +19,40 @@ import { toast } from './toast.js';
  * telefonos de los responsables e importes, y el endpoint publico de verificacion esta hecho
  * a proposito para no revelar nada de eso.
  */
+/**
+ * La credencial VIRTUAL de un responsable, como imagen.
+ *
+ * Va aparte de `descargarPdf` porque no es un papel: es lo que el expositor va a llevar en el
+ * telefono y a enseñar en la puerta. En el movil se guarda en Documentos como PNG —visible
+ * desde la galeria y adjuntable por WhatsApp, que es como se reparte— y en la web se descarga.
+ */
+export async function descargarCredencialVirtual(responsableId, nombre) {
+  const archivo = `credencial-${(nombre || responsableId).toString().replace(/[^\w -]/g, '').trim() || responsableId}.png`;
+  try {
+    const res = await descargarArchivo(
+      `/api/app/credenciales/${responsableId}/virtual`, archivo);
+    toast(res.destino === 'telefono'
+      ? `Credencial guardada en Documentos (${archivo})`
+      : 'Credencial descargada', 'ok');
+    return true;
+  } catch (e) {
+    toast(`No se pudo generar la credencial: ${e.message}`, 'error');
+    return false;
+  }
+}
+
 export async function descargarPdf(ruta, nombreArchivo, opciones = {}) {
+  return descargarArchivo(ruta, nombreArchivo, opciones);
+}
+
+/**
+ * Baja CUALQUIER archivo del servidor, en la web y en el APK.
+ *
+ * Antes esto se llamaba `descargarPdf` y solo se usaba para eso; el nombre se quedo corto en
+ * cuanto aparecio la credencial virtual, que es un PNG. El mecanismo no tenia nada de PDF:
+ * blob + `<a download>` en la web, Filesystem en el telefono.
+ */
+export async function descargarArchivo(ruta, nombreArchivo, opciones = {}) {
   // `opciones` permite pedirlo por POST con un cuerpo: las credenciales se generan a partir
   // de una seleccion que puede ser de cientos de ids, y eso no cabe en una URL.
   const r = await apiFetch(ruta, opciones);

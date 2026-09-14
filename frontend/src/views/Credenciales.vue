@@ -2,7 +2,8 @@
 import { ref, computed, onMounted } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import { apiFetch } from '../api';
-import { descargarPdf } from '../ui/descargas';
+import { descargarPdf, descargarCredencialVirtual } from '../ui/descargas';
+import { mostrarCarga, ocultarCarga } from '../ui/cargando';
 import { toast } from '../ui/toast';
 import { alerta } from '../ui/alerta';
 
@@ -37,6 +38,47 @@ import { alerta } from '../ui/alerta';
  */
 const auth = useAuthStore();
 const soloMias = computed(() => auth.esVendedor);
+
+/*
+ * El vendedor solo ve la CREDENCIAL VIRTUAL.
+ *
+ * Es la que se entrega de verdad: se manda al telefono del expositor y se enseña en la puerta.
+ * Las otras dos son papel para casos concretos —tandas impresas, acreditacion en mesa— y las
+ * maneja administracion. Enseñarle al vendedor tres plantillas, un selector de tamaño y una
+ * vista previa sobre hoja carta es ofrecerle decisiones que no le tocan, justo cuando tiene al
+ * expositor delante.
+ */
+const soloVirtual = computed(() => auth.esVendedor);
+const ID_VIRTUAL = 'CREDENCIAL_VIRTUAL';
+
+/** Las credenciales de esta inscripcion que YA se pueden emitir en virtual. */
+const virtualesListas = (c) => grupoDe(c).filter((x) => x.listo?.[ID_VIRTUAL]);
+
+/**
+ * Descarga la credencial virtual de un responsable, o de toda su entidad.
+ *
+ * Una a una y no en un archivo unico: cada credencial es de UNA persona y se le manda a esa
+ * persona por separado. Un paquete con las tres obligaria a quien lo recibe a repartirlas.
+ */
+async function bajarVirtual(lista) {
+  if (generando.value) return;
+  const aptas = lista.filter((x) => x.listo?.[ID_VIRTUAL]);
+  if (!aptas.length) {
+    alerta('Todavía no se puede emitir: hace falta el comprobante de pago y la foto del '
+      + 'responsable.', 'advertencia');
+    return;
+  }
+  generando.value = true;
+  mostrarCarga(aptas.length === 1 ? 'Generando la credencial…'
+                                  : `Generando ${aptas.length} credenciales…`);
+  try {
+    for (const c of aptas) await descargarCredencialVirtual(c.responsableId, c.nombre);
+    await cargar();
+  } finally {
+    ocultarCarga();
+    generando.value = false;
+  }
+}
 
 const cargando = ref(true);
 const credenciales = ref([]);
@@ -295,10 +337,12 @@ onMounted(() => {
          no le dice nada a nadie hasta que lo ve sobre una carta. -->
     <p v-if="soloMias" class="alcance">
       Aquí salen las credenciales de <strong>tus ventas</strong>. Puedes adjuntar el comprobante
-      y las fotos de tus responsables, y generar sus credenciales.
+      y las fotos de tus responsables, y descargar su <strong>credencial virtual</strong>: una
+      imagen para el teléfono, con el QR que se escanea en la puerta. Se la mandas al expositor
+      y listo, no hay que imprimir nada.
     </p>
 
-    <section class="ajustes card">
+    <section v-if="!soloVirtual" class="ajustes card">
       <div class="grupo">
         <span class="rotulo">Plantilla</span>
         <div class="opciones">
@@ -348,7 +392,13 @@ onMounted(() => {
       </button>
       <!-- Con cero listas el boton no se esconde: sigue siendo el sitio donde se mira cuantas
            hay, y esconderlo dejaria la barra sin explicacion. Solo se desactiva. -->
-      <button class="btn btn-primario" :disabled="generando || !listas.length"
+      <button v-if="soloVirtual" class="btn btn-primario" :disabled="generando || !listas.length"
+              @click="bajarVirtual(listas)">
+        {{ generando ? 'Generando…'
+           : !listas.length ? 'Ninguna lista todavía'
+           : `📱 Descargar ${listas.length} credencial${listas.length === 1 ? '' : 'es'}` }}
+      </button>
+      <button v-else class="btn btn-primario" :disabled="generando || !listas.length"
               @click="imprimirTodasListas">
         {{ generando ? 'Generando…'
            : !listas.length ? 'Ninguna lista todavía'
@@ -427,17 +477,30 @@ onMounted(() => {
                    :title="`Adjuntar la foto de ${c.nombre}`">📷 Foto</label>
           </template>
 
+          <!-- La credencial virtual es la accion principal: es la que se entrega. -->
+          <button class="btn btn-primario btn-sm" :disabled="generando || !c.listo?.[ID_VIRTUAL]"
+                  :title="c.listo?.[ID_VIRTUAL]
+                    ? `Descargar la credencial virtual de ${c.nombre}`
+                    : 'Falta el comprobante o la foto'"
+                  @click="bajarVirtual([c])">📱 Credencial</button>
+          <button v-if="virtualesListas(c).length > 1" class="btn btn-sm" :disabled="generando"
+                  :title="`Descargar las ${virtualesListas(c).length} credenciales de ${c.entidad}`"
+                  @click="bajarVirtual(grupoDe(c))">📱 ×{{ virtualesListas(c).length }}</button>
+
           <!-- El par v-if / v-else tiene que quedar PEGADO: entre medias, Vue se queda sin
                el v-if al que engancharse y pinta los dos botones en la misma fila. -->
-          <button v-if="esListo(c)" class="btn btn-fantasma btn-sm" :disabled="generando"
-                  title="Imprimir solo esta" @click="imprimir([c.responsableId], 1)">🖨</button>
-          <button v-else class="btn btn-fantasma btn-sm" :disabled="generando"
-                  :title="`Imprimir igual, aunque le falte ${faltaDe(c).join(' y ')}`"
-                  @click="imprimirIgual(c)">🖨 igual</button>
+          <template v-if="!soloVirtual">
+            <button v-if="esListo(c)" class="btn btn-fantasma btn-sm" :disabled="generando"
+                    title="Imprimir en papel solo esta" @click="imprimir([c.responsableId], 1)">🖨</button>
+            <button v-else class="btn btn-fantasma btn-sm" :disabled="generando"
+                    :title="`Imprimir igual, aunque le falte ${faltaDe(c).join(' y ')}`"
+                    @click="imprimirIgual(c)">🖨 igual</button>
+          </template>
           <!-- Solo cuando la inscripcion tiene mas de un responsable: con uno solo haria
                exactamente lo mismo que el boton de al lado. -->
-          <button v-if="grupoDe(c).length > 1" class="btn btn-fantasma btn-sm" :disabled="generando"
-                  :title="`Imprimir las ${grupoDe(c).length} credenciales de ${c.entidad}`"
+          <button v-if="!soloVirtual && grupoDe(c).length > 1" class="btn btn-fantasma btn-sm"
+                  :disabled="generando"
+                  :title="`Imprimir en papel las ${grupoDe(c).length} credenciales de ${c.entidad}`"
                   @click="imprimirInscripcion(c)">🎫 {{ grupoDe(c).length }}</button>
         </div>
       </li>
