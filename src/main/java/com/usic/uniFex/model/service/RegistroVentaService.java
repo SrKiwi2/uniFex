@@ -9,6 +9,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -442,7 +443,8 @@ public class RegistroVentaService {
         if (normalizado.length() == 8) normalizado = "591" + normalizado;
 
         final String numeroFinal = normalizado;
-        Runnable envio = () -> enviarWhatsAppVentaConPdfs(numeroFinal, nombreEntidad, inscripcionId);
+        Runnable envio = () -> CompletableFuture.runAsync(
+                () -> enviarWhatsAppVentaConPdfs(numeroFinal, nombreEntidad, inscripcionId));
 
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             envio.run();
