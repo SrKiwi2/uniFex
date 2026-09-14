@@ -72,6 +72,16 @@ public final class Roles {
      * preparar la acreditacion de toda la feria es un trabajo, y acreditar a los propios
      * expositores es otro. Los endpoints que si son de toda la feria siguen con la primera.
      */
+    /**
+     * Quien controla la puerta: escanea credenciales y anota entradas y salidas.
+     *
+     * CONTROL es el rol que existe para esto. Administracion entra tambien porque durante el
+     * montaje suele haber una sola persona haciendo de todo, y porque quien mira los numeros
+     * al final del dia necesita poder probar el circuito.
+     */
+    public static final String CONTROLA_ACCESO =
+            "hasAnyRole('SUPER_USUARIO','ADMINISTRADOR','CONTROL')";
+
     public static final String USA_CREDENCIALES =
             "hasAnyRole('SUPER_USUARIO','ADMINISTRADOR','VERIFICADOR','ADMINISTRATIVO')";
 }

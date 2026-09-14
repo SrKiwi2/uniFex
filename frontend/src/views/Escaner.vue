@@ -1,6 +1,7 @@
 <script setup>
-import { ref, computed, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue';
 import { url as urlApi } from '../config.js';
+import { apiFetch } from '../api';
 
 /*
  * Verificar una credencial en la puerta.
@@ -25,6 +26,30 @@ const codigo = ref('');
 const buscando = ref(false);
 const resultado = ref(null);
 const error = ref('');
+
+/*
+ * Entrada o salida: LO ELIGE QUIEN ESCANEA, y se queda elegido.
+ *
+ * La alternativa era alternar solo —primer escaneo entrada, segundo salida— y parece mas
+ * comodo hasta que alguien escanea dos veces por nerviosismo o porque el telefono no respondio
+ * a la primera: a partir de ahi todo queda invertido y nadie se entera hasta mirar los numeros
+ * al cierre. Con el sentido elegido, un escaneo de mas es un movimiento de mas.
+ *
+ * Se queda pegado entre escaneos porque en la puerta se trabaja por tandas: entra el grupo
+ * entero y luego sale el grupo entero. Cambiarlo en cada persona seria un toque de mas por
+ * cada una.
+ */
+const sentido = ref(localStorage.getItem('escaner.sentido') || 'E');
+watch(sentido, (v) => localStorage.setItem('escaner.sentido', v));
+
+const dentro = ref(null);   // cuanta gente hay dentro ahora
+
+async function cuantosDentro() {
+  try {
+    const r = await apiFetch('/api/app/accesos/dentro');
+    if (r.ok) dentro.value = (await r.json()).dentro;
+  } catch { /* el contador es informativo: sin el la puerta sigue funcionando */ }
+}
 
 // ------------------------------------------------------------------ camara
 const video = ref(null);
@@ -167,8 +192,16 @@ function leido(c) {
 // Salir de la pantalla sin esto deja la camara encendida: se nota en la bateria y el LED
 // del telefono se queda prendido, que es lo que hace pensar que la aplicacion espia.
 onBeforeUnmount(apagar);
+onMounted(cuantosDentro);
 
 // ------------------------------------------------------------------ consulta
+/**
+ * Comprueba la credencial y ANOTA el movimiento.
+ *
+ * Las dos cosas van juntas a proposito: en la puerta, verificar sin registrar deja el mismo
+ * vacio de antes —se sabe que la credencial vale, pero no quien entro ni cuanta gente hay
+ * dentro—, y son el mismo gesto para quien esta ahi.
+ */
 async function verificar() {
   const c = codigoDe(codigo.value);
   if (!c || buscando.value) return;
@@ -176,12 +209,21 @@ async function verificar() {
   resultado.value = null;
   error.value = '';
   try {
-    const r = await fetch(urlApi(`/api/publico/credencial/${encodeURIComponent(c)}`));
+    const r = await apiFetch('/api/app/accesos', {
+      method: 'POST',
+      body: JSON.stringify({ codigo: c, sentido: sentido.value }),
+    });
     const d = await r.json().catch(() => ({}));
-    if (r.ok && d.valida) resultado.value = d;
-    else error.value = d.mensaje || 'Esta credencial no es válida';
-  } catch {
-    error.value = 'No se pudo verificar. Revisa la conexión.';
+    if (r.ok && d.ok) {
+      resultado.value = d;
+      cuantosDentro();
+    } else {
+      error.value = d.mensaje || 'Esta credencial no es válida';
+    }
+  } catch (e) {
+    error.value = e.message === 'Sesion expirada'
+      ? 'Tu sesión caducó. Vuelve a entrar para seguir controlando la puerta.'
+      : 'No se pudo verificar. Revisa la conexión.';
   } finally {
     buscando.value = false;
   }
@@ -203,8 +245,26 @@ function siguiente() {
 
 <template>
   <div class="escaner">
+    <!-- Lo PRIMERO: si esto marca entrada o salida. Es lo que cambia el significado de cada
+         escaneo, asi que va arriba y grande, no escondido en un ajuste. -->
+    <section class="modo card" :class="sentido === 'E' ? 'es-entrada' : 'es-salida'">
+      <div class="botones-modo" role="radiogroup" aria-label="Entrada o salida">
+        <button type="button" class="modo-btn" :class="{ activo: sentido === 'E' }"
+                role="radio" :aria-checked="sentido === 'E'" @click="sentido = 'E'">
+          <span class="ico">⬇️</span><strong>Entrada</strong>
+        </button>
+        <button type="button" class="modo-btn" :class="{ activo: sentido === 'S' }"
+                role="radio" :aria-checked="sentido === 'S'" @click="sentido = 'S'">
+          <span class="ico">⬆️</span><strong>Salida</strong>
+        </button>
+      </div>
+      <p class="dentro" v-if="dentro !== null">
+        <strong>{{ dentro }}</strong> persona{{ dentro === 1 ? '' : 's' }} dentro ahora
+      </p>
+    </section>
+
     <section class="entrada card">
-      <h2>Verificar credencial</h2>
+      <h2>{{ sentido === 'E' ? 'Registrar entrada' : 'Registrar salida' }}</h2>
 
       <!-- La camara ocupa el sitio principal porque es como se trabaja con una fila delante.
            Se enciende con un toque y no sola: pedir el permiso al entrar a la pantalla es lo
@@ -251,8 +311,15 @@ function siguiente() {
     <section v-else-if="resultado" class="resultado valido card">
       <header>
         <span class="marca">✓</span>
-        <h3>Credencial válida</h3>
+        <h3>{{ resultado.sentido === 'E' ? 'Entrada registrada' : 'Salida registrada' }}</h3>
       </header>
+
+      <!-- Dos movimientos iguales seguidos no se rechazan, se avisan: en la puerta pasa por
+           motivos razonables —alguien salio por otro lado sin escanear— y bloquear dejaria a
+           una persona fuera por un fallo de registro. Decide quien esta viendo lo que pasa. -->
+      <p v-if="resultado.repetido" class="repetido">
+        Ojo: ya figuraba {{ resultado.sentido === 'E' ? 'dentro' : 'fuera' }}. Se registró igual.
+      </p>
       <div class="persona">
         <img v-if="resultado.fotoUrl" :src="urlApi(resultado.fotoUrl)" :alt="resultado.nombre" class="foto" />
         <div v-else class="foto sinfoto">Sin foto</div>
@@ -265,7 +332,22 @@ function siguiente() {
       <dl class="datos">
         <div><dt>Categoría</dt><dd>{{ resultado.categoria || '—' }}</dd></div>
         <div><dt>Caseta</dt><dd class="casetas">{{ resultado.casetas || '—' }}</dd></div>
+        <div><dt>Entradas</dt><dd>{{ resultado.entradas }}</dd></div>
+        <div><dt>Salidas</dt><dd>{{ resultado.salidas }}</dd></div>
       </dl>
+
+      <details v-if="resultado.historial?.length" class="movimientos">
+        <summary>Últimos movimientos</summary>
+        <ul>
+          <li v-for="(h, i) in resultado.historial" :key="i">
+            <span class="badge" :class="h.sentido === 'E' ? 'badge-ok' : 'badge-muted'">
+              {{ h.sentido === 'E' ? 'entrada' : 'salida' }}
+            </span>
+            <span class="cuando">{{ (h.cuando || '').slice(0, 16).replace('T', ' ') }}</span>
+            <span class="muted">{{ h.usuario || '—' }}</span>
+          </li>
+        </ul>
+      </details>
       <div class="fila">
         <button class="btn btn-primario" @click="siguiente">📷 Escanear la siguiente</button>
         <button class="btn btn-fantasma" @click="limpiar">Limpiar</button>
@@ -276,6 +358,39 @@ function siguiente() {
 
 <style scoped>
 .escaner { display: flex; flex-direction: column; gap: 1rem; max-width: 560px; margin: 0 auto; }
+
+/* ---- entrada o salida ---- */
+.modo { padding: 0.8rem; display: flex; flex-direction: column; gap: 0.6rem; border-top: 5px solid var(--border); }
+.modo.es-entrada { border-top-color: var(--ok); }
+.modo.es-salida { border-top-color: var(--tramite); }
+.botones-modo { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+.modo-btn {
+  font: inherit; cursor: pointer; display: flex; flex-direction: column; align-items: center;
+  gap: 0.15rem; padding: 0.9rem 0.6rem; border-radius: var(--radio-sm);
+  border: 2px solid var(--border); background: var(--panel); color: var(--texto);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.modo-btn .ico { font-size: 1.4rem; line-height: 1; }
+.modo-btn strong { font-size: 1.05rem; }
+.es-entrada .modo-btn.activo {
+  border-color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, var(--panel));
+}
+.es-salida .modo-btn.activo {
+  border-color: var(--tramite); background: color-mix(in srgb, var(--tramite) 14%, var(--panel));
+}
+.dentro { margin: 0; text-align: center; font-size: 0.9rem; color: var(--muted); }
+.dentro strong { font-size: 1.15rem; color: var(--texto); font-variant-numeric: tabular-nums; }
+
+.repetido {
+  margin: 0; padding: 0.5rem 0.7rem; border-radius: var(--radio-sm);
+  background: color-mix(in srgb, var(--tramite) 14%, transparent);
+  color: var(--tramite); font-size: 0.88rem; font-weight: 600;
+}
+.movimientos { font-size: 0.85rem; }
+.movimientos summary { cursor: pointer; color: var(--muted); font-weight: 600; }
+.movimientos ul { list-style: none; margin: 0.5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.movimientos li { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.movimientos .cuando { font-variant-numeric: tabular-nums; }
 .entrada { padding: 1.1rem; display: flex; flex-direction: column; gap: 0.6rem; }
 .entrada h2 { margin: 0; font-size: 1.1rem; }
 .ayuda { margin: 0; font-size: 0.86rem; color: var(--muted); line-height: 1.5; }

@@ -183,6 +183,11 @@ public class SecurityConfig {
                         // que solo habla de la raiz del servidor y no dice nada del archivo que
                         // faltaba. Es la causa del ERR_TOO_MANY_REDIRECTS de las fotos.
                         "/error",
+                        // La vista publica de una credencial: la abre quien escanea el QR en la
+                        // puerta, que no tiene cuenta. Sin esto la cadena web le pedia sesion y
+                        // el telefono acababa en la pagina de login en vez de en la credencial.
+                        "/credencial/**",
+                        "/app/**",
                         "/control-responsable",
                         "/buscar-responsable",
                         "/vistaR/**",

@@ -232,7 +232,7 @@ public class CredencialImagenService {
      * —una fraccion del alto de la credencial— todos los valores salen iguales, y solo se
      * encoge el que de verdad no quepa.
      */
-    private static final double TAM_BASE = 0.030;   // del alto de la imagen
+    private static final double TAM_BASE = 0.026;   // del alto de la imagen
 
     /**
      * Escribe un valor dentro de su caja, en una o dos lineas.

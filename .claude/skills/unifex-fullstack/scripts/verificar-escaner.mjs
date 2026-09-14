@@ -174,6 +174,16 @@ try {
     await ch.esperar(2500);
     paso('la pantalla monta en tamaño de telefono',
          await ch.evaluar(`!!document.querySelector('.escaner')`));
+    /*
+     * Lo primero de la pantalla es si esto marca entrada o salida: es lo que cambia el
+     * significado de cada escaneo. Escondido en un ajuste, se controla la puerta entera con el
+     * sentido equivocado sin que nadie lo note hasta el cierre.
+     */
+    paso('se elige entrada o salida, y hay uno activo',
+         (await ch.evaluar(`document.querySelectorAll('.modo-btn').length`)) === 2
+         && await ch.evaluar(`!!document.querySelector('.modo-btn.activo')`));
+    await ch.evaluar(`[...document.querySelectorAll('.modo-btn')].find(b=>/Entrada/.test(b.textContent))?.click()`);
+    await ch.esperar(400);
     paso('la camara NO se enciende sola al entrar',
          !(await ch.evaluar(`!!document.querySelector('.visor')`)));
 
@@ -187,7 +197,15 @@ try {
         await ch.esperar(1000);
         leido = await ch.evaluar(`document.querySelector('.resultado')?.className || ''`);
       }
-      paso('lee el QR y da la credencial por valida', /valido/.test(leido), leido || 'no leyo en 15 s');
+      paso('lee el QR y registra el movimiento', /valido/.test(leido), leido || 'no leyo en 15 s');
+    // El escaner ya no solo verifica: ANOTA entrada o salida, y el titulo lo dice.
+    paso('y dice si fue entrada o salida',
+         /Entrada registrada|Salida registrada/.test(
+           await ch.evaluar(`document.querySelector('.resultado h3')?.textContent || ''`)),
+         await ch.evaluar(`document.querySelector('.resultado h3')?.textContent || ''`));
+    paso('con el conteo de entradas y salidas de esa persona',
+         /Entradas/.test(await ch.evaluar(`document.querySelector('.resultado .datos')?.textContent || ''`)),
+         await ch.evaluar(`document.querySelector('.resultado .datos')?.textContent.replace(/\s+/g,' ').trim() || '(no hay .datos)'`));
 
       const texto = (await ch.evaluar(
           `document.querySelector('.resultado')?.textContent.replace(/\\s+/g,' ').trim()`) || '');
