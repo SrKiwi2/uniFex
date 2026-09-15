@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -20,6 +21,7 @@ import com.usic.uniFex.model.dto.EdicionDTO;
 import com.usic.uniFex.model.dto.NocheFexpoDTO;
 import com.usic.uniFex.model.dto.PlanoDTO;
 import com.usic.uniFex.model.service.NochesFexpoService;
+import com.usic.uniFex.model.service.VisitasPaginaService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -33,6 +35,7 @@ public class FeriaPublicaController {
     private final IPuestoDao puestoDao;
     private final com.usic.uniFex.model.service.PlanoService planoService;
     private final NochesFexpoService nochesFexpoService;
+    private final VisitasPaginaService visitasService;
 
     /**
      * Información pública de la feria: edición activa, categorías, estadísticas de casetas y plano.
@@ -181,6 +184,22 @@ public class FeriaPublicaController {
         return nochesFexpoService.listarDeEdicionActiva().stream()
                 .map(NocheFexpoDTO::de)
                 .toList();
+    }
+
+    /**
+     * Contador de visitas de esta vista (V38), que la SPA muestra al pasar el cursor por
+     * "Quiero exponer". POST suma una visita y devuelve el total; GET solo lo lee. El cliente
+     * hace POST una vez por navegador y dia y GET el resto, asi recargar no infla el numero
+     * (ver VisitasPaginaService).
+     */
+    @PostMapping("/visitas")
+    public Map<String, Object> registrarVisita() {
+        return Map.of("total", visitasService.registrar(VisitasPaginaService.FERIA_PUBLICA));
+    }
+
+    @GetMapping("/visitas")
+    public Map<String, Object> visitas() {
+        return Map.of("total", visitasService.total(VisitasPaginaService.FERIA_PUBLICA));
     }
 
     /**

@@ -99,8 +99,167 @@ const nochesFexpo = computed(() => {
     fechaTexto: formatearFechaNoche(n.fecha),
     color: n.color || COLORES_NOCHE[i % COLORES_NOCHE.length],
     urlMedio: n.urlMedio ? urlApi(n.urlMedio) : null,
+    urlAudio: n.urlAudio ? urlApi(n.urlAudio) : null,
   }));
 });
+
+// Música de cada noche (V38, se sube desde el panel "Noches de FEXPO"). Suena mientras el
+// cursor está sobre la tarjeta y se apaga con un fundido corto al salir. En pantallas
+// táctiles no existe "encima": ahí un toque la enciende o la apaga, igual que Enter/Espacio
+// con el teclado.
+//
+// Un solo reproductor para toda la sección: pasar a otra tarjeta cambia la pista, así nunca
+// suenan dos a la vez. Volver a la misma tarjeta sigue donde se quedó.
+//
+// Los navegadores no dejan sonar audio hasta que la persona interactuó con la página (clic,
+// toque o tecla); pasar el cursor NO cuenta. Si play() se rechaza por eso, la tarjeta muestra
+// "Haz clic para escuchar" y ese primer clic ya la hace sonar.
+const VOLUMEN_MUSICA = 0.8;
+const nocheSonando = ref(null);     // id de la noche que suena
+const sonidoBloqueado = ref(null);  // id de la noche que el navegador no dejó sonar
+let reproductor = null;
+let pistaActual = null;             // URL cargada (a.src devuelve la absoluta: no sirve para comparar)
+let fundido = null;
+// La noche que DEBERÍA sonar. play() es asíncrono (tiene que cargar el MP3): si el cursor se
+// va antes de que termine, al volver ya no es la deseada y no debe empezar a sonar.
+let nocheDeseada = null;
+
+function obtenerReproductor() {
+  if (!reproductor) {
+    reproductor = new Audio();
+    reproductor.loop = true;
+  }
+  return reproductor;
+}
+
+function fundirVolumen(objetivo, ms, alTerminar) {
+  clearInterval(fundido);
+  const a = obtenerReproductor();
+  const pasos = Math.max(1, Math.round(ms / 30));
+  const salto = (objetivo - a.volume) / pasos;
+  let dados = 0;
+  fundido = setInterval(() => {
+    dados++;
+    a.volume = Math.min(1, Math.max(0, a.volume + salto));
+    if (dados >= pasos) {
+      clearInterval(fundido);
+      fundido = null;
+      a.volume = objetivo;
+      alTerminar?.();
+    }
+  }, 30);
+}
+
+async function sonarNoche(n) {
+  if (!n.urlAudio || nocheSonando.value === n.id) return;
+  nocheDeseada = n.id;
+  const a = obtenerReproductor();
+  clearInterval(fundido);
+  if (pistaActual !== n.urlAudio) {
+    a.src = n.urlAudio;
+    pistaActual = n.urlAudio;
+  }
+  a.volume = 0;
+  try {
+    await a.play();
+  } catch (e) {
+    // NotAllowedError = falta esa primera interacción. Cualquier otro fallo (archivo que ya no
+    // existe, pista reemplazada a mitad de carga) se ignora: la tarjeta sigue, sin música.
+    if (nocheDeseada === n.id && e?.name === 'NotAllowedError') sonidoBloqueado.value = n.id;
+    return;
+  }
+  if (nocheDeseada !== n.id) {
+    // El cursor se fue mientras cargaba: que no se quede sonando en silencio de fondo.
+    if (nocheDeseada === null) a.pause();
+    return;
+  }
+  nocheSonando.value = n.id;
+  sonidoBloqueado.value = null;
+  fundirVolumen(VOLUMEN_MUSICA, 400);
+}
+
+function callarNoche(n) {
+  if (nocheDeseada === n.id) nocheDeseada = null;
+  if (sonidoBloqueado.value === n.id) sonidoBloqueado.value = null;
+  if (nocheSonando.value !== n.id) return;
+  nocheSonando.value = null;
+  fundirVolumen(0, 300, () => obtenerReproductor().pause());
+}
+
+// Sin fundido: para cuando la música tiene que parar ya (pestaña oculta, pista quitada).
+function callarYa() {
+  nocheDeseada = null;
+  nocheSonando.value = null;
+  clearInterval(fundido);
+  reproductor?.pause();
+}
+
+// Clic, toque o teclado: la vía de las pantallas táctiles y la que desbloquea el sonido.
+function alternarNoche(n) {
+  if (!n.urlAudio) return;
+  if (nocheSonando.value === n.id) callarNoche(n);
+  else sonarNoche(n);
+}
+
+// Solo el ratón "pasa por encima". Con dedo o lápiz, pointerenter llega junto con el toque, y
+// el click que viene detrás apagaría enseguida lo que acaba de encender.
+function alEntrarNoche(e, n) {
+  if (e.pointerType === 'mouse') sonarNoche(n);
+}
+function alSalirNoche(e, n) {
+  if (e.pointerType === 'mouse') callarNoche(n);
+}
+
+// Si desde el panel quitan o cambian la música de la noche que está sonando (llega en vivo
+// por WebSocket), se calla en vez de seguir con una pista que ya no le corresponde.
+watch(nochesFexpo, (lista) => {
+  if (nocheSonando.value === null) return;
+  const n = lista.find((x) => x.id === nocheSonando.value);
+  if (!n || n.urlAudio !== pistaActual) callarYa();
+});
+
+// Cambiar de pestaña con el cursor quieto no dispara pointerleave. Sin fundido: en una
+// pestaña oculta los temporizadores van a 1 por segundo y el fundido duraría una eternidad.
+function alCambiarVisibilidad() {
+  if (document.hidden) callarYa();
+}
+onMounted(() => document.addEventListener('visibilitychange', alCambiarVisibilidad));
+onUnmounted(() => {
+  document.removeEventListener('visibilitychange', alCambiarVisibilidad);
+  callarYa();
+  if (reproductor) {
+    reproductor.removeAttribute('src');
+    reproductor.load(); // suelta el MP3 descargado
+  }
+});
+
+// Contador de visitas de esta página (V38), visible al pasar el cursor por "Quiero exponer".
+// Una visita por navegador y día: la primera carga del día hace POST (suma y devuelve el
+// total); las demás, solo GET. Así recargar no infla el número. Si falla (sin red, o una base
+// que aún no tiene V38) el contador simplemente no aparece: no es información crítica.
+const CLAVE_VISITA = 'feria.visita';
+const totalVisitas = ref(null);
+// "1.234" / "1 234" según el idioma de la vista; vacío mientras no hay dato (y entonces el
+// contador no se pinta). La etiqueta que va debajo sale de t.exponer.visitas.
+const visitasFormateadas = computed(() =>
+  totalVisitas.value === null ? '' : totalVisitas.value.toLocaleString(locale.value));
+
+async function cargarVisitas() {
+  const hoy = new Date().toLocaleDateString('sv'); // AAAA-MM-DD en hora local
+  let yaContada = false;
+  try { yaContada = localStorage.getItem(CLAVE_VISITA) === hoy; } catch { /* sin almacenamiento: cuenta */ }
+  try {
+    const r = await fetch(urlApi('/api/publico/feria/visitas'), { method: yaContada ? 'GET' : 'POST' });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (typeof d?.total !== 'number') return;
+    totalVisitas.value = d.total;
+    if (!yaContada) {
+      try { localStorage.setItem(CLAVE_VISITA, hoy); } catch { /* se contará de nuevo: tolerable */ }
+    }
+  } catch { /* sin red: no se muestra */ }
+}
+onMounted(cargarVisitas);
 
 // Vitrina de zonas para el público visitante, curada a mano (no viene del backend). Los
 // textos de cada zona, en los dos idiomas, están en i18n/feriaPublica.js bajo stands.lista[id].
@@ -420,13 +579,30 @@ const cuentaRegresiva = computed(() => {
         <h2 class="titulo-seccion titulo-noches">{{ t.noches.titulo }}</h2>
         <p class="subtitulo-seccion subtitulo-noches">{{ t.noches.subtitulo }}</p>
         <div class="grid-noches">
+          <!-- Con música (V38): suena mientras el cursor está encima; clic, toque o
+               Enter/Espacio la encienden o la apagan (ver sonarNoche en el script). -->
           <article
             class="noche-card"
-            :class="{ 'noche-card--media': n.urlMedio }"
+            :class="{
+              'noche-card--media': n.urlMedio,
+              'noche-card--musica': n.urlAudio,
+              'noche-card--sonando': nocheSonando === n.id,
+            }"
             :style="{ '--color-noche': n.color }"
             v-for="n in nochesFexpo"
             :key="n.id"
+            :tabindex="n.urlAudio ? 0 : undefined"
+            :role="n.urlAudio ? 'button' : undefined"
+            :aria-pressed="n.urlAudio ? nocheSonando === n.id : undefined"
+            @pointerenter="alEntrarNoche($event, n)"
+            @pointerleave="alSalirNoche($event, n)"
+            @click="alternarNoche(n)"
+            @keydown.enter.prevent="alternarNoche(n)"
+            @keydown.space.prevent="alternarNoche(n)"
           >
+            <p v-if="sonidoBloqueado === n.id" class="noche-aviso-sonido" role="status">
+              🔊 {{ t.noches.clicParaEscuchar }}
+            </p>
             <div v-if="n.urlMedio" class="noche-media" aria-hidden="true">
               <!-- Copia borrosa y ampliada de la misma foto: rellena lo que deja libre el
                    "contain" de abajo. Sin esto, una foto apaisada dentro de una tarjeta
@@ -581,6 +757,23 @@ const cuentaRegresiva = computed(() => {
             {{ enviandoExponer ? t.exponer.enviando : t.exponer.enviar }}
           </button>
         </form>
+      </div>
+
+      <!-- Contador de visitas (V38): esquina inferior derecha de la sección. Aparece al pasar
+           el cursor por ella; en pantallas táctiles, que no tienen cursor, se ve siempre.
+           Si no se pudo cargar, no se muestra. -->
+      <div v-if="visitasFormateadas" class="exponer-visitas">
+        <span class="visitas-icono" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </span>
+        <span class="visitas-texto">
+          <strong>{{ visitasFormateadas }}</strong>
+          <small>{{ t.exponer.visitas(totalVisitas) }}</small>
+        </span>
       </div>
     </section>
 
@@ -1283,9 +1476,44 @@ html.fx-scroll-suave {
 }
 
 
+/* Música de la noche (V38): la tarjeta suena mientras el cursor está encima. */
+.noche-card--musica { cursor: pointer; }
+.noche-card--musica:focus-visible { outline: 3px solid #ffffff; outline-offset: 3px; }
+
+/* Mientras suena, el borde toma el color de la noche: se ve cuál es la que se escucha. */
+.noche-card--sonando {
+  border-color: var(--color-noche);
+  box-shadow:
+    0 16px 32px rgba(0, 0, 0, 0.35),
+    0 0 0 2px var(--color-noche),
+    0 0 28px color-mix(in srgb, var(--color-noche) 55%, transparent);
+}
+
+/* "Haz clic para escuchar": el navegador frenó el sonido porque nadie hizo clic en la página
+   todavía. Centrado debajo del recuadro de la fecha, sin tapar el texto de abajo. La tarjeta
+   no lleva ningún ícono de música a propósito: solo aparece este aviso cuando hace falta. */
+.noche-aviso-sonido {
+  position: absolute;
+  top: 4.6rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  margin: 0;
+  padding: 0.35rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(6, 4, 18, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 /* Quiero exponer: sección roja a propósito, para que se note que es una acción distinta
    (registrar interés) de todo lo informativo que viene antes. */
-.exponer { position: relative; overflow: hidden; text-align: center; }
+/* padding-bottom mayor que el de .seccion: es el sitio del contador de visitas, en la esquina
+   inferior derecha (ver .exponer-visitas). */
+.exponer { position: relative; overflow: hidden; text-align: center; padding-bottom: 6rem; }
 
 .exponer-fondo {
   position: absolute;
@@ -1316,6 +1544,81 @@ html.fx-scroll-suave {
   display: flex;
   flex-direction: column;
   gap: 1.1rem;
+}
+
+/* Contador de visitas (V38), en la esquina inferior derecha de la sección roja.
+   - Vidrio translúcido en vez de una pastilla opaca: toma el rojo del fondo y no compite con
+     el formulario, que es lo principal de la sección.
+   - Número en Anton, como los títulos de la página; etiqueta en Work Sans, en mayúsculas.
+   - Aparece al pasar el cursor por la sección o al entrar en ella con el teclado. En pantallas
+     sin cursor (táctiles) queda siempre visible: ahí "pasar por encima" no existe.
+   Su sitio es el padding-bottom extra de .exponer: sin él, entre ~640 y ~1030 px de ancho el
+   contador se montaba sobre la esquina de la tarjeta del formulario. */
+.exponer-visitas {
+  position: absolute;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1.1rem 0.5rem 0.5rem;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06));
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  text-align: left;
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.exponer:hover .exponer-visitas,
+.exponer:focus-within .exponer-visitas {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (hover: none) {
+  .exponer-visitas { opacity: 1; transform: none; }
+}
+
+/* Recuadro blanco con el ojo en el rojo de la página: el único acento del contador. */
+.visitas-icono {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--fx-rojo);
+}
+.visitas-icono svg { width: 20px; height: 20px; }
+
+.visitas-texto { display: flex; flex-direction: column; gap: 0.15rem; line-height: 1; }
+.visitas-texto strong {
+  font-family: 'Anton', sans-serif;
+  font-weight: 400;
+  font-size: 1.4rem;
+  letter-spacing: 0.02em;
+}
+.visitas-texto small {
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* En el teléfono no queda esquina libre junto a la tarjeta: va debajo, centrado. */
+@media (max-width: 640px) {
+  .exponer { padding-bottom: 3.5rem; }
+  .exponer-visitas { position: static; width: fit-content; margin: 1.5rem auto 0; }
 }
 
 .campo-exponer { display: flex; flex-direction: column; gap: 0.4rem; }

@@ -44,6 +44,7 @@ export const TEXTOS = {
       titulo: 'Noches de FEXPO',
       subtitulo: 'Cada jornada de exposición cierra con música y cultura en vivo. Los artistas se van confirmando poco a poco.',
       porRevelar: 'Artista por revelar',
+      clicParaEscuchar: 'Haz clic para escuchar',
     },
     stands: {
       titulo: 'Ven y disfruta con la familia: los stands te están esperando',
@@ -119,6 +120,8 @@ export const TEXTOS = {
       errorMensaje: 'No pudimos enviar tu registro. Revisa tu conexión e intenta de nuevo en unos minutos.',
       // El servidor explica en español qué campo rechazó: aquí se muestra tal cual.
       errorDatos: null,
+      // Etiqueta bajo el número del contador de visitas (el número lo formatea la vista).
+      visitas: (total) => (total === 1 ? 'visita a esta página' : 'visitas a esta página'),
     },
     pie: {
       descripcion: 'La feria de ciencia y tecnología de la Universidad Amazónica de Pando.',
@@ -167,6 +170,7 @@ export const TEXTOS = {
       titulo: 'Noites da FEXPO',
       subtitulo: 'Cada dia de exposição termina com música e cultura ao vivo. Os artistas vão sendo confirmados aos poucos.',
       porRevelar: 'Artista a ser revelado',
+      clicParaEscuchar: 'Clique para ouvir',
     },
     stands: {
       titulo: 'Venha curtir com a família: os estandes estão esperando por você',
@@ -242,6 +246,7 @@ export const TEXTOS = {
       errorMensaje: 'Não conseguimos enviar seu cadastro. Verifique sua conexão e tente novamente em alguns minutos.',
       // El servidor responde en español: en portugués se muestra este aviso en su lugar.
       errorDatos: 'Alguns dados não são válidos. Revise o formulário e tente novamente.',
+      visitas: (total) => (total === 1 ? 'visita nesta página' : 'visitas nesta página'),
     },
     pie: {
       descripcion: 'A feira de ciência e tecnologia da Universidade Amazônica de Pando.',

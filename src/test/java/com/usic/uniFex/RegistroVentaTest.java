@@ -50,6 +50,10 @@ class RegistroVentaTest {
     private List<Puesto> libres;
     private Long categoriaId;
     private BigDecimal precioOriginal;
+    /** Precio propio de cada caseta de la prueba (NULL = sin precio propio), para devolverlo. */
+    private final java.util.Map<Long, BigDecimal> preciosPropios = new java.util.HashMap<>();
+    /** Precio de la opcion predeterminada de la categoria, si tiene, para devolverlo. */
+    private final java.util.Map<Long, BigDecimal> preciosOpcion = new java.util.HashMap<>();
 
     @BeforeEach
     void setUp() {
@@ -72,6 +76,22 @@ class RegistroVentaTest {
                 "SELECT precio_base FROM categoria WHERE id=?", BigDecimal.class, categoriaId);
         jdbc.update("UPDATE categoria SET precio_base=? WHERE id=?", PRECIO, categoriaId);
 
+        // El costo de una caseta sale, en orden, de su precio propio (V37), de la opcion
+        // predeterminada de su categoria (V33) y, sin opciones, de precio_base. Para que la
+        // prueba mida el precio DE LA CATEGORIA y no datos que no controla, quita el precio
+        // propio de sus dos casetas y pone PRECIO tambien en la opcion predeterminada.
+        for (Puesto p : libres) {
+            preciosPropios.put(p.getId(), jdbc.queryForObject(
+                    "SELECT precio FROM puesto WHERE id=?", BigDecimal.class, p.getId()));
+            jdbc.update("UPDATE puesto SET precio=NULL WHERE id=?", p.getId());
+        }
+        for (var fila : jdbc.queryForList("SELECT id, precio FROM categoria_opcion "
+                + "WHERE id_categoria=? AND predeterminada AND _estado <> 'X'", categoriaId)) {
+            Long idOpcion = ((Number) fila.get("id")).longValue();
+            preciosOpcion.put(idOpcion, (BigDecimal) fila.get("precio"));
+            jdbc.update("UPDATE categoria_opcion SET precio=? WHERE id=?", PRECIO, idOpcion);
+        }
+
         // Tambien al empezar: una prueba no debe depender de que la anterior limpiara bien.
         // Si una ejecucion se corta a la mitad, la siguiente arranca de cero igualmente.
         limpiarDatosDePrueba();
@@ -85,6 +105,11 @@ class RegistroVentaTest {
                     + "reserva_expira=NULL WHERE id=?", p.getId());
         }
         jdbc.update("UPDATE categoria SET precio_base=? WHERE id=?", precioOriginal, categoriaId);
+        // SqlParameterValue: el precio original puede ser NULL y hay que decirle el tipo.
+        preciosPropios.forEach((id, precio) -> jdbc.update("UPDATE puesto SET precio=? WHERE id=?",
+                new org.springframework.jdbc.core.SqlParameterValue(java.sql.Types.NUMERIC, precio), id));
+        preciosOpcion.forEach((id, precio) -> jdbc.update("UPDATE categoria_opcion SET precio=? WHERE id=?",
+                new org.springframework.jdbc.core.SqlParameterValue(java.sql.Types.NUMERIC, precio), id));
     }
 
     /** Borra lo que crea la prueba, respetando el orden de las claves foraneas. */
@@ -322,23 +347,27 @@ class RegistroVentaTest {
     }
 
     @Test
-    void rechazaMasDeDosResponsables() {
+    void rechazaMasResponsablesDeLosQueDanLasCasetas() {
         NuevaVenta base = venta(libres.stream().map(Puesto::getId).toList());
-        NuevaVenta conTres = new NuevaVenta(
+        // El derecho es POR CASETA (RESPONSABLES_POR_CASETA cada una), no un tope fijo de 2
+        // por venta: con dos casetas caben cuatro, asi que hay que pasarse de eso.
+        int derecho = RegistroVentaService.maxResponsables(base.puestos().size());
+        List<DatosPersona> deMas = java.util.stream.IntStream.rangeClosed(1, derecho + 1)
+                .mapToObj(i -> new DatosPersona("R" + i, "A", "A", String.valueOf(i), null, null))
+                .toList();
+        NuevaVenta conDeMas = new NuevaVenta(
                 base.entidadNombre(), base.nit(), base.descripcion(), base.objeto(),
                 base.representanteLegal(), base.ciRepresentante(), base.celularRepresentante(),
                 base.tipoEntidadId(),
                 base.fechaInicio(), base.fechaFin(),
-                List.of(new DatosPersona("A", "A", "A", "1", null, null),
-                        new DatosPersona("B", "B", "B", "2", null, null),
-                        new DatosPersona("C", "C", "C", "3", null, null)),
+                deMas,
                 base.entidadBancaria(), base.numComprobante(), base.pagoContado(),
                 base.puestos());
 
-        RegistroVentaService.Resultado r = registro.registrar(conTres, 1L);
+        RegistroVentaService.Resultado r = registro.registrar(conDeMas, 1L);
 
         assertThat(r.ok()).isFalse();
-        assertThat(r.mensaje()).contains("2 responsables");
+        assertThat(r.mensaje()).contains("derecho a " + derecho + " responsables");
         // Una validacion que falla no debe haber tocado las casetas.
         for (Long id : base.puestos()) {
             assertThat(puestoDao.findById(id).orElseThrow().getEstadoPuesto())

@@ -139,6 +139,49 @@ public class NochesFexpoService {
         return Resultado.exito("Medio quitado.", nocheDao.save(n));
     }
 
+    /**
+     * Reemplaza la musica de una noche (V38): el MP3 que suena en la vista publica mientras el
+     * cursor esta sobre su tarjeta. Solo MP3 a proposito: el bucket "noches" tambien acepta
+     * fotos y videos (FileStorageService no distingue por bucket), y sin esta comprobacion se
+     * podria "subir musica" con una imagen que despues no suena en ningun navegador.
+     */
+    @Transactional
+    public Resultado subirAudio(Long id, MultipartFile archivo, Long actorId) {
+        NocheFexpo n = buscarViva(id);
+        if (n == null) return Resultado.error("Noche no encontrada.");
+        if (archivo == null || archivo.isEmpty()) return Resultado.error("No llego ningun archivo.");
+        String nombre = archivo.getOriginalFilename();
+        if (nombre == null || !nombre.toLowerCase(Locale.ROOT).endsWith(".mp3")) {
+            return Resultado.error("La musica debe ser un archivo MP3.");
+        }
+
+        String ruta;
+        try {
+            ruta = almacen.save(archivo, FileStorageService.Bucket.NOCHES,
+                    (n.getTitulo() != null ? n.getTitulo() : "noche-" + n.getId()) + "-musica");
+        } catch (IOException e) {
+            log.warn("No se pudo guardar la musica de la noche {}", id, e);
+            return Resultado.error("No se pudo guardar el archivo: " + e.getMessage());
+        }
+
+        // Como con el medio: el MP3 anterior se queda en disco, por si hay que volver a el.
+        n.setAudioArchivo(ruta);
+        n.setModificacion(new Date());
+        n.setModificacionIdUsuario(actorId);
+        return Resultado.exito("Musica actualizada.", nocheDao.save(n));
+    }
+
+    /** Quita la musica: la tarjeta publica deja de sonar. El archivo queda en disco. */
+    @Transactional
+    public Resultado quitarAudio(Long id, Long actorId) {
+        NocheFexpo n = buscarViva(id);
+        if (n == null) return Resultado.error("Noche no encontrada.");
+        n.setAudioArchivo(null);
+        n.setModificacion(new Date());
+        n.setModificacionIdUsuario(actorId);
+        return Resultado.exito("Musica quitada.", nocheDao.save(n));
+    }
+
     private NocheFexpo buscarViva(Long id) {
         NocheFexpo n = nocheDao.findById(id).orElse(null);
         if (n == null || NocheFexpo.REGISTRO_ANULADO.equalsIgnoreCase(n.getEstado())) return null;

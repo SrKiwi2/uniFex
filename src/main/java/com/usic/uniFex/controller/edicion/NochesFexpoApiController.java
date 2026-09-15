@@ -88,6 +88,18 @@ public class NochesFexpoApiController {
         return responder(servicio.quitarMedio(id, actorId()));
     }
 
+    /** MP3 que suena al pasar el cursor por la tarjeta publica de la noche (V38). */
+    @PostMapping(value = "/{id}/audio", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, Object>> subirAudio(
+            @PathVariable Long id, @RequestPart("archivo") MultipartFile archivo) {
+        return responder(servicio.subirAudio(id, archivo, actorId()));
+    }
+
+    @DeleteMapping("/{id}/audio")
+    public ResponseEntity<Map<String, Object>> quitarAudio(@PathVariable Long id) {
+        return responder(servicio.quitarAudio(id, actorId()));
+    }
+
     private ResponseEntity<Map<String, Object>> responder(Resultado r) {
         // Toda escritura exitosa se difunde por WebSocket a la vista publica y a los demas
         // paneles. Aqui ya estamos fuera de la transaccion del servicio: lo que viaja es lo que
