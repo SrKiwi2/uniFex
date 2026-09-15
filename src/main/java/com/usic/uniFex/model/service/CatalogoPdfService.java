@@ -7,6 +7,7 @@ import java.math.RoundingMode;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ import com.itextpdf.text.pdf.PdfPCell;
 import com.itextpdf.text.pdf.PdfPTable;
 import com.itextpdf.text.pdf.PdfWriter;
 import com.usic.uniFex.model.entity.Categoria;
+import com.usic.uniFex.model.entity.CategoriaOpcion;
 
 /** Reporte PDF del catalogo de precios de casetas. */
 @Service
@@ -37,12 +39,18 @@ public class CatalogoPdfService {
     private static final BaseColor FONDO = new BaseColor(249, 250, 251);
 
     public void generar(List<Categoria> categorias, OutputStream salida) throws Exception {
+        generar(categorias, Map.of(), salida);
+    }
+
+    public void generar(List<Categoria> categorias, Map<Long, List<CategoriaOpcion>> opciones,
+                        OutputStream salida) throws Exception {
         Document doc = new Document(PageSize.LETTER, 36, 36, 34, 34);
         PdfWriter.getInstance(doc, salida);
         doc.open();
 
         agregarCabecera(doc, categorias == null ? 0 : categorias.size());
-        agregarTabla(doc, categorias == null ? List.of() : categorias);
+        agregarTabla(doc, categorias == null ? List.of() : categorias,
+                opciones == null ? Map.of() : opciones);
         agregarPie(doc);
 
         doc.close();
@@ -85,27 +93,45 @@ public class CatalogoPdfService {
         doc.add(cab);
     }
 
-    private void agregarTabla(Document doc, List<Categoria> categorias) throws Exception {
-        PdfPTable tabla = new PdfPTable(new float[] { 7, 34, 12, 29, 18 });
+    private void agregarTabla(Document doc, List<Categoria> categorias,
+                              Map<Long, List<CategoriaOpcion>> opciones) throws Exception {
+        PdfPTable tabla = new PdfPTable(new float[] { 6, 25, 12, 29, 18, 10 });
         tabla.setWidthPercentage(100);
         tabla.setHeaderRows(1);
         encabezado(tabla, "#");
         encabezado(tabla, "Categoria");
         encabezado(tabla, "Color");
-        encabezado(tabla, "Descripcion");
-        encabezado(tabla, "Precio base");
+        encabezado(tabla, "Subcategorias / opciones");
+        encabezado(tabla, "Precios");
+        encabezado(tabla, "Base");
 
         int i = 1;
         for (Categoria c : categorias) {
             boolean par = i % 2 == 0;
+            List<CategoriaOpcion> ops = opciones.getOrDefault(c.getId(), List.of());
             celda(tabla, String.valueOf(i), par, Element.ALIGN_CENTER, fuente(8, Font.NORMAL, TINTA));
             celda(tabla, nvl(c.getNombre()), par, Element.ALIGN_LEFT, fuente(8, Font.BOLD, TINTA));
             celdaColor(tabla, c.getColor(), par);
-            celda(tabla, nvl(c.getDescripcion()), par, Element.ALIGN_LEFT, fuente(7.5f, Font.NORMAL, MUTED));
-            celda(tabla, "Bs " + money(c.getPrecioBase()), par, Element.ALIGN_RIGHT, fuente(8.5f, Font.BOLD, VERDE));
+            celda(tabla, nombresOpciones(ops, c), par, Element.ALIGN_LEFT, fuente(7.5f, Font.NORMAL, MUTED));
+            celda(tabla, preciosOpciones(ops, c), par, Element.ALIGN_RIGHT, fuente(8, Font.BOLD, VERDE));
+            celda(tabla, "Bs " + money(c.getPrecioBase()), par, Element.ALIGN_RIGHT, fuente(8, Font.BOLD, TINTA));
             i++;
         }
         doc.add(tabla);
+    }
+
+    private String nombresOpciones(List<CategoriaOpcion> opciones, Categoria c) {
+        if (opciones == null || opciones.isEmpty()) return nvl(c.getDescripcion());
+        return opciones.stream()
+                .map(o -> nvl(o.getNombre()) + (Boolean.TRUE.equals(o.getPredeterminada()) ? " (base)" : ""))
+                .reduce((a, b) -> a + "\n" + b).orElse("-");
+    }
+
+    private String preciosOpciones(List<CategoriaOpcion> opciones, Categoria c) {
+        if (opciones == null || opciones.isEmpty()) return "Bs " + money(c.getPrecioBase());
+        return opciones.stream()
+                .map(o -> "Bs " + money(o.getPrecio()))
+                .reduce((a, b) -> a + "\n" + b).orElse("-");
     }
 
     private void agregarPie(Document doc) throws Exception {
