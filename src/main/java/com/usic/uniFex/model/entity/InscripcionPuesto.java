@@ -31,4 +31,15 @@ public class InscripcionPuesto extends AuditoriaConfig{
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_inscripcion")
     private Inscripcion inscripcion;
+
+    /**
+     * Con que opcion de precio se vendio esta caseta (V33).
+     *
+     * `costo` ya guarda CUANTO se cobro; esto guarda POR QUE. Sin ello, un recibo de hace un mes
+     * con 1.200 Bs en una categoria que hoy vale 800 no se puede explicar. Es nulo en las ventas
+     * anteriores a las opciones, y eso es correcto: entonces no habia nada que elegir.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_categoria_opcion")
+    private CategoriaOpcion opcion;
 }

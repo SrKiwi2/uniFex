@@ -34,7 +34,11 @@ const TODOS = [
   { p: 'reportes', a: '/reportes', icono: '📊', titulo: 'Reportes',
     desc: 'Recaudación y ventas por categoría, entidad y vendedor.', color: '#0891b2' },
   { p: 'editor', a: '/editor', icono: '✏️', titulo: 'Editor del plano',
-    desc: 'Categorías, casetas, colores y distribución.', color: '#7c3aed' },
+    desc: 'Casetas, colores y distribución sobre el plano.', color: '#7c3aed' },
+  { p: 'categorias', a: '/categorias', icono: '🏷️', titulo: 'Categorías',
+    desc: 'Nombre, color, tamaño y las opciones de precio de cada categoría.', color: '#c026d3' },
+  { p: 'seguimiento', a: '/seguimiento', icono: '📡', titulo: 'Seguimiento en vivo',
+    desc: 'Quién está conectado ahora mismo y qué está haciendo.', color: '#0284c7' },
   { p: 'usuarios', a: '/usuarios', icono: '👥', titulo: 'Usuarios',
     desc: 'Crear y gestionar los usuarios del sistema.', color: '#db2777' },
 ];

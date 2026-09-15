@@ -34,9 +34,18 @@ public class GestionPersonaService {
 
     private final IPersonaService personaService;
     private final IUsuarioDao usuarioDao;
+    private final CatalogoAcademicoService catalogoAcademico;
 
+    /**
+     * Los datos editables de una persona.
+     *
+     * {@code carreraId} es opcional y puede llegar ausente: en esta tabla conviven las personas
+     * del sistema con los responsables de entidad, que no tienen carrera. Al editar, un
+     * {@code null} SI vacia la carrera — este record viaja entero desde el formulario, no como
+     * un PATCH campo a campo.
+     */
     public record Datos(String nombre, String paterno, String materno, String ci,
-                        String correo, String celular) {
+                        String correo, String celular, Long carreraId) {
     }
 
     public record Resultado(boolean ok, String mensaje, Persona persona) {
@@ -178,6 +187,9 @@ public class GestionPersonaService {
         p.setCi(trim(d.ci()));
         p.setCorreo(trim(d.correo()));
         p.setCelular(trim(d.celular()));
+        // Un id que no existe deja la carrera vacia en vez de tumbar el alta: el dato es
+        // opcional, y un desplegable desincronizado no justifica perder el resto del formulario.
+        p.setCarrera(catalogoAcademico.buscarViva(d.carreraId()));
     }
 
     /** El C.I. no debe repetirse en ninguna persona no eliminada (evita duplicar a la misma persona). */

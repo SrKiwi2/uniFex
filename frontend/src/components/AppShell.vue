@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { usePermisosStore } from '../stores/permisos';
@@ -7,6 +7,7 @@ import { usePuestosStore } from '../stores/puestos';
 import { toast } from '../ui/toast';
 import { alerta } from '../ui/alerta';
 import { tema, alternarTema } from '../ui/tema';
+import { iniciarPresencia, marcarPantalla, detenerPresencia } from '../ui/presencia';
 
 const auth = useAuthStore();
 const permisos = usePermisosStore();
@@ -45,6 +46,8 @@ const TODOS = [
   { a: '/reportes', p: 'reportes', icono: '📊', txt: 'Reportes' },
   { a: '/noches-fexpo', p: 'noches-fexpo', icono: '🎤', txt: 'Noches de FEXPO' },
   { a: '/editor', p: 'editor', icono: '✏️', txt: 'Editor del plano' },
+  { a: '/categorias', p: 'categorias', icono: '🏷️', txt: 'Categorías' },
+  { a: '/seguimiento', p: 'seguimiento', icono: '📡', txt: 'Seguimiento en vivo' },
   { a: '/personas', p: 'personas', icono: '🪪', txt: 'Personas' },
   { a: '/personal-apoyo', p: 'personal-apoyo', icono: '👥', txt: 'Personal de apoyo' },
   { a: '/usuarios', p: 'usuarios', icono: '👤', txt: 'Usuarios' },
@@ -121,7 +124,15 @@ onMounted(() => {
   window.addEventListener('unifex:mantenimiento', alMantenimientoHttp);
   document.addEventListener('visibilitychange', alVolverAlFrente);
   window.addEventListener('online', alVolverAlFrente);
+  // El latido que alimenta "Seguimiento en vivo". Va aqui y no en cada vista: se late mientras
+  // haya sesion abierta, sea cual sea la pantalla.
+  iniciarPresencia();
+  marcarPantalla(route.meta?.pantalla, route.meta?.titulo);
 });
+
+// Cambiar de pantalla es el dato mas util del seguimiento, asi que se informa en el acto en vez
+// de esperar al siguiente latido.
+watch(() => route.fullPath, () => marcarPantalla(route.meta?.pantalla, route.meta?.titulo));
 onUnmounted(() => {
   if (quitarOyente) quitarOyente();
   window.removeEventListener('unifex:mantenimiento', alMantenimientoHttp);
@@ -130,6 +141,9 @@ onUnmounted(() => {
 });
 
 function salir() {
+  // Avisar de la salida ANTES de tirar el token: despues, la peticion iria sin credencial y el
+  // usuario se quedaria en la lista de conectados hasta que venciera su silencio.
+  detenerPresencia();
   // Los permisos se olvidan con la sesion: en un equipo compartido, el siguiente en entrar no
   // puede heredar el menu del anterior aunque sea de otro rol.
   permisos.limpiar();

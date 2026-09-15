@@ -96,6 +96,34 @@ if (verif) {
   paso('y el rol queda como estaba', vuelta.pantallas.length === antes.length);
 }
 
+/*
+ * Toda pantalla del catalogo la tiene ALGUN rol que no sea el super usuario.
+ *
+ * Una pantalla nueva existe en el codigo, funciona, y es INVISIBLE hasta que alguien inserta
+ * su fila en `rol_pantalla`: el menu se arma contra esa tabla y solo SUPER USUARIO la esquiva.
+ * No hay error de por medio —el menu simplemente no la lista— asi que se descubre cuando
+ * alguien pregunta "¿y donde esta el modulo?". Paso exactamente eso con `categorias` y
+ * `seguimiento`, y por eso existe esta comprobacion: si añades una pantalla y te olvidas de
+ * la migracion que la concede, esto falla y te dice cual.
+ */
+{
+  const catalogo = ((await api(T, '/api/app/permisos/catalogo')).cuerpo || [])
+    .map((p) => p.clave || p.pantalla).filter(Boolean);
+  const matriz = (await api(T, '/api/app/permisos')).cuerpo || [];
+  const concedidas = new Set(
+    matriz.filter((r) => !r.loVeTodo).flatMap((r) => r.pantallas || []));
+  /*
+   * Reservadas al super usuario A PROPOSITO. `mantenimiento` pone el sistema entero fuera de
+   * servicio: que solo la vea quien lo administra todo no es un descuido, es la intencion.
+   * Cualquier otra pantalla sin conceder SI lo es.
+   */
+  const soloSuperUsuario = new Set(['mantenimiento']);
+  const huerfanas = catalogo.filter((c) => !concedidas.has(c) && !soloSuperUsuario.has(c));
+  paso('ninguna pantalla del catalogo se queda sin ningun rol que la vea',
+       huerfanas.length === 0,
+       huerfanas.length ? `sin conceder: ${huerfanas.join(', ')}` : `${catalogo.length} pantallas`);
+}
+
 paso('sin sesion no se consultan los permisos', (await api(null, '/api/app/permisos')).estado === 401);
 
 console.log(fallos.length ? `\n${fallos.length} paso(s) fallaron:` : '\nTodo paso.');

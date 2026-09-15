@@ -404,10 +404,30 @@ titulo('Contrato del formulario de venta');
   const RAIZ = resolve(AQUI, '../../../..') + '/';
   const java = readFileSync(RAIZ + 'src/main/java/com/usic/uniFex/model/service/RegistroVentaService.java', 'utf8');
 
+  /*
+   * Los componentes del record. Dos cuidados que no son opcionales:
+   *
+   *   - Se cuentan los PARENTESIS hasta cerrar la lista, en vez de buscar el primer ')': el
+   *     record puede llevar constructores y metodos dentro, y el primer parentesis de esos
+   *     cortaba la lista por la mitad.
+   *   - Se quitan los ARGUMENTOS GENERICOS antes de partir por comas. `Map<Long, Long> x`
+   *     lleva una coma dentro del tipo, y sin esto salian dos componentes inventados
+   *     ("Map<Long" y "Long> x") que jamas coincidirian con nada del formulario.
+   */
   const componentes = (nombre) => {
     const i = java.indexOf(`public record ${nombre}(`);
-    const desde = i + `public record ${nombre}(`.length;
-    const cuerpo = java.slice(desde, java.indexOf(')', java.indexOf('{', i) - 200));
+    if (i < 0) return [];
+    let k = i + `public record ${nombre}(`.length;
+    let nivel = 1;
+    const desde = k;
+    while (k < java.length && nivel > 0) {
+      if (java[k] === '(') nivel++;
+      else if (java[k] === ')') nivel--;
+      if (nivel > 0) k++;
+    }
+    const cuerpo = java.slice(desde, k)
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')   // comentarios de bloque entre componentes
+      .replace(/<[^<>]*>/g, '');            // Map<Long, Long> -> Map
     return cuerpo.split(',').map((t) => t.trim().split(/\s+/).pop()).filter(Boolean);
   };
   const nuevaVenta = componentes('NuevaVenta');
@@ -436,8 +456,15 @@ titulo('Contrato del formulario de venta');
        camposResp.filter((k) => !datosPersona.includes(k)).join(', '));
 
   const plantilla = vue.slice(vue.indexOf('<template>'));
-  paso('los rotulos son "Responsable 1" y "Responsable 2"',
-       plantilla.includes('Responsable {{ i + 1 }}') && plantilla.includes('Agregar Responsable 2'));
+  // Los responsables se numeran, y ya NO son dos fijos: cada caseta da derecho a dos, asi
+  // que el boton no puede nombrar al "Responsable 2" ni el limite puede ser una constante.
+  paso('los responsables van numerados',
+       plantilla.includes('Responsable {{ i + 1 }}'));
+  paso('el limite sale de las casetas, no es un 2 fijo',
+       /maxResponsables\s*=\s*computed\(\(\) => Math\.max\(1, carrito\.value\.length\) \* 2\)/.test(vue),
+       'dos por caseta');
+  paso('y la pantalla dice cuantos dan las casetas',
+       plantilla.includes('dan derecho a'));
   paso('ya no aparecen "Titular" ni "Acompanante"', !/Titular|Acompañante/.test(plantilla));
   paso('ya no se pide el correo del responsable', !/>\s*Correo\s*</.test(plantilla));
   paso('el responsable legal pide nombre, C.I. y celular',

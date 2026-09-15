@@ -84,8 +84,18 @@ public interface IUsuarioDao extends JpaRepository<Usuario, Long> {
               + "where (u.estado is null or u.estado <> 'ELIMINADO') group by u.rol.id")
       List<Object[]> contarUsuariosPorRol();
 
-      /** Usuarios vivos con un rol dado (por nombre del rol). */
-      @Query("select u from Usuario u join u.rol r where r.nombre = :rolNombre and (u.estado is null or u.estado <> 'ELIMINADO')")
+      /**
+       * Usuarios vivos con un rol dado (por nombre del rol), con persona, carrera y area ya
+       * cargadas: el listado de vendedores las pinta todas en la misma tabla.
+       *
+       * Los fetch de carrera y area son LEFT a proposito. Con INNER, el listado de vendedores
+       * se quedaria solo con los que ya tienen carrera asignada — que al aplicar V35 no es
+       * ninguno — y la pantalla saldria vacia sin explicar por que.
+       */
+      @Query("select u from Usuario u join fetch u.rol r left join fetch u.persona p "
+              + "left join fetch p.carrera c left join fetch c.area "
+              + "where r.nombre = :rolNombre and (u.estado is null or u.estado <> 'ELIMINADO') "
+              + "order by u.username")
       List<Usuario> findByRolNombre(@Param("rolNombre") String rolNombre);
 
       /** Usuarios conectables que deben ser expulsados cuando se activa mantenimiento. */

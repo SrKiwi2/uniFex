@@ -153,10 +153,30 @@ r = await api(T,'/api/app/puestos');
 ok(typeof r.cuerpo?.[0]?.categoria === 'string', 'puesto.categoria es TEXTO, no objeto',
    JSON.stringify(r.cuerpo?.[0]?.categoria));
 
+// El listado devuelve VendedorDTO, no la entidad Usuario: la entidad sacaba el hash de la
+// contrasena por la red en cada listado, y no traia ni la carrera ni el recuento por categoria,
+// que es lo que la tabla tiene que pintar.
 r = await api(T,'/api/app/vendedores');
 const fila = r.cuerpo?.[0];
-ok(!!fila?.persona?.nombre && !!fila?.rol?.nombre,
-   'cada vendedor trae persona y rol (los pinta la tabla)', `${fila?.persona?.nombre} / ${fila?.rol?.nombre}`);
+ok(!!fila?.persona && !!fila?.rol && typeof fila?.username === 'string',
+   'cada vendedor trae usuario, persona y rol (los pinta la tabla)', `${fila?.persona} / ${fila?.rol}`);
+ok(fila && !('password' in fila),
+   'el listado NO lleva la contrasena', Object.keys(fila || {}).join(','));
+ok(Array.isArray(fila?.categorias) && typeof fila?.totalPuestos === 'number',
+   'cada vendedor trae su desglose por categoria y el total',
+   `${fila?.totalPuestos} en ${fila?.categorias?.length} categoria(s)`);
+ok('carreraId' in (fila || {}) && 'areaSigla' in (fila || {}),
+   'cada vendedor trae carrera y area (el filtro por area los lee)',
+   `${fila?.areaSigla || 'sin area'} / ${fila?.carrera || 'sin carrera'}`);
+
+// El catalogo academico de V35: tres areas sembradas por la migracion, con sus carreras dentro.
+r = await api(T,'/api/app/areas');
+const siglas = (r.cuerpo || []).map((a) => a.sigla).sort().join(',');
+ok(r.estado === 200 && siglas === 'ACBN,ACEF,ACYT', 'GET /areas trae las tres areas de la UAP', siglas);
+const totalCarreras = (r.cuerpo || []).reduce((n, a) => n + (a.carreras?.length || 0), 0);
+ok(totalCarreras === 15, 'las 15 carreras cuelgan de su area', String(totalCarreras));
+ok((r.cuerpo || []).every((a) => (a.carreras || []).every((c) => c.areaSigla === a.sigla)),
+   'cada carrera lleva la sigla de su propia area');
 
 
 const lleva = (p, uid) => (p.habilitados || []).some((h) => h.id === uid);

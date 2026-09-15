@@ -3,6 +3,7 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import UiModal from '../components/UiModal.vue';
 import { apiFetch } from '../api';
 import { toast } from '../ui/toast';
+import { useAcademicoStore } from '../stores/academico';
 
 const PASSWORD_MIN = 8; // igual que GestionUsuarioService.PASSWORD_MIN
 
@@ -20,13 +21,15 @@ const ocupado = ref(false);
 const modal = reactive({
   abierto: false, editando: null, username: '', password: '', verPassword: false,
   rolId: null, modoPersona: 'buscar', personaId: null, personaTexto: '',
-  nueva: { nombre: '', paterno: '', materno: '', ci: '', correo: '', celular: '' },
+  nueva: { nombre: '', paterno: '', materno: '', ci: '', correo: '', celular: '', carreraId: '' },
   ciExistente: null,
 });
 const personasSugeridas = ref([]);
 const buscandoPersonas = ref(false);
 
 const modalPass = reactive({ abierto: false, id: null, username: '', nueva: '', confirmar: '', ver: false });
+
+const academico = useAcademicoStore();
 
 const usuariosFiltrados = computed(() => {
   const q = filtro.value.trim().toLowerCase();
@@ -138,7 +141,7 @@ function abrirCrear() {
     abierto: true, editando: null, username: '', password: '', verPassword: false,
     rolId: roles.value.find((r) => r.nombre === 'ADMINISTRATIVO')?.id ?? roles.value[0]?.id ?? null,
     modoPersona: 'buscar', personaId: null, personaTexto: '',
-    nueva: { nombre: '', paterno: '', materno: '', ci: '', correo: '', celular: '' },
+    nueva: { nombre: '', paterno: '', materno: '', ci: '', correo: '', celular: '', carreraId: '' },
     ciExistente: null,
   });
   personasSugeridas.value = [];
@@ -147,7 +150,7 @@ function abrirEditar(u) {
   Object.assign(modal, {
     abierto: true, editando: u.id, username: u.username, password: '', verPassword: false,
     rolId: u.rolId, modoPersona: 'buscar', personaId: u.personaId, personaTexto: u.persona || '',
-    nueva: { nombre: '', paterno: '', materno: '', ci: '', correo: '', celular: '' },
+    nueva: { nombre: '', paterno: '', materno: '', ci: '', correo: '', celular: '', carreraId: '' },
     ciExistente: null,
   });
   personasSugeridas.value = [];
@@ -185,7 +188,8 @@ async function guardar() {
           password: modal.password,
           rolId: modal.rolId,
           personaId: creaPersona ? null : modal.personaId,
-          persona: creaPersona ? { ...modal.nueva } : null,
+          // '' es "sin carrera": el <select> devuelve texto y el backend espera un id o null.
+          persona: creaPersona ? { ...modal.nueva, carreraId: modal.nueva.carreraId || null } : null,
         };
     const r = await apiFetch(url, { method: metodo, body: JSON.stringify(body) });
     const d = await r.json();
@@ -256,7 +260,11 @@ async function eliminar(u) {
   }
 }
 
-onMounted(cargar);
+onMounted(() => {
+  cargar();
+  // El catalogo no bloquea la tabla: si falla, lo unico que queda vacio es el desplegable.
+  academico.asegurar().catch((e) => toast(e.message, 'error'));
+});
 </script>
 
 <template>
@@ -369,6 +377,16 @@ onMounted(cargar);
           <label class="campo"><span>Apellido materno</span><input v-model="modal.nueva.materno" class="control" /></label>
           <label class="campo"><span>Correo</span><input v-model="modal.nueva.correo" type="email" class="control" /></label>
           <label class="campo"><span>Celular</span><input v-model="modal.nueva.celular" class="control" /></label>
+          <!-- Agrupado por area: de ella sale el area con la que se filtra el modulo de Vendedores. -->
+          <label class="campo campo-ancho">
+            <span>Carrera</span>
+            <select v-model="modal.nueva.carreraId" class="control">
+              <option value="">— Sin carrera —</option>
+              <optgroup v-for="a in academico.areas" :key="a.id" :label="academico.etiquetaArea(a)">
+                <option v-for="c in a.carreras" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+              </optgroup>
+            </select>
+          </label>
         </div>
         <p v-if="modal.ciExistente" class="aviso-ci">
           Ese C.I. ya es de <strong>{{ modal.ciExistente.nombre }}</strong>.
@@ -420,6 +438,8 @@ onMounted(cargar);
 .card { overflow: visible; }
 
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+/* La carrera ocupa la fila entera: los nombres son largos y a media columna se cortan. */
+.campo-ancho { grid-column: 1 / -1; }
 @media (max-width: 520px) { .grid2 { grid-template-columns: 1fr; } }
 
 .aviso { margin: -0.4rem 0 0; font-size: 0.8rem; }

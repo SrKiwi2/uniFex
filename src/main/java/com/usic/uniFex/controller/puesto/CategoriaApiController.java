@@ -20,7 +20,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.usic.uniFex.model.dao.IPuestoDao;
 import com.usic.uniFex.model.entity.Categoria;
+import com.usic.uniFex.model.entity.CategoriaOpcion;
 import com.usic.uniFex.model.service.CategoriaMapaService;
+import com.usic.uniFex.model.service.CategoriaOpcionService;
 import com.usic.uniFex.model.service.CategoriaMapaService.ResultadoAjuste;
 import com.usic.uniFex.model.service.PuestoEventPublisher;
 import com.usic.uniFex.security.JwtUser;
@@ -42,6 +44,7 @@ import lombok.RequiredArgsConstructor;
 public class CategoriaApiController {
 
     private final CategoriaMapaService service;
+    private final CategoriaOpcionService opciones;
     private final PuestoEventPublisher publisher;
     private final IPuestoDao puestoDao;
 
@@ -57,8 +60,15 @@ public class CategoriaApiController {
      * solo muestra las que YA tienen casetas: para asignar una categoria recien creada hace falta
      * la lista de verdad.
      */
+    /*
+     * Lo LEE cualquier usuario autenticado, no solo administracion: el formulario de venta
+     * necesita las opciones de precio para poder elegir una, y quien vende es precisamente
+     * quien no edita el plano. Escribir sigue reservado (el @PreAuthorize de la clase).
+     */
     @GetMapping
+    @PreAuthorize("isAuthenticated()")
     public List<Map<String, Object>> listar() {
+        Map<Long, List<CategoriaOpcion>> porCategoria = opciones.porCategoria();
         return service.listar().stream()
                 .map(c -> {
                     Map<String, Object> m = new LinkedHashMap<>();
@@ -66,16 +76,77 @@ public class CategoriaApiController {
                     m.put("nombre", c.getNombre());
                     m.put("color", c.getColor());
                     m.put("forma", c.getForma());
+                    m.put("tamanoMapa", c.getTamanoMapa());
                     m.put("precioBase", c.getPrecioBase());
+                    m.put("opciones", porCategoria.getOrDefault(c.getId(), List.of()).stream()
+                            .map(CategoriaApiController::opcionComoMapa).toList());
                     return m;
                 })
                 .toList();
+    }
+
+    private static Map<String, Object> opcionComoMapa(CategoriaOpcion o) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", o.getId());
+        m.put("nombre", o.getNombre());
+        m.put("precio", o.getPrecio());
+        m.put("predeterminada", Boolean.TRUE.equals(o.getPredeterminada()));
+        m.put("orden", o.getOrden());
+        return m;
+    }
+
+    // ===== Opciones de precio =====
+
+    /**
+     * Agrega una opcion de precio a la categoria.
+     *
+     * Si pasa a ser la predeterminada hay que REDIFUNDIR las casetas: el mapa pinta el precio de
+     * cada caseta en su ficha, y ese precio sale de la predeterminada. Sin la difusion, los demas
+     * mapas seguirian cantando el precio viejo hasta recargar — con un cliente delante.
+     */
+    @PostMapping("/{id}/opciones")
+    public ResponseEntity<Map<String, Object>> crearOpcion(
+            @PathVariable Long id, @RequestBody CategoriaOpcionService.CambioOpcion req) {
+        try {
+            CategoriaOpcion o = opciones.crear(id, req, usuarioActual());
+            if (Boolean.TRUE.equals(o.getPredeterminada())) publisher.publicarVarios(puestoDao.idsActivosDeCategoria(id));
+            return ResponseEntity.ok(Map.<String, Object>of("ok", true, "opcion", opcionComoMapa(o)));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.<String, Object>of("ok", false, "mensaje", e.getMessage()));
+        }
+    }
+
+    /** Cambia nombre, precio, orden o cual es la predeterminada. Campos nulos: no se tocan. */
+    @PatchMapping("/{id}/opciones/{opcionId}")
+    public ResponseEntity<Map<String, Object>> actualizarOpcion(
+            @PathVariable Long id, @PathVariable Long opcionId,
+            @RequestBody CategoriaOpcionService.CambioOpcion req) {
+        CategoriaOpcion o = opciones.actualizar(opcionId, req, usuarioActual());
+        if (o == null) return ResponseEntity.status(404).body(Map.<String, Object>of("ok", false));
+        if (Boolean.TRUE.equals(o.getPredeterminada())) publisher.publicarVarios(puestoDao.idsActivosDeCategoria(id));
+        return ResponseEntity.ok(Map.<String, Object>of("ok", true, "opcion", opcionComoMapa(o)));
+    }
+
+    /** Baja logica. Una opcion ya usada en ventas nunca se borra: el recibo tiene que seguir leyendose. */
+    @DeleteMapping("/{id}/opciones/{opcionId}")
+    public ResponseEntity<Map<String, Object>> eliminarOpcion(
+            @PathVariable Long id, @PathVariable Long opcionId) {
+        String motivo = opciones.eliminar(opcionId, usuarioActual());
+        if (motivo == null) return ResponseEntity.status(404).body(Map.<String, Object>of("ok", false));
+        if (!motivo.isEmpty()) {
+            return ResponseEntity.status(409).body(Map.<String, Object>of("ok", false, "mensaje", motivo));
+        }
+        return ResponseEntity.ok(Map.<String, Object>of("ok", true));
     }
 
     /** Crea la categoria y sus N casetas, y las difunde para que aparezcan en los mapas abiertos. */
     @PostMapping
     public ResponseEntity<Map<String, Object>> crear(@RequestBody CategoriaMapaService.NuevaCategoria req) {
         Categoria c = service.crear(req, usuarioActual());
+        // Toda categoria nace con su opcion predeterminada, con su mismo nombre y su precio.
+        // Sin ella el formulario de venta no tendria nada que elegir y el precio caeria al
+        // calculo de respaldo, que para una categoria nueva da CERO: se venderia gratis.
+        opciones.asegurarPredeterminada(c.getId(), c.getNombre(), c.getPrecioBase(), usuarioActual());
         publisher.publicarVarios(puestoDao.idsActivosDeCategoria(c.getId()));
         return ResponseEntity.ok(Map.<String, Object>of("ok", true, "id", c.getId(), "nombre", c.getNombre()));
     }

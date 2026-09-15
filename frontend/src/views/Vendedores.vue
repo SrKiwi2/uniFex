@@ -4,10 +4,45 @@ import { apiFetch } from '../api';
 import { useAuthStore } from '../stores/auth';
 import { toast } from '../ui/toast';
 import UiModal from '../components/UiModal.vue';
+import { useAcademicoStore } from '../stores/academico';
 
 const auth = useAuthStore();
+const academico = useAcademicoStore();
 const vendedores = ref([]);
 const cargando = ref(false);
+
+// Filtros de la tabla. El área es el que se pidió ("¿quiénes son los de ACYT?"); el texto
+// acompaña porque una vez recortado a un área siguen siendo doce nombres.
+const filtroArea = ref('');   // '' = todas · 'sin' = los que aún no tienen carrera
+const filtroTexto = ref('');
+
+/**
+ * Los vendedores que se ven, tras el área y el texto.
+ *
+ * "Sin carrera" es una opción del filtro y no un olvido: al aplicar V35 NADIE tiene carrera
+ * todavía, y sin esa opción la única forma de encontrar a quien falta por asignar sería
+ * recorrer la lista entera a ojo.
+ */
+const vendedoresFiltrados = computed(() => {
+  const q = filtroTexto.value.trim().toLowerCase();
+  return vendedores.value.filter((v) => {
+    if (filtroArea.value === 'sin' && v.areaId) return false;
+    if (filtroArea.value && filtroArea.value !== 'sin' && String(v.areaId) !== filtroArea.value) return false;
+    if (!q) return true;
+    return [v.username, v.persona, v.carrera, v.areaSigla]
+      .some((c) => (c || '').toLowerCase().includes(q));
+  });
+});
+
+/** Cuántos vendedores hay en cada área, para poder decirlo en el propio filtro. */
+const conteoPorArea = computed(() => {
+  const m = new Map();
+  for (const v of vendedores.value) {
+    const clave = v.areaId ? String(v.areaId) : 'sin';
+    m.set(clave, (m.get(clave) || 0) + 1);
+  }
+  return m;
+});
 
 // Modales
 const modalPuestos = ref(null);
@@ -228,7 +263,8 @@ async function guardarPuestos() {
     const d = await r.json().catch(() => ({}));
     if (!r.ok || !d.ok) { toast(d.mensaje || 'No se pudo guardar', 'error'); return; }
     toast(d.mensaje, d.noDisponibles?.length ? 'error' : 'ok');
-    await cargarCatalogo(vendedorSel.value.id);
+    // Y la tabla de atrás, que es donde se lee el recuento por categoría que acaba de cambiar.
+    await Promise.all([cargarCatalogo(vendedorSel.value.id), cargarVendedores()]);
   } catch (e) {
     toast(e.message, 'error');
   } finally {
@@ -242,6 +278,8 @@ function descartarCambios() {
 
 onMounted(async () => {
   await cargarVendedores();
+  // El catálogo solo llena el desplegable del filtro: si falla, la tabla ya está pintada.
+  academico.asegurar().catch((e) => toast(e.message, 'error'));
 });
 
 const esAdmin = computed(() => auth.puedeEditarPlano);
@@ -251,12 +289,30 @@ const esAdmin = computed(() => auth.puedeEditarPlano);
   <div class="vendedores-vista">
     <header class="cabecera-vista">
       <h1>Gestión de Vendedores</h1>
-      <span class="muted">{{ vendedores.length }} vendedor{{ vendedores.length !== 1 ? 'es' : '' }}</span>
+      <span class="muted">
+        {{ vendedoresFiltrados.length }} de {{ vendedores.length }}
+        vendedor{{ vendedores.length !== 1 ? 'es' : '' }}
+      </span>
     </header>
+
+    <div class="barra-filtros">
+      <select v-model="filtroArea" class="control select-area">
+        <option value="">Todas las áreas</option>
+        <option v-for="a in academico.areas" :key="a.id" :value="String(a.id)">
+          {{ a.sigla }} ({{ conteoPorArea.get(String(a.id)) || 0 }})
+        </option>
+        <option value="sin">Sin carrera ({{ conteoPorArea.get('sin') || 0 }})</option>
+      </select>
+      <input v-model="filtroTexto" class="control busca" placeholder="Buscar por usuario, nombre o carrera…" />
+    </div>
 
     <div v-if="cargando" class="cargando">Cargando…</div>
     <div v-else-if="vendedores.length === 0" class="vacio">
       No hay vendedores registrados. Crea usuarios con rol <strong>ADMINISTRATIVO</strong> desde <router-link to="/usuarios">Usuarios</router-link>.
+    </div>
+    <div v-else-if="vendedoresFiltrados.length === 0" class="vacio">
+      Ningún vendedor con ese filtro. La carrera se asigna en la ficha de la persona, desde
+      <router-link to="/personas">Personas</router-link>.
     </div>
     <div v-else class="tabla-scroll">
       <table class="tabla">
@@ -264,26 +320,38 @@ const esAdmin = computed(() => auth.puedeEditarPlano);
           <tr>
             <th>Usuario</th>
             <th>Nombre</th>
-            <th>Rol</th>
+            <th>Carrera</th>
             <th>Estado</th>
             <th>Categorías</th>
-            <th>Puestos asignados</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="v in vendedores" :key="v.id">
+          <tr v-for="v in vendedoresFiltrados" :key="v.id">
             <td>{{ v.username }}</td>
-            <td>{{ v.persona ? (v.persona.nombre + ' ' + v.persona.paterno) : '—' }}</td>
-            <td><span class="badge badge-info">{{ v.rol?.nombre }}</span></td>
+            <td>{{ v.persona || '—' }}</td>
+            <td>
+              <template v-if="v.carrera">
+                <span class="badge badge-info" :title="academico.etiquetaArea({ sigla: v.areaSigla, nombre: v.areaNombre })">{{ v.areaSigla }}</span>
+                <span class="carrera-nombre">{{ v.carrera }}</span>
+              </template>
+              <span v-else class="muted">Sin carrera</span>
+            </td>
             <td>
               <span class="badge" :class="v.estado === 'ACTIVO' ? 'badge-ok' : v.estado === 'INACTIVO' ? 'badge-muted' : 'badge-danger'">
                 {{ v.estado }}
               </span>
             </td>
+            <!-- Una pastilla por categoría con su recuento. Antes era un guion fijo, así que
+                 desde aquí no había forma de ver qué lleva cada vendedor sin abrir el modal. -->
             <td>
-              <span class="muted">—</span>
-              <!-- TODO: mostrar conteo cuando el backend lo exponga -->
+              <div v-if="v.categorias?.length" class="lista-cats">
+                <span v-for="c in v.categorias" :key="c.categoriaId" class="chip-cat">
+                  {{ c.categoria }} <strong>{{ c.cantidad }}</strong>
+                </span>
+                <span class="muted total-casetas">{{ v.totalPuestos }} en total</span>
+              </div>
+              <span v-else class="muted">Sin casetas habilitadas</span>
             </td>
             <td class="acciones">
               <button v-if="esAdmin" class="btn btn-fantasma btn-sm" @click="abrirPuestos(v)" title="Asignar puestos">
@@ -391,6 +459,11 @@ const esAdmin = computed(() => auth.puedeEditarPlano);
 
 .vendedores-vista { display: flex; flex-direction: column; gap: 1rem; }
 .cabecera-vista { display: flex; align-items: center; justify-content: space-between; }
+.barra-filtros { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+.select-area { min-width: 200px; }
+.busca { flex: 1; min-width: 220px; }
+.carrera-nombre { margin-left: 0.4rem; font-size: 0.85rem; }
+.total-casetas { font-size: 0.75rem; align-self: center; }
 .cargando, .vacio { padding: 2rem; text-align: center; color: var(--muted); }
 .tabla-scroll { overflow-x: auto; }
 .tabla { width: 100%; border-collapse: collapse; font-size: 0.88rem; }

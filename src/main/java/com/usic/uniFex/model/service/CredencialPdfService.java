@@ -285,10 +285,27 @@ public class CredencialPdfService {
         float x = x0 + (float) (caja.x() * w);
         float y = y0 + h - (float) (caja.y() * h) - cajaH;
 
-        Image foto = Image.getInstance(ruta.toAbsolutePath().toString());
-        foto.scaleAbsolute(cajaW, cajaH);
-        foto.setAbsolutePosition(x, y);
-        lienzo.addImage(foto);
+        /*
+         * Una foto ilegible NO puede tumbar el lote.
+         *
+         * `Image.getInstance` revienta con cualquier archivo corrupto ("Premature EOF while
+         * reading JPG"), y sin este catch esa excepcion sube hasta el controlador y convierte
+         * en un 500 la peticion ENTERA: nadie imprime. En la feria, una foto a medias es lo
+         * normal —se sube desde un telefono con mala señal— y el resultado seria que un
+         * archivo roto deja sin credencial a las otras 799 personas de la tanda.
+         *
+         * Se salta esa foto y se sigue: una credencial sin cara es un problema de UNA persona,
+         * que ademas se ve al recogerla. Queda el aviso en el registro para poder rehacerla.
+         */
+        try {
+            Image foto = Image.getInstance(ruta.toAbsolutePath().toString());
+            foto.scaleAbsolute(cajaW, cajaH);
+            foto.setAbsolutePosition(x, y);
+            lienzo.addImage(foto);
+        } catch (Exception e) {
+            log.warn("Foto ilegible en la credencial de {} ({}): {}. Se imprime sin ella.",
+                    c.nombre(), c.fotoUrl(), e.getMessage());
+        }
     }
 
     private Path rutaFoto(String fotoUrl) {

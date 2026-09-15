@@ -285,10 +285,88 @@ async function abrirFicha(id) {
     const d = await r.json().catch(() => ({}));
     if (!r.ok || d.ok === false) { await alerta(d.mensaje || 'No se pudo abrir la venta', 'error', 0); return; }
     ficha.value = d;
+    cargarCupo(id);
   } catch (e) {
     await alerta(e.message, 'error', 0);
   } finally {
     cargandoFicha.value = false;
+  }
+}
+
+/*
+ * ---------------------------------------------------------------- responsables de mas
+ *
+ * Cada caseta da derecho a DOS responsables, o sea a dos credenciales. Pasada esa cuenta, el
+ * cliente puede seguir sumando gente pagando 15 Bs por cabeza, con su comprobante.
+ *
+ * El cupo se pide al abrir la ficha y NO se calcula aqui: quien decide si cobra es el servidor,
+ * y si la pantalla hiciera su propia cuenta las dos podrian discrepar — y la que se ve es esta,
+ * asi que el vendedor le diria un precio al cliente que luego el servidor no acepta.
+ */
+const cupo = ref(null);
+const modalResp = reactive({
+  abierto: false, nombre: '', paterno: '', materno: '', ci: '', celular: '', comprobante: null,
+});
+const guardandoResp = ref(false);
+
+async function cargarCupo(id) {
+  cupo.value = null;
+  try {
+    const r = await apiFetch(`/api/app/inscripciones/${id}/responsables/cupo`);
+    if (r.ok) cupo.value = await r.json();
+  } catch {
+    // Sin cupo el boton no aparece: es preferible a ofrecer un alta que el servidor rechazara.
+  }
+}
+
+function abrirAgregarResponsable() {
+  Object.assign(modalResp, {
+    abierto: true, nombre: '', paterno: '', materno: '', ci: '', celular: '', comprobante: null,
+  });
+}
+
+function elegirComprobanteResp(e) {
+  const f = e.target.files?.[0];
+  modalResp.comprobante = f || null;
+}
+
+async function guardarResponsableNuevo() {
+  if (guardandoResp.value || !ficha.value) return;
+  if (!modalResp.nombre.trim()) { await alerta('Falta el nombre', 'error', 0); return; }
+  if (!modalResp.ci.trim()) { await alerta('Falta el C.I.', 'error', 0); return; }
+  // El cobro sin comprobante es el agujero por el que se pierden los pagos: se corta aqui y el
+  // servidor lo vuelve a comprobar, porque esta pantalla no es una garantia.
+  if (!cupo.value?.dentroDelDerecho && !modalResp.comprobante) {
+    await alerta('Este responsable tiene un costo de 15 Bs: adjunta el comprobante del pago.', 'error', 0);
+    return;
+  }
+  guardandoResp.value = true;
+  mostrarCarga('Agregando al responsable…');
+  try {
+    const fd = new FormData();
+    fd.append('nombre', modalResp.nombre.trim().toUpperCase());
+    fd.append('paterno', modalResp.paterno.trim().toUpperCase());
+    fd.append('materno', modalResp.materno.trim().toUpperCase());
+    fd.append('ci', modalResp.ci.trim());
+    fd.append('celular', modalResp.celular.trim());
+    if (modalResp.comprobante) fd.append('comprobante', modalResp.comprobante);
+
+    const r = await apiFetch(`/api/app/inscripciones/${ficha.value.id}/responsables`,
+      { method: 'POST', body: fd });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.ok === false) { await alerta(d.mensaje || 'No se pudo agregar', 'error', 0); return; }
+
+    modalResp.abierto = false;
+    await alerta(d.cobrado
+      ? `Responsable agregado. Se registró el cobro de ${d.monto} Bs.`
+      : 'Responsable agregado.', 'ok');
+    // Se recarga la ficha entera: cambian los responsables, el cupo y el "faltan fotos".
+    await abrirFicha(ficha.value.id);
+  } catch (e) {
+    await alerta(e.message, 'error', 0);
+  } finally {
+    guardandoResp.value = false;
+    ocultarCarga();
   }
 }
 
@@ -652,6 +730,21 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
           </ul>
           <!-- Las fotos se gestionan con el componente que ya existe para eso. -->
           <FotosResponsables :inscripcion-id="ficha.id" />
+
+          <!-- El derecho y lo que cuesta pasarse. Se dice ANTES de abrir el formulario: que el
+               cobro aparezca despues de escribir los datos, con el cliente delante, es lo que
+               hace quedar mal al vendedor. -->
+          <div v-if="cupo" class="cupo">
+            <p class="muted">
+              {{ cupo.casetas }} caseta{{ cupo.casetas === 1 ? '' : 's' }} dan derecho a
+              <strong>{{ cupo.derecho }} responsables</strong>
+              ({{ cupo.registrados }} usados<template v-if="cupo.extras">, {{ cupo.extras }} de pago</template>).
+            </p>
+            <button class="btn" @click="abrirAgregarResponsable">
+              ＋ Agregar responsable
+              <template v-if="!cupo.dentroDelDerecho"> · {{ cupo.costoSiguiente }} Bs</template>
+            </button>
+          </div>
         </section>
       </div>
 
@@ -688,6 +781,59 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
       <button class="btn btn-fantasma" @click="modalSolicitar = null">Volver</button>
       <button class="btn btn-primario" :disabled="enviando || !motivo.trim()" @click="confirmarSolicitud">
         {{ enviando ? 'Enviando…' : 'Enviar solicitud' }}
+      </button>
+    </template>
+  </UiModal>
+
+  <!-- ------------------------------------------------- agregar un responsable a la venta -->
+  <UiModal v-if="modalResp.abierto" titulo="Agregar responsable" @cerrar="modalResp.abierto = false">
+    <div class="form-resp">
+      <p v-if="cupo && !cupo.dentroDelDerecho" class="card aviso-cobro">
+        Ya se usaron los <strong>{{ cupo.derecho }}</strong> responsables que dan sus
+        {{ cupo.casetas }} caseta{{ cupo.casetas === 1 ? '' : 's' }}.
+        Este tiene un costo de <strong>{{ cupo.costoSiguiente }} Bs</strong> y hace falta
+        el comprobante del pago.
+      </p>
+      <p v-else class="muted">
+        Está dentro de los {{ cupo?.derecho }} responsables que dan sus casetas: no tiene costo.
+      </p>
+
+      <div class="dos">
+        <label class="campo"><span>Nombre *</span>
+          <input class="control mayus" v-model="modalResp.nombre" /></label>
+        <label class="campo"><span>C.I. *</span>
+          <input class="control" inputmode="numeric" v-model="modalResp.ci" /></label>
+      </div>
+      <div class="dos">
+        <label class="campo"><span>Apellido paterno</span>
+          <input class="control mayus" v-model="modalResp.paterno" /></label>
+        <label class="campo"><span>Apellido materno</span>
+          <input class="control mayus" v-model="modalResp.materno" /></label>
+      </div>
+      <label class="campo"><span>Celular</span>
+        <CampoCelular v-model="modalResp.celular" /></label>
+
+      <div v-if="cupo && !cupo.dentroDelDerecho" class="campo">
+        <span>Comprobante del pago *</span>
+        <!-- Sin `capture`: forzar la camara quita la galeria en Android, y el comprobante
+             muchas veces ya esta en el telefono. Mismo criterio que el resto del modulo. -->
+        <input id="comp-resp" class="oculto" type="file" accept="image/*,application/pdf"
+               @change="elegirComprobanteResp" />
+        <label for="comp-resp" class="btn">
+          📷 {{ modalResp.comprobante ? 'Cambiar comprobante' : 'Adjuntar comprobante' }}
+        </label>
+        <span v-if="modalResp.comprobante" class="muted">{{ modalResp.comprobante.name }}</span>
+      </div>
+
+      <p class="muted chico">
+        La <strong>foto</strong> se toma después, desde esta misma ficha; con ella ya se puede
+        generar su credencial virtual.
+      </p>
+    </div>
+    <template #pie>
+      <button class="btn btn-fantasma" @click="modalResp.abierto = false">Cancelar</button>
+      <button class="btn btn-primario" :disabled="guardandoResp" @click="guardarResponsableNuevo">
+        {{ guardandoResp ? 'Guardando…' : 'Agregar' }}
       </button>
     </template>
   </UiModal>
@@ -787,6 +933,13 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
 .acciones-form { display: flex; gap: 0.5rem; justify-content: flex-end; }
 .mayus { text-transform: uppercase; }
 .mayus::placeholder { text-transform: none; }
+.cupo { margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-start; }
+.cupo p { margin: 0; line-height: 1.5; }
+.form-resp { display: flex; flex-direction: column; gap: 0.85rem; }
+.form-resp .campo { display: flex; flex-direction: column; gap: 0.3rem; }
+.aviso-cobro { padding: 0.7rem; line-height: 1.5; margin: 0; }
+.chico { font-size: 0.85rem; }
+.oculto { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .responsables { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 .responsables li {
   display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;

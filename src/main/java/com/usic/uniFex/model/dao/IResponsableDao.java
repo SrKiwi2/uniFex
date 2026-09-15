@@ -19,6 +19,18 @@ public interface IResponsableDao extends JpaRepository<Responsable, Long> {
     @Query("select r from Responsable r")
     List<Responsable> findAllConPersona();
 
+    /**
+     * Los responsables VIVOS de una entidad, con su persona.
+     *
+     * Vivos y no todos: un responsable dado de baja no ocupa uno de los sitios que dan las
+     * casetas. Si se quito a alguien del stand, su lugar vuelve a estar disponible y no habria
+     * que cobrar por reemplazarlo.
+     */
+    @Query("select r from Responsable r left join fetch r.persona "
+         + "where r.entidad.id = :entidadId and (r.estado is null or r.estado <> 'X') "
+         + "order by r.esTitular desc, r.id")
+    List<Responsable> vivosDeEntidad(@Param("entidadId") Long entidadId);
+
     @Query("""
                 select r
                 from Responsable r
