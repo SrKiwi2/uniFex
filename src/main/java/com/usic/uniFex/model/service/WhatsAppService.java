@@ -154,7 +154,7 @@ public class WhatsAppService {
                             numero, fileName, response.code(), respBody);
                     return true;
                 } else {
-                    log.warn("[WHATSAPP] Archivo fallo numero={} fileName='{}' status={} respuesta={}",
+                    log.error("[WHATSAPP] Archivo fallo numero={} fileName='{}' status={} respuesta={}",
                             numero, fileName, response.code(), respBody);
                     return false;
                 }

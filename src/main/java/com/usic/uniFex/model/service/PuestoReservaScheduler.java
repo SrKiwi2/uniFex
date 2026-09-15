@@ -29,7 +29,7 @@ public class PuestoReservaScheduler {
             reservaService.liberarVencidas().forEach(publisher::publicar);
         } catch (Exception e) {
             // No dejar que un fallo transitorio mate el hilo del scheduler.
-            log.warn("Fallo al liberar reservas vencidas: {}", e.getMessage());
+            log.error("Fallo al liberar reservas vencidas", e);
         }
     }
 }

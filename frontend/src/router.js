@@ -41,6 +41,7 @@ const router = createRouter({
         { path: 'usuarios', component: () => import('./views/Usuarios.vue'), meta: { titulo: 'Usuarios', requiereAuth: true, pantalla: 'usuarios'} },
         { path: 'roles', component: () => import('./views/Roles.vue'), meta: { titulo: 'Roles', requiereAuth: true, pantalla: 'roles'} },
         { path: 'mantenimiento', component: () => import('./views/Mantenimiento.vue'), meta: { titulo: 'Mantenimiento', requiereAuth: true, pantalla: 'mantenimiento'} },
+        { path: 'errores', component: () => import('./views/Errores.vue'), meta: { titulo: 'Registro de errores', requiereAuth: true, soloAdministracion: true } },
         { path: 'personas', component: () => import('./views/Personas.vue'), meta: { titulo: 'Personas', requiereAuth: true, pantalla: 'personas'} },
         { path: 'personal-apoyo', component: () => import('./views/PersonalApoyo.vue'), meta: { titulo: 'Personal de apoyo', requiereAuth: true, pantalla: 'personal-apoyo' } },
         { path: 'reportes', component: () => import('./views/Reportes.vue'), meta: { titulo: 'Reportes', requiereAuth: true, pantalla: 'reportes'} },
@@ -62,6 +63,7 @@ router.beforeEach(async (to) => {
   // Rutas públicas: no requieren autenticación
   if (to.meta.publico) return;
   if (to.meta.requiereAuth && !auth.autenticado) return '/login';
+  if (to.meta.soloAdministracion && !auth.puedeEditarPlano) return '/';
   if (to.path === '/login' && auth.autenticado) return '/';
   /*
    * `editaPlano` ya no decide quien entra a una pantalla.

@@ -127,6 +127,14 @@ Authorities arrive as `ROLE_<rol uppercased, spaces → underscores>`, so `SUPER
 
 ## Files, reports, and payments
 
+- **Error logs** → `logback-spring.xml`, `Config/CodificadorErrores` and `RegistroErroresFilter`:
+  UTF-8 JSON lines in `logs/errores.txt`, configurable with `UNIFEX_LOGS_DIR`. ERROR only, plus
+  HTTP 4xx/5xx and authenticated SPA error reports. Rotation: 10 MB/day, 30 days, 300 MB of
+  archives. `GET /api/app/errores` and `/archivos` require `Roles.ADMINISTRA`; the SPA `/errores`
+  has fixed admin access independent of the screen permission matrix. No DB tables.
+  HTTP identity uses MDC (JWT/session); `ContextoRegistro.conservar` carries it into the
+  asynchronous post-sale WhatsApp task. Do not log request bodies or credentials.
+
 - **Uploads** live under `app.upload-root` and are served back at `/files/**` via a resource handler in `WebConfig`.
 - **Receipts** → iText, in-code, in `ReciboPdfService`.
 - **Other reports** (credentials, XLSX, DOCX) → **JasperReports** in `IServiceImp/UtilidadesServiceImpl`, which compiles `.jrxml` at runtime read from a `reportes/` directory resolved **relative to the process working directory**. These templates are **not in the repo** and must exist on disk where the app runs, or report generation fails.

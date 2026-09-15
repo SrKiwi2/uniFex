@@ -46,7 +46,7 @@ public class NochesFexpoEventPublisher {
             messaging.convertAndSend(TOPIC, lista);
             log.info("Cartelera de noches difundida ({} noches)", lista.size());
         } catch (Exception e) {
-            log.warn("No se pudo difundir la cartelera de noches: {}", e.getMessage());
+            log.error("No se pudo difundir la cartelera de noches", e);
         }
     }
 }

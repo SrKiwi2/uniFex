@@ -624,108 +624,111 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
     <!-- Mas ancha que el resto de dialogos: lleva datos en dos columnas y tres botones con
          palabras en el pie, y a 480 px eso se partia en dos filas. -->
     <UiModal v-if="ficha || cargandoFicha" :titulo="ficha?.entidad?.nombre || 'Venta'"
-             ancho="620px" @cerrar="cerrarFicha">
+             ancho="1200px" @cerrar="cerrarFicha">
       <div v-if="cargandoFicha" class="vacio">Cargando…</div>
       <div v-else-if="ficha" class="ficha">
-        <!-- Lo que falta, primero: es sobre lo que hay que actuar. -->
-        <div v-if="!ficha.pago.conComprobante || sinFoto" class="falta-credencial">
-          <strong>Falta para la credencial:</strong>
-          <ul>
-            <li v-if="!ficha.pago.conComprobante">el comprobante de pago</li>
-            <li v-if="sinFoto">{{ sinFoto }} foto{{ sinFoto === 1 ? '' : 's' }} de responsable</li>
-          </ul>
-        </div>
+        <div class="columna-datos">
+          <!-- Lo que falta, primero: es sobre lo que hay que actuar. -->
+          <div v-if="!ficha.pago.conComprobante || sinFoto" class="falta-credencial">
+            <strong>Falta para la credencial:</strong>
+            <ul>
+              <li v-if="!ficha.pago.conComprobante">el comprobante de pago</li>
+              <li v-if="sinFoto">{{ sinFoto }} foto{{ sinFoto === 1 ? '' : 's' }} de responsable</li>
+            </ul>
+          </div>
 
-        <!-- ENTIDAD -->
-        <section class="grupo g-entidad">
-          <header>
-            <h3><span class="ico">🏢</span>Entidad</h3>
-            <button v-if="editando !== 'entidad'" class="btn btn-fantasma btn-sm"
-                    @click="editarEntidad">✏️ Modificar</button>
-          </header>
+          <!-- ENTIDAD -->
+          <section class="grupo g-entidad">
+            <header>
+              <h3><span class="ico">🏢</span>Entidad</h3>
+              <button v-if="editando !== 'entidad'" class="btn btn-fantasma btn-sm"
+                      @click="editarEntidad">✏️ Modificar</button>
+            </header>
 
-          <dl v-if="editando !== 'entidad'" class="datos">
-            <div><dt>Nombre</dt><dd>{{ ficha.entidad.nombre || '—' }}</dd></div>
-            <div><dt>Rubro</dt><dd>{{ ficha.entidad.descripcion || '—' }}</dd></div>
-            <div><dt>Tipo</dt><dd>{{ ficha.entidad.tipo || '—' }}</dd></div>
-            <div><dt>NIT</dt><dd>{{ ficha.entidad.nit || '—' }}</dd></div>
-            <div><dt>Responsable legal</dt><dd>{{ ficha.entidad.representanteLegal || '—' }}</dd></div>
-            <div><dt>C.I.</dt><dd>{{ ficha.entidad.ciRepresentante || '—' }}</dd></div>
-            <div><dt>Celular</dt><dd>{{ ficha.entidad.celularRepresentante || '—' }}</dd></div>
-          </dl>
+            <dl v-if="editando !== 'entidad'" class="datos">
+              <div><dt>Nombre</dt><dd>{{ ficha.entidad.nombre || '—' }}</dd></div>
+              <div><dt>Rubro</dt><dd>{{ ficha.entidad.descripcion || '—' }}</dd></div>
+              <div><dt>Tipo</dt><dd>{{ ficha.entidad.tipo || '—' }}</dd></div>
+              <div><dt>NIT</dt><dd>{{ ficha.entidad.nit || '—' }}</dd></div>
+              <div><dt>Responsable legal</dt><dd>{{ ficha.entidad.representanteLegal || '—' }}</dd></div>
+              <div><dt>C.I.</dt><dd>{{ ficha.entidad.ciRepresentante || '—' }}</dd></div>
+              <div><dt>Celular</dt><dd>{{ ficha.entidad.celularRepresentante || '—' }}</dd></div>
+            </dl>
 
-          <div v-else class="form">
-            <label class="campo"><span>Nombre de la entidad</span>
-              <input class="control mayus" v-model="borrador.entidadNombre" /></label>
-            <div class="dos">
-              <label class="campo"><span>Rubro</span>
-                <input class="control mayus" v-model="borrador.descripcion" /></label>
-              <label class="campo"><span>NIT</span>
-                <input class="control" inputmode="numeric" v-model="borrador.nit" /></label>
+            <div v-else class="form">
+              <label class="campo"><span>Nombre de la entidad</span>
+                <input class="control mayus" v-model="borrador.entidadNombre" /></label>
+              <div class="dos">
+                <label class="campo"><span>Rubro</span>
+                  <input class="control mayus" v-model="borrador.descripcion" /></label>
+                <label class="campo"><span>NIT</span>
+                  <input class="control" inputmode="numeric" v-model="borrador.nit" /></label>
+              </div>
+              <label class="campo"><span>Responsable legal</span>
+                <input class="control mayus" v-model="borrador.representanteLegal" /></label>
+              <div class="dos">
+                <label class="campo"><span>C.I.</span>
+                  <input class="control" inputmode="numeric" v-model="borrador.ciRepresentante" /></label>
+                <label class="campo"><span>Celular</span>
+                  <CampoCelular v-model="borrador.celularRepresentante" /></label>
+              </div>
+              <div class="acciones-form">
+                <button class="btn btn-fantasma" @click="editando = null">Cancelar</button>
+                <button class="btn btn-primario" :disabled="guardando" @click="guardarEdicion">
+                  {{ guardando ? 'Guardando…' : 'Guardar' }}
+                </button>
+              </div>
             </div>
-            <label class="campo"><span>Responsable legal</span>
-              <input class="control mayus" v-model="borrador.representanteLegal" /></label>
-            <div class="dos">
-              <label class="campo"><span>C.I.</span>
-                <input class="control" inputmode="numeric" v-model="borrador.ciRepresentante" /></label>
-              <label class="campo"><span>Celular</span>
-                <CampoCelular v-model="borrador.celularRepresentante" /></label>
+          </section>
+
+          <!-- CASETAS -->
+          <section class="grupo g-casetas">
+            <header><h3><span class="ico">🏬</span>Casetas</h3></header>
+            <div v-if="!ficha.casetas.length" class="muted">Sin casetas registradas.</div>
+            <div v-else class="puestos">
+              <span v-for="(c, i) in ficha.casetas" :key="i" class="chip-puesto"
+                    :style="c.color ? { background: c.color + '22', color: c.color } : null">
+                {{ c.categoria }} {{ c.codigo }}
+              </span>
             </div>
-            <div class="acciones-form">
-              <button class="btn btn-fantasma" @click="editando = null">Cancelar</button>
-              <button class="btn btn-primario" :disabled="guardando" @click="guardarEdicion">
-                {{ guardando ? 'Guardando…' : 'Guardar' }}
+          </section>
+
+          <!-- PAGO Y COMPROBANTE -->
+          <section class="grupo g-pago">
+            <header>
+              <h3><span class="ico">🧾</span>Pago</h3>
+              <span class="badge" :class="ficha.pago.conComprobante ? 'badge-ok' : 'badge-danger'">
+                {{ ficha.pago.conComprobante ? 'con comprobante' : 'sin comprobante' }}
+              </span>
+            </header>
+            <dl class="datos">
+              <div><dt>Forma</dt><dd>{{ ficha.pago.contado ? 'Al contado' : 'Crédito' }}</dd></div>
+              <div v-if="ficha.pago.entidadBancaria"><dt>Banco</dt><dd>{{ ficha.pago.entidadBancaria }}</dd></div>
+              <div v-if="ficha.pago.numComprobante"><dt>N.º comprobante</dt><dd>{{ ficha.pago.numComprobante }}</dd></div>
+            </dl>
+
+            <!-- El comprobante SE VE. Antes solo se ofrecia reemplazarlo, asi que no habia forma
+                 de comprobar que lo subido fuera lo correcto sin bajarlo por otro camino. -->
+            <div v-if="ficha.pago.conComprobante" class="comprobante">
+              <button class="btn btn-sm" @click="verComprobante = !verComprobante">
+                {{ verComprobante ? 'Ocultar comprobante' : '👁 Ver comprobante' }}
               </button>
+              <a class="btn btn-fantasma btn-sm" :href="urlArchivo(ficha.pago.comprobanteUrl)"
+                 target="_blank" rel="noopener">Abrir aparte</a>
+              <div v-if="verComprobante" class="visor-comp">
+                <img v-if="!esPdf(ficha.pago.comprobanteUrl)" :src="urlArchivo(ficha.pago.comprobanteUrl)"
+                     alt="Comprobante de pago" />
+                <p v-else class="muted">
+                  El comprobante es un PDF. Tócalo en «Abrir aparte» para verlo.
+                </p>
+              </div>
             </div>
-          </div>
-        </section>
+            <p v-else class="muted">
+              Todavía no se subió el comprobante. Sin él no se puede emitir la credencial.
+            </p>
+          </section>
 
-        <!-- CASETAS -->
-        <section class="grupo g-casetas">
-          <header><h3><span class="ico">🏬</span>Casetas</h3></header>
-          <div v-if="!ficha.casetas.length" class="muted">Sin casetas registradas.</div>
-          <div v-else class="puestos">
-            <span v-for="(c, i) in ficha.casetas" :key="i" class="chip-puesto"
-                  :style="c.color ? { background: c.color + '22', color: c.color } : null">
-              {{ c.categoria }} {{ c.codigo }}
-            </span>
-          </div>
-        </section>
-
-        <!-- PAGO Y COMPROBANTE -->
-        <section class="grupo g-pago">
-          <header>
-            <h3><span class="ico">🧾</span>Pago</h3>
-            <span class="badge" :class="ficha.pago.conComprobante ? 'badge-ok' : 'badge-danger'">
-              {{ ficha.pago.conComprobante ? 'con comprobante' : 'sin comprobante' }}
-            </span>
-          </header>
-          <dl class="datos">
-            <div><dt>Forma</dt><dd>{{ ficha.pago.contado ? 'Al contado' : 'Crédito' }}</dd></div>
-            <div v-if="ficha.pago.entidadBancaria"><dt>Banco</dt><dd>{{ ficha.pago.entidadBancaria }}</dd></div>
-            <div v-if="ficha.pago.numComprobante"><dt>N.º comprobante</dt><dd>{{ ficha.pago.numComprobante }}</dd></div>
-          </dl>
-
-          <!-- El comprobante SE VE. Antes solo se ofrecia reemplazarlo, asi que no habia forma
-               de comprobar que lo subido fuera lo correcto sin bajarlo por otro camino. -->
-          <div v-if="ficha.pago.conComprobante" class="comprobante">
-            <button class="btn btn-sm" @click="verComprobante = !verComprobante">
-              {{ verComprobante ? 'Ocultar comprobante' : '👁 Ver comprobante' }}
-            </button>
-            <a class="btn btn-fantasma btn-sm" :href="urlArchivo(ficha.pago.comprobanteUrl)"
-               target="_blank" rel="noopener">Abrir aparte</a>
-            <div v-if="verComprobante" class="visor-comp">
-              <img v-if="!esPdf(ficha.pago.comprobanteUrl)" :src="urlArchivo(ficha.pago.comprobanteUrl)"
-                   alt="Comprobante de pago" />
-              <p v-else class="muted">
-                El comprobante es un PDF. Tócalo en «Abrir aparte» para verlo.
-              </p>
-            </div>
-          </div>
-          <p v-else class="muted">
-            Todavía no se subió el comprobante. Sin él no se puede emitir la credencial.
-          </p>
-        </section>
+        </div>
 
         <!-- RESPONSABLES -->
         <section class="grupo g-responsables">
@@ -936,7 +939,9 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
 .ver { color: var(--acento); font-size: 0.82rem; font-weight: 700; white-space: nowrap; }
 
 /* ---- ficha de la venta ---- */
-.ficha { display: flex; flex-direction: column; gap: 1.1rem; }
+.ficha { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.1rem; align-items: start; }
+.columna-datos { display: flex; flex-direction: column; gap: 1.1rem; min-width: 0; }
+.ficha > .g-responsables { min-width: 0; overflow-wrap: anywhere; }
 /*
  * OJO con el nombre: esta clase se llamaba `.pendiente` a secas y chocaba con `.venta.pendiente`
  * de la lista. El selector sin calificar alcanzaba tambien a las filas, asi que una venta con
@@ -1037,6 +1042,10 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
 .pendientes .dias { font-size: 0.8rem; color: var(--muted); font-weight: 600; white-space: nowrap; }
 /* A partir de tres días deja de ser un olvido y pasa a ser un problema de cobro. */
 .pendientes .dias.urgente { color: var(--danger); }
+
+@media (max-width: 800px) {
+  .ficha { grid-template-columns: minmax(0, 1fr); }
+}
 
 @media (max-width: 560px) {
   .pendientes li { align-items: flex-start; }

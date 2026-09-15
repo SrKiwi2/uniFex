@@ -1,6 +1,7 @@
 import { Client } from '@stomp/stompjs';
 import { useAuthStore } from './stores/auth.js';
 import { urlWebSocket } from './config.js';
+import { registrarError } from './ui/registroErrores.js';
 
 /**
  * Cliente STOMP sobre WebSocket NATIVO suscrito a /topic/puestos y al topic
@@ -55,8 +56,12 @@ export function escucharTopic(topic, { onMensaje, onConectado, onCerrado } = {})
       onConectado?.();
     },
     onWebSocketClose: () => onCerrado?.(),
+    onWebSocketError: () => registrarError('No se pudo conectar al canal en tiempo real /ws'),
     // Token vencido o suscripcion no permitida para este rol: reintentar en bucle no lo arregla.
-    onStompError: () => client.deactivate(),
+    onStompError: (frame) => {
+      registrarError(frame.headers?.message || 'WebSocket rechazado');
+      client.deactivate();
+    },
   });
   client.activate();
   return () => client.deactivate();
@@ -117,11 +122,13 @@ export function crearClientePuestos(onEstado, onRechazo, onConectado, onNotifica
       if (onCerrado) onCerrado();
     },
     onStompError: (frame) => {
+      registrarError(frame.headers?.message || 'WebSocket rechazado');
       // Token ausente, invalido o expirado. Reintentar en bucle no arregla nada:
       // paramos y avisamos para que la vista cierre la sesion.
       client.deactivate();
       if (onRechazo) onRechazo(frame.headers?.message || 'WebSocket rechazado');
     },
+    onWebSocketError: () => registrarError('No se pudo conectar al canal en tiempo real /ws'),
   });
   client.activate();
   return client;

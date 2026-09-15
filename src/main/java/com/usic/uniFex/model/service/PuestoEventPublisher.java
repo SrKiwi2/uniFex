@@ -44,7 +44,7 @@ public class PuestoEventPublisher {
                     .map(PuestoEstadoDTO::de)
                     .ifPresent(dto -> messaging.convertAndSend(TOPIC, dto));
         } catch (Exception e) {
-            log.warn("No se pudo difundir el estado del puesto {}: {}", puestoId, e.getMessage());
+            log.error("No se pudo difundir el estado del puesto {}", puestoId, e);
         }
     }
 
@@ -64,7 +64,7 @@ public class PuestoEventPublisher {
         } catch (Exception e) {
             // Igual que el estado de las casetas: un fallo al difundir NUNCA puede tumbar la
             // operacion que ya se guardo. El cliente se enterara al resincronizar.
-            log.warn("No se pudieron difundir los cambios de asignacion: {}", e.getMessage());
+            log.error("No se pudieron difundir los cambios de asignacion", e);
         }
     }
 
