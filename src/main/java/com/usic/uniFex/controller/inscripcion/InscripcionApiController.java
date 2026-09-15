@@ -35,6 +35,7 @@ import com.usic.uniFex.model.service.CancelarInscripcionService;
 import com.usic.uniFex.model.service.ReciboPdfService;
 import com.usic.uniFex.model.service.ResponsableFotoService;
 import com.usic.uniFex.model.service.RegistroVentaService;
+import com.usic.uniFex.model.service.ResponsableExtraService;
 import com.usic.uniFex.model.service.VendedorAsignacionService;
 import com.usic.uniFex.security.JwtUser;
 import com.usic.uniFex.security.Roles;
@@ -57,6 +58,8 @@ import lombok.extern.slf4j.Slf4j;
 public class InscripcionApiController {
 
     private final IInscripcionService inscripcionService;
+
+    private final com.usic.uniFex.model.service.ResponsableExtraService responsableExtra;
     private final RegistroVentaService registroVenta;
     private final EdicionVentaService edicionVenta;
     private final ReciboPdfService reciboPdfService;
@@ -172,6 +175,12 @@ public class InscripcionApiController {
             // 409 y no 400: no es que el vendedor mandara mal los datos, es que otro gano la
             // carrera. La venta entera quedo revertida.
             return ResponseEntity.status(409).body(Map.of("ok", false, "mensaje", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            // Datos que no cuadran contra la base: p.ej. una opcion de precio que no es de esa
+            // categoria. Sin este catch salia un 500 con la traza dentro, que al vendedor no le
+            // dice nada y al que lee los registros tampoco.
+            return ResponseEntity.badRequest().body(Map.of(
+                    "ok", false, "mensaje", e.getMessage() == null ? "Datos invalidos" : e.getMessage()));
         }
     }
 
@@ -394,6 +403,65 @@ public class InscripcionApiController {
         cuerpo.put("ok", r.ok());
         cuerpo.put("mensaje", r.mensaje());
         cuerpo.put("responsable", r.responsable());
+        return r.ok() ? ResponseEntity.ok(cuerpo) : ResponseEntity.badRequest().body(cuerpo);
+    }
+
+    /**
+     * Cuantos responsables admite esta venta y cuantos tiene ya.
+     *
+     * Lo pide la ficha de la venta ANTES de abrir el formulario, para saber si lo que va a
+     * agregar es gratis o lleva cobro: decirselo despues de que ha escrito los datos es
+     * hacerle perder el trabajo, y con el cliente delante.
+     */
+    @GetMapping("/{id}/responsables/cupo")
+    public ResponseEntity<?> cupoResponsables(@PathVariable Long id) {
+        ResponseEntity<Map<String, Object>> veto = comprobarAcceso(id);
+        if (veto != null) return veto;
+        ResponsableExtraService.Cupo c = responsableExtra.cupoDe(id);
+        if (c == null) return ResponseEntity.status(404).body(Map.of("ok", false));
+        return ResponseEntity.ok(Map.of(
+                "ok", true,
+                "casetas", c.casetas(),
+                "derecho", c.derecho(),
+                "registrados", c.registrados(),
+                "extras", c.extras(),
+                "dentroDelDerecho", c.dentroDelDerecho(),
+                "costoSiguiente", c.costoSiguiente()));
+    }
+
+    /**
+     * Agrega un responsable a una venta ya registrada.
+     *
+     * Es multipart porque puede traer el comprobante del cobro. Los que pasan del derecho que
+     * dan las casetas (2 por caseta) se cobran, y entonces el comprobante NO es opcional: el
+     * servicio lo rechaza sin el. Va en la misma peticion que crea al responsable para que no
+     * exista el estado intermedio "creado y sin pagar", que es donde se pierden los cobros.
+     *
+     * La foto se sube despues, con el endpoint de siempre: hasta que no existe el responsable
+     * no hay id al que asociarla.
+     */
+    @PostMapping(value = "/{id}/responsables", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, Object>> agregarResponsable(
+            @PathVariable Long id,
+            @RequestParam("nombre") String nombre,
+            @RequestParam(value = "paterno", required = false) String paterno,
+            @RequestParam(value = "materno", required = false) String materno,
+            @RequestParam("ci") String ci,
+            @RequestParam(value = "correo", required = false) String correo,
+            @RequestParam(value = "celular", required = false) String celular,
+            @RequestPart(value = "comprobante", required = false) MultipartFile comprobante) {
+        ResponseEntity<Map<String, Object>> veto = comprobarAcceso(id);
+        if (veto != null) return veto;
+        Long usuarioId = usuarioActual();
+        ResponsableExtraService.Resultado r = responsableExtra.agregar(id,
+                new ResponsableExtraService.NuevoResponsable(nombre, paterno, materno, ci, correo, celular),
+                comprobante, usuarioId);
+        Map<String, Object> cuerpo = new LinkedHashMap<>();
+        cuerpo.put("ok", r.ok());
+        cuerpo.put("mensaje", r.mensaje());
+        cuerpo.put("responsableId", r.responsableId());
+        cuerpo.put("cobrado", r.cobrado());
+        cuerpo.put("monto", r.monto());
         return r.ok() ? ResponseEntity.ok(cuerpo) : ResponseEntity.badRequest().body(cuerpo);
     }
 

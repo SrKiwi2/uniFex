@@ -55,6 +55,15 @@ public interface IVendedorAsignacionDao {
     /** Para un puñado de casetas, el nombre de la categoria de cada una: [puestoId, nombre]. */
     List<Object[]> nombresDeCategoriaPorPuesto(List<Long> puestoIds);
 
+    /**
+     * Cuantas casetas lleva cada vendedor de cada categoria, para TODOS los vendedores.
+     * Columnas: usuarioId, categoriaId, categoriaNombre, cantidad.
+     *
+     * Una sola consulta para toda la tabla y no una por fila: son 35 vendedores, y pedir el
+     * desglose vendedor a vendedor son 35 viajes a la base para pintar una columna.
+     */
+    List<Object[]> contarPuestosPorCategoriaYVendedor();
+
     /** Suelta TODAS las casetas de un usuario. Se usa al darlo de baja. */
     void borrarAsignacionesDe(Long usuarioId);
 

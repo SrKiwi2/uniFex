@@ -29,4 +29,22 @@ public class Responsable extends AuditoriaConfig{
      */
     @Column(name = "es_titular", nullable = false)
     private boolean esTitular;
+
+    /**
+     * true si esta POR ENCIMA del derecho que dan las casetas (V34).
+     *
+     * Cada caseta da derecho a dos responsables, o sea a dos credenciales. Al que pasa de ahi
+     * se le cobra, y ese cobro va aparte del de la venta: es otro dia y otro recibo. Por eso el
+     * importe y el comprobante viven aqui y no en la inscripcion.
+     */
+    @Column(name = "es_extra", nullable = false)
+    private boolean esExtra;
+
+    /** Bs cobrados por este responsable extra, congelados: la tarifa puede cambiar. */
+    @Column(name = "monto_extra")
+    private java.math.BigDecimal montoExtra;
+
+    /** Ruta del comprobante de ese cobro, dentro de app.upload-root. */
+    @Column(name = "comprobante_extra")
+    private String comprobanteExtra;
 }

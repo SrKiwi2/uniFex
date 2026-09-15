@@ -125,6 +125,27 @@ public class VendedorAsignacionDaoImpl implements IVendedorAsignacionDao {
                 .getResultList();
     }
 
+    /**
+     * El desglose por categoria de TODOS los vendedores de una vez.
+     *
+     * Cuenta solo casetas vivas y no bloqueadas, igual que {@code findPuestosVisiblesParaVendedor}:
+     * si contara las anuladas, la pantalla de administracion diria "12 de PYMES" y el vendedor
+     * veria 10 en su mapa, y el numero que no cuadra siempre parece un fallo del reparto.
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public List<Object[]> contarPuestosPorCategoriaYVendedor() {
+        return em.createNativeQuery("""
+                SELECT vp.id_usuario, c.id, c.nombre, COUNT(*)
+                  FROM vendedor_puesto vp
+                  INNER JOIN puesto p    ON p.id = vp.id_puesto
+                                        AND p._estado <> 'X' AND p.estado_puesto <> 'X'
+                  INNER JOIN categoria c ON c.id = p.id_categoria AND c._estado <> 'X'
+                 GROUP BY vp.id_usuario, c.id, c.nombre
+                 ORDER BY vp.id_usuario, c.nombre
+                """).getResultList();
+    }
+
     @Override
     public void borrarAsignacionesDe(Long usuarioId) {
         em.createNativeQuery("DELETE FROM vendedor_puesto WHERE id_usuario = :usuarioId")

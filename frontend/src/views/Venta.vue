@@ -42,7 +42,57 @@ const tiposEntidad = ref([]);
 const perdidas = ref([]);
 
 const carrito = computed(() => tienda.carritoDe(auth.id));
-const total = computed(() => carrito.value.reduce((s, p) => s + Number(p.precio || 0), 0));
+
+/**
+ * Las opciones de precio de cada categoria: {categoriaId -> [{id, nombre, precio, predeterminada}]}.
+ *
+ * Una categoria puede venderse de varias formas —"PYMES" a 800, "PYMES con tarima" a 1.200— y el
+ * total depende de cual se elija. Se piden UNA vez al abrir el formulario: son pocas y no
+ * cambian a media venta.
+ */
+const opcionesDe = ref(new Map());
+/** Lo elegido por el vendedor: {categoriaId -> opcionId}. Una eleccion por categoria. */
+const opcionElegida = ref(new Map());
+
+async function cargarOpciones() {
+  try {
+    const r = await apiFetch('/api/app/categorias');
+    if (!r.ok) return;
+    const lista = await r.json();
+    const m = new Map();
+    for (const c of lista) m.set(c.id, c.opciones || []);
+    opcionesDe.value = m;
+  } catch {
+    // Sin opciones el formulario sigue funcionando con el precio que trae cada caseta: es lo
+    // que hacia antes de que existieran, y es mejor que no poder vender.
+  }
+}
+
+/** La opcion vigente de una categoria: la elegida, o la marcada por defecto. */
+function opcionDe(categoriaId) {
+  const lista = opcionesDe.value.get(categoriaId) || [];
+  const elegida = opcionElegida.value.get(categoriaId);
+  return lista.find((o) => o.id === elegida) || lista.find((o) => o.predeterminada) || null;
+}
+
+/**
+ * Lo que cuesta una caseta segun la opcion elegida para su categoria.
+ *
+ * Si la categoria no tiene opciones se usa el precio que trae la caseta, que es de donde salia
+ * antes: una base sin la migracion de opciones sigue vendiendo bien.
+ */
+function precioDe(p) {
+  const o = opcionDe(p.categoriaId);
+  return Number(o ? o.precio : (p.precio || 0));
+}
+
+function elegirOpcion(categoriaId, opcionId) {
+  const m = new Map(opcionElegida.value);
+  m.set(categoriaId, opcionId);
+  opcionElegida.value = m;
+}
+
+const total = computed(() => carrito.value.reduce((s, p) => s + precioDe(p), 0));
 
 /**
  * El carrito agrupado por categoria, que es como el vendedor lo nombra en voz alta.
@@ -56,10 +106,14 @@ const porCategoria = computed(() => {
   const m = new Map();
   for (const p of carrito.value) {
     const clave = p.categoria || 'Sin categoría';
-    if (!m.has(clave)) m.set(clave, { categoria: clave, color: p.color, casetas: [], subtotal: 0 });
+    if (!m.has(clave)) {
+      m.set(clave, { categoria: clave, categoriaId: p.categoriaId, color: p.color,
+                     casetas: [], subtotal: 0,
+                     opciones: opcionesDe.value.get(p.categoriaId) || [] });
+    }
     const g = m.get(clave);
     g.casetas.push(p);
-    g.subtotal += Number(p.precio || 0);
+    g.subtotal += precioDe(p);
   }
   // Los numeros, en orden: "6, 7 y 14" se lee; "14, 6 y 7" hace dudar de si falta alguna.
   for (const g of m.values()) {
@@ -169,6 +223,18 @@ const fotos = ref([null, null]);
 
 const hayResponsable2 = computed(() => form.responsables.length > 1);
 
+/**
+ * Cuantos responsables admite esta venta: DOS POR CASETA, que es a lo que da derecho cada una
+ * (dos credenciales). Antes eran dos fijos: quien compraba tres casetas tenia derecho a seis
+ * personas y el formulario le dejaba meter dos.
+ *
+ * Los que pasen de aqui se agregan despues, desde la ficha de la venta, porque llevan cobro y
+ * su propio comprobante; meter un cobro aparte en mitad del registro enreda el total que el
+ * vendedor esta cantando.
+ */
+const maxResponsables = computed(() => Math.max(1, carrito.value.length) * 2);
+const puedeAgregarResponsable = computed(() => form.responsables.length < maxResponsables.value);
+
 /** `pagoContado` es lo que entiende el servidor; aqui se deriva de la eleccion. */
 watch(() => form.formaPago, (v) => {
   form.pagoContado = v === 'contado';
@@ -276,17 +342,19 @@ const faltantes = computed(() => {
     const r0 = form.responsables[0] || {};
     pide('r0.nombre', 'Nombre del Responsable 1', (r0.nombre || '').trim());
     pide('r0.ci', 'C.I. del Responsable 1', (r0.ci || '').trim());
-    const r1 = form.responsables[1];
     /*
-     * Del segundo responsable solo se exige el NOMBRE.
+     * Del SEGUNDO en adelante solo se exige el NOMBRE.
      *
-     * El C.I. era obligatorio y frenaba ventas por un dato que muchas veces no esta a mano: el
-     * segundo suele ser un familiar o un empleado que ni siquiera esta en el mostrador. Sin
+     * El C.I. era obligatorio y frenaba ventas por un dato que muchas veces no esta a mano: los
+     * acompañantes suelen ser familiares o empleados que ni siquiera estan en el mostrador. Sin
      * C.I. se registra igual y se completa despues desde Mis ventas; lo que no se puede es
      * dejarlo sin nombre, porque entonces no hay a quien acreditar.
      */
-    if (r1 && algoEscrito(r1)) {
-      pide('r1.nombre', 'Nombre del Responsable 2', r1.nombre.trim());
+    for (let i = 1; i < form.responsables.length; i++) {
+      const r = form.responsables[i];
+      if (r && algoEscrito(r)) {
+        pide(`r${i}.nombre`, `Nombre del Responsable ${i + 1}`, (r.nombre || '').trim());
+      }
     }
   }
   if (paso.value === 2) {
@@ -320,13 +388,17 @@ function atras() {
   if (paso.value > 0) paso.value--;
 }
 
-function agregarResponsable2() {
-  if (form.responsables.length >= 2) return; // el sistema permite dos
+function agregarResponsable() {
+  if (!puedeAgregarResponsable.value) return;
   form.responsables.push(personaVacia());
 }
-function quitarResponsable2() {
-  form.responsables.splice(1);
-  fotos.value[1] = null;
+
+/** Quita el ULTIMO. El Responsable 1 no se quita: sin el no hay a quien acreditar. */
+function quitarUltimoResponsable() {
+  if (form.responsables.length <= 1) return;
+  const i = form.responsables.length - 1;
+  form.responsables.splice(i, 1);
+  fotos.value[i] = null;
 }
 
 // ---- foto opcional de cada responsable ----
@@ -417,8 +489,8 @@ async function registrar() {
   // vendedor concluia que la aplicacion se colgo y volvia a pulsar.
   mostrarCarga('Registrando la venta…');
   try {
-    // Se manda el Responsable 2 solo si de verdad lo rellenaron: un bloque vacio haria
-    // fallar la validacion del servidor por "cada responsable necesita nombre".
+    // Solo van los que de verdad se rellenaron: un bloque vacio haria fallar la validacion
+    // del servidor por "cada responsable necesita nombre".
     const responsables = form.responsables
       .filter((p) => p.nombre.trim() && p.ci.trim())
       .map((p) => ({
@@ -443,6 +515,13 @@ async function registrar() {
         numComprobante: form.numComprobante,
         pagoContado: form.pagoContado,
         puestos: carrito.value.map((p) => p.id),
+        // La eleccion de precio por categoria. El servidor la revalida contra la base: aqui
+        // solo se dice QUE se eligio, no cuanto cuesta.
+        opcionesPorCategoria: Object.fromEntries(
+          porCategoria.value
+            .map((g) => [g.categoriaId, opcionDe(g.categoriaId)?.id])
+            .filter(([cat, op]) => cat != null && op != null),
+        ),
       }),
     });
     const d = await r.json().catch(() => ({}));
@@ -582,12 +661,15 @@ onMounted(async () => {
     toast('Se recuperó lo que habías escrito', 'info');
   }
   await tienda.asegurar();
+  // En paralelo: las dos hacen falta para pintar el primer paso y en serie serian dos esperas.
+  const opcionesListas = cargarOpciones();
   try {
     const r = await apiFetch('/api/app/catalogos/tipos-entidad');
     tiposEntidad.value = await r.json();
   } catch (e) {
     toast('No se pudieron cargar los tipos de entidad', 'error');
   }
+  await opcionesListas;
 });
 
 onUnmounted(() => {
@@ -647,6 +729,45 @@ onUnmounted(() => {
 
       <!-- Paso 1: entidad -->
       <section v-show="paso === 0" class="card bloque">
+        <!--
+          Que se vende, y a que precio. Va lo PRIMERO porque de esto sale el total, y el total
+          es lo que el vendedor esta cantando en voz alta mientras rellena lo demas.
+          Solo aparece si hay algo que elegir: con una sola opcion no hay decision, y una fila
+          de radios con un unico boton solo estorba.
+        -->
+        <div v-if="porCategoria.some((g) => g.opciones.length > 1)" class="opciones-precio">
+          <h3 class="titulo-bloque">Qué se está vendiendo</h3>
+          <div v-for="g in porCategoria" :key="'op-' + g.categoria" class="grupo-opcion">
+            <div class="cab-grupo-op">
+              <span class="punto" :style="{ background: g.color || 'var(--acento)' }"></span>
+              <strong>{{ g.categoria }}</strong>
+              <span class="muted">
+                · caseta{{ g.casetas.length === 1 ? '' : 's' }}
+                {{ listar(g.casetas.map((c) => c.codigo)) }}
+              </span>
+            </div>
+
+            <div v-if="g.opciones.length > 1" class="elecciones">
+              <button v-for="o in g.opciones" :key="o.id" type="button" class="opcion"
+                      :class="{ marcada: opcionDe(g.categoriaId)?.id === o.id }"
+                      @click="elegirOpcion(g.categoriaId, o.id)">
+                <span class="nom">{{ o.nombre }}</span>
+                <span class="pre">{{ bs(o.precio) }} Bs</span>
+              </button>
+            </div>
+            <p v-else class="muted sin-eleccion">
+              {{ opcionDe(g.categoriaId)?.nombre || g.categoria }} ·
+              {{ bs(opcionDe(g.categoriaId)?.precio ?? g.casetas[0]?.precio) }} Bs por caseta
+            </p>
+
+            <p class="subtotal-op">
+              {{ g.casetas.length }} × {{ bs(g.subtotal / (g.casetas.length || 1)) }} Bs =
+              <strong>{{ bs(g.subtotal) }} Bs</strong>
+            </p>
+          </div>
+          <div class="separador"></div>
+        </div>
+
         <label class="campo">
           <span>Nombre de la entidad *<button type="button" class="ayuda" @click.prevent="ayuda('entidadNombre')" aria-label="Qué es esto">?</button></span>
           <input class="control mayus" :class="{ falta: falta('entidadNombre') }"
@@ -776,10 +897,24 @@ onUnmounted(() => {
           </div>
         </template>
 
-        <button v-if="hayResponsable2" class="btn btn-peligro" @click="quitarResponsable2">
-          Quitar Responsable 2
-        </button>
-        <button v-else class="btn" @click="agregarResponsable2">＋ Agregar Responsable 2</button>
+        <!-- El derecho, dicho con sus numeros: "2 de 6" explica por que el boton se apaga,
+             y de paso le dice al vendedor cuanto puede ofrecerle al cliente. -->
+        <p class="muted derecho">
+          {{ carrito.length }} caseta{{ carrito.length === 1 ? '' : 's' }} dan derecho a
+          <strong>{{ maxResponsables }} responsables</strong>
+          ({{ form.responsables.length }} de {{ maxResponsables }} usados).
+          Si hacen falta más, se agregan desde <strong>Mis ventas</strong> y tienen un costo de
+          15 Bs cada uno.
+        </p>
+        <div class="fila acciones-resp">
+          <button v-if="puedeAgregarResponsable" class="btn" @click="agregarResponsable">
+            ＋ Agregar responsable
+          </button>
+          <button v-if="form.responsables.length > 1" class="btn btn-peligro"
+                  @click="quitarUltimoResponsable">
+            Quitar el último
+          </button>
+        </div>
       </section>
 
       <!-- Paso 3: confirmar -->
@@ -909,6 +1044,27 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+/* Las opciones de precio: botones grandes, porque se tocan con el cliente delante y con una
+   mano. Un <select> obliga a dos toques y esconde el precio hasta que se abre. */
+.opciones-precio { display: flex; flex-direction: column; gap: 0.9rem; }
+.titulo-bloque { margin: 0; font-size: 1.05rem; }
+.grupo-opcion { display: flex; flex-direction: column; gap: 0.45rem; }
+.cab-grupo-op { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.elecciones { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.opcion {
+  flex: 1 1 160px; min-height: 56px; display: flex; flex-direction: column; justify-content: center;
+  gap: 0.15rem; padding: 0.5rem 0.75rem; border-radius: 10px; cursor: pointer;
+  border: 2px solid var(--borde, rgba(128,128,128,0.35)); background: var(--panel, transparent);
+  text-align: left; font: inherit; color: inherit;
+}
+.opcion.marcada { border-color: var(--acento); background: color-mix(in srgb, var(--acento) 12%, transparent); }
+.opcion .nom { font-weight: 600; }
+.opcion .pre { font-size: 1.05rem; }
+.sin-eleccion { margin: 0; }
+.derecho { margin: 0.5rem 0; line-height: 1.5; }
+.acciones-resp { gap: 0.5rem; flex-wrap: wrap; }
+.subtotal-op { margin: 0; font-size: 0.95rem; }
+
 /*
  * La pantalla NO se saca del flujo con `position: absolute`.
  *

@@ -27,6 +27,8 @@ public enum PantallasSistema {
     MIS_VENTAS("mis-ventas", "Mis ventas", "Venta"),
     TABLERO("tablero", "Tablero", "Venta"),
     EDITOR("editor", "Editor del plano", "Feria"),
+    CATEGORIAS("categorias", "Categorías", "Feria"),
+    SEGUIMIENTO("seguimiento", "Seguimiento en vivo", "Administracion"),
     VENDEDORES("vendedores", "Vendedores", "Feria"),
     INSCRIPCIONES("inscripciones", "Inscripciones", "Feria"),
     INTERESADOS("interesados", "Interesados en exponer", "Feria"),

@@ -19,6 +19,7 @@ import com.usic.uniFex.model.dao.IVendedorAsignacionDao;
 import com.usic.uniFex.model.entity.Categoria;
 import com.usic.uniFex.model.entity.Puesto;
 import com.usic.uniFex.model.dto.AsignacionPuestoDTO;
+import com.usic.uniFex.model.dto.VendedorDTO;
 import com.usic.uniFex.model.entity.Usuario;
 
 import lombok.RequiredArgsConstructor;
@@ -296,9 +297,29 @@ public class VendedorAsignacionService {
 
     // ===== LISTADO DE VENDEDORES =====
 
+    /**
+     * Los vendedores para la pantalla de administracion, cada uno con su carrera, su area y
+     * el desglose de casetas por categoria.
+     *
+     * Son DOS consultas para toda la tabla, no dos por fila: la de usuarios ya trae persona,
+     * carrera y area con {@code join fetch}, y el desglose de los 35 vendedores viene de una
+     * sola agregacion que se reparte aqui en memoria.
+     */
     @Transactional(readOnly = true)
-    public List<Usuario> listarVendedores() {
-        return usuarioDao.findByRolNombre("ADMINISTRATIVO");
+    public List<VendedorDTO> listarVendedores() {
+        Map<Long, List<VendedorDTO.CategoriaAsignada>> porVendedor = dao
+                .contarPuestosPorCategoriaYVendedor().stream()
+                .collect(Collectors.groupingBy(
+                        f -> numero(f[0]),
+                        java.util.LinkedHashMap::new,
+                        Collectors.mapping(
+                                f -> new VendedorDTO.CategoriaAsignada(
+                                        numero(f[1]), texto(f[2]), ((Number) f[3]).intValue()),
+                                Collectors.toList())));
+
+        return usuarioDao.findByRolNombre("ADMINISTRATIVO").stream()
+                .map(u -> VendedorDTO.de(u, porVendedor.getOrDefault(u.getId(), List.of())))
+                .toList();
     }
     /**
      * Todas las asignaciones con el contacto de su vendedor, para el mapa.

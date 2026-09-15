@@ -3,6 +3,7 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import UiModal from '../components/UiModal.vue';
 import { apiFetch } from '../api';
 import { toast } from '../ui/toast';
+import { useAcademicoStore } from '../stores/academico';
 
 const personas = ref([]);
 const cargando = ref(true);
@@ -10,14 +11,18 @@ const filtro = ref('');
 const guardando = ref(false);
 // Ocupado: evita dobles clicks en las acciones de fila (eliminar).
 const ocupado = ref(false);
+// La carrera es OPCIONAL: en esta tabla hay gente de administracion que no tiene ninguna.
 const modal = reactive({ abierto: false, editando: null, nombre: '', paterno: '', materno: '',
-  ci: '', correo: '', celular: '' });
+  ci: '', correo: '', celular: '', carreraId: '' });
+
+const academico = useAcademicoStore();
 
 const filtradas = computed(() => {
   const q = filtro.value.trim().toLowerCase();
   if (!q) return personas.value;
   return personas.value.filter((p) =>
-    [p.nombreCompleto, p.ci, p.correo].some((c) => (c || '').toLowerCase().includes(q)));
+    [p.nombreCompleto, p.ci, p.correo, p.carrera, p.areaSigla]
+      .some((c) => (c || '').toLowerCase().includes(q)));
 });
 
 async function cargar() {
@@ -34,11 +39,12 @@ async function cargar() {
 
 function abrirCrear() {
   Object.assign(modal, { abierto: true, editando: null, nombre: '', paterno: '', materno: '',
-    ci: '', correo: '', celular: '' });
+    ci: '', correo: '', celular: '', carreraId: '' });
 }
 function abrirEditar(p) {
   Object.assign(modal, { abierto: true, editando: p.id, nombre: p.nombre || '', paterno: p.paterno || '',
-    materno: p.materno || '', ci: p.ci || '', correo: p.correo || '', celular: p.celular || '' });
+    materno: p.materno || '', ci: p.ci || '', correo: p.correo || '', celular: p.celular || '',
+    carreraId: p.carreraId || '' });
 }
 
 async function guardar() {
@@ -53,6 +59,8 @@ async function guardar() {
     const body = {
       nombre: modal.nombre, paterno: modal.paterno, materno: modal.materno,
       ci: modal.ci, correo: modal.correo, celular: modal.celular,
+      // '' es "sin carrera": el <select> devuelve texto y el backend espera un id o null.
+      carreraId: modal.carreraId || null,
     };
     const r = await apiFetch(url, { method: metodo, body: JSON.stringify(body) });
     const d = await r.json();
@@ -82,12 +90,17 @@ async function eliminar(p) {
   }
 }
 
-onMounted(cargar);
+onMounted(() => {
+  cargar();
+  // El catalogo no bloquea el listado: si tarda o falla, la tabla ya esta pintada y lo unico
+  // que queda sin llenarse es el desplegable de carrera.
+  academico.asegurar().catch((e) => toast(e.message, 'error'));
+});
 </script>
 
 <template>
   <div class="fila entre encabezado">
-      <input v-model="filtro" class="control busca" placeholder="Buscar por nombre, C.I. o correo…" />
+      <input v-model="filtro" class="control busca" placeholder="Buscar por nombre, C.I., correo, carrera o área…" />
       <button class="btn btn-primario" @click="abrirCrear">＋ Nueva persona</button>
     </div>
 
@@ -98,12 +111,19 @@ onMounted(cargar);
       <div v-else-if="filtradas.length === 0" class="vacio">No hay personas que mostrar.</div>
       <table v-else class="tabla">
         <thead>
-          <tr><th>Nombre</th><th>C.I.</th><th>Correo</th><th>Celular</th><th>Usuario</th><th></th></tr>
+          <tr><th>Nombre</th><th>C.I.</th><th>Carrera</th><th>Correo</th><th>Celular</th><th>Usuario</th><th></th></tr>
         </thead>
         <tbody>
           <tr v-for="p in filtradas" :key="p.id">
             <td><strong>{{ p.nombreCompleto }}</strong></td>
             <td>{{ p.ci }}</td>
+            <td>
+              <template v-if="p.carrera">
+                <span class="badge badge-info" :title="p.carrera">{{ p.areaSigla }}</span>
+                <span class="carrera-nombre">{{ p.carrera }}</span>
+              </template>
+              <span v-else class="muted">—</span>
+            </td>
             <td>{{ p.correo || '—' }}</td>
             <td>{{ p.celular || '—' }}</td>
             <td>
@@ -129,6 +149,16 @@ onMounted(cargar);
         <label class="campo"><span>Apellido materno</span><input v-model="modal.materno" class="control" /></label>
         <label class="campo"><span>Correo</span><input v-model="modal.correo" type="email" class="control" /></label>
         <label class="campo"><span>Celular</span><input v-model="modal.celular" class="control" /></label>
+        <!-- Agrupado por área: quien asigna piensa "es de ACYT" antes que en la carrera suelta. -->
+        <label class="campo campo-ancho">
+          <span>Carrera</span>
+          <select v-model="modal.carreraId" class="control">
+            <option value="">— Sin carrera —</option>
+            <optgroup v-for="a in academico.areas" :key="a.id" :label="academico.etiquetaArea(a)">
+              <option v-for="c in a.carreras" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+            </optgroup>
+          </select>
+        </label>
       </div>
       <template #pie>
         <button class="btn btn-fantasma" @click="modal.abierto = false">Cancelar</button>
@@ -144,5 +174,8 @@ onMounted(cargar);
 .busca { max-width: 360px; }
 .nota { margin: 0 0 1rem; font-size: 0.85rem; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+/* La carrera ocupa la fila entera: los nombres son largos y partidos a media columna se cortan. */
+.campo-ancho { grid-column: 1 / -1; }
+.carrera-nombre { margin-left: 0.4rem; font-size: 0.85rem; }
 @media (max-width: 520px) { .grid2 { grid-template-columns: 1fr; } }
 </style>

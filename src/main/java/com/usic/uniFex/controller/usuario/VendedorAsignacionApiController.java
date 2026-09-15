@@ -16,8 +16,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.usic.uniFex.model.dto.VendedorDTO;
 import com.usic.uniFex.model.entity.Puesto;
-import com.usic.uniFex.model.entity.Usuario;
 import com.usic.uniFex.model.service.VendedorAsignacionService;
 import com.usic.uniFex.security.JwtUser;
 import com.usic.uniFex.security.Roles;
@@ -45,10 +45,17 @@ public class VendedorAsignacionApiController {
 
     private final VendedorAsignacionService service;
 
-    /** Los vendedores del sistema, para la tabla de administracion. */
+    /**
+     * Los vendedores del sistema, para la tabla de administracion: cada uno con su carrera, su
+     * area y cuantas casetas lleva de cada categoria.
+     *
+     * Devuelve {@link VendedorDTO} y no la entidad {@code Usuario}. Mientras devolvio la
+     * entidad, cada listado sacaba tambien el hash de la contraseña por la red, y la columna
+     * "Categorias" no se podia llenar porque ese dato no esta en el usuario.
+     */
     @GetMapping("/vendedores")
     @PreAuthorize(Roles.ADMINISTRA)
-    public List<Usuario> listarVendedores() {
+    public List<VendedorDTO> listarVendedores() {
         return service.listarVendedores();
     }
 

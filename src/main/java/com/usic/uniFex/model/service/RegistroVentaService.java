@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.Map;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -27,6 +28,7 @@ import com.usic.uniFex.model.IService.IResponsableService;
 import com.usic.uniFex.model.IService.ITipoEntidadService;
 import com.usic.uniFex.model.dao.IEdicionDao;
 import com.usic.uniFex.model.dao.IInscripcionDao;
+import com.usic.uniFex.model.entity.CategoriaOpcion;
 import com.usic.uniFex.model.entity.Edicion;
 import com.usic.uniFex.model.entity.Entidad;
 import com.usic.uniFex.model.entity.Inscripcion;
@@ -63,8 +65,22 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class RegistroVentaService {
 
-    /** Maximo de responsables por entidad: Responsable 1 y Responsable 2, los que atienden. */
-    public static final int MAX_RESPONSABLES = 2;
+    /**
+     * Cuantos responsables da de derecho CADA caseta: dos, o sea dos credenciales.
+     *
+     * Antes el limite era 2 por venta, fijo, sin mirar cuantas casetas se compraban: quien
+     * compraba tres tenia derecho a seis personas y el formulario le dejaba meter dos. El
+     * limite de una venta es {@link #maxResponsables(int)}.
+     */
+    public static final int RESPONSABLES_POR_CASETA = 2;
+
+    /** Lo que se cobra por cada responsable POR ENCIMA del derecho (V34). */
+    public static final java.math.BigDecimal COSTO_RESPONSABLE_EXTRA = new java.math.BigDecimal("15");
+
+    /** Cuantos responsables admite una venta de {@code casetas} casetas. */
+    public static int maxResponsables(int casetas) {
+        return Math.max(1, casetas) * RESPONSABLES_POR_CASETA;
+    }
 
     /** Valor de {@code persona._estado} y {@code responsable._estado} para un responsable. */
     private static final String RESPONSABLE = "RESPONSABLE";
@@ -73,6 +89,8 @@ public class RegistroVentaService {
     private static final String PENDIENTE = "PENDIENTE";
 
     private final IEntidadService entidadService;
+
+    private final CategoriaOpcionService opcionService;
     private final IPersonaService personaService;
     private final IResponsableService responsableService;
     private final IInscripcionService inscripcionService;
@@ -107,7 +125,30 @@ public class RegistroVentaService {
             LocalDate fechaInicio, LocalDate fechaFin,
             List<DatosPersona> responsables,
             String entidadBancaria, Long numComprobante, Boolean pagoContado,
-            List<Long> puestos) {
+            List<Long> puestos,
+            /**
+             * Que opcion de precio se eligio para cada categoria presente en el carrito:
+             * {categoriaId -> opcionId}. Una categoria ausente usa su opcion predeterminada,
+             * que es lo que ocurre con las ventas de antes de que existieran las opciones.
+             */
+            Map<Long, Long> opcionesPorCategoria) {
+
+        /**
+         * Sin elegir opciones: cada categoria se cobra con su predeterminada.
+         *
+         * Existe para que el JSON de un cliente viejo —y las pruebas escritas antes de que
+         * hubiera opciones— sigan valiendo tal cual. No elegir es una respuesta legitima: es lo
+         * que hace un vendedor cuando la categoria solo tiene una forma de venderse.
+         */
+        public NuevaVenta(String entidadNombre, String nit, String descripcion, String objeto,
+                          String representanteLegal, String ciRepresentante, String celularRepresentante,
+                          Long tipoEntidadId, LocalDate fechaInicio, LocalDate fechaFin,
+                          List<DatosPersona> responsables, String entidadBancaria,
+                          Long numComprobante, Boolean pagoContado, List<Long> puestos) {
+            this(entidadNombre, nit, descripcion, objeto, representanteLegal, ciRepresentante,
+                 celularRepresentante, tipoEntidadId, fechaInicio, fechaFin, responsables,
+                 entidadBancaria, numComprobante, pagoContado, puestos, null);
+        }
     }
 
     /** Resultado del registro. `ok=false` trae el motivo en `mensaje`. */
@@ -251,7 +292,8 @@ public class RegistroVentaService {
                         "La caseta " + cual + " ya no esta disponible. Revisa el mapa y vuelve a intentarlo.");
             }
             ocupados.add(puestoId);
-            total = total.add(guardarDetalle(puestoId, inscripcion, tipo, ahora, usuarioId));
+            total = total.add(guardarDetalle(puestoId, inscripcion, tipo, ahora, usuarioId,
+                                             req.opcionesPorCategoria()));
         }
 
         // La huella de auditoria viaja en la misma transaccion: si la venta se revierte
@@ -301,8 +343,12 @@ public class RegistroVentaService {
         if (req.responsables() == null || req.responsables().isEmpty()) {
             return "Hace falta al menos el Responsable 1";
         }
-        if (req.responsables().size() > MAX_RESPONSABLES) {
-            return "Solo se permiten " + MAX_RESPONSABLES + " responsables (Responsable 1 y Responsable 2)";
+        int derecho = maxResponsables(req.puestos().size());
+        if (req.responsables().size() > derecho) {
+            // Los de mas no se registran aqui: se agregan luego desde la ficha de la venta,
+            // donde se cobran y se les pide su comprobante.
+            return req.puestos().size() + " caseta(s) dan derecho a " + derecho
+                 + " responsables. Los adicionales se agregan desde Mis ventas, con su pago.";
         }
         for (DatosPersona p : req.responsables()) {
             if (vacio(p.nombre())) return "Cada responsable necesita nombre";
@@ -381,19 +427,38 @@ public class RegistroVentaService {
      *
      * El costo se copia aqui a proposito: si mañana cambia el precio de la categoria, esta
      * venta debe seguir valiendo lo que valia el dia que se hizo.
+     *
+     * De donde sale ese costo, en orden: la OPCION de precio elegida para la categoria; si no se
+     * eligio ninguna, la opcion predeterminada; y si la categoria todavia no tiene opciones, la
+     * funcion almacenada de siempre. Ese ultimo escalon no es decorativo: es lo que hace que una
+     * base que aun no aplico V33 siga vendiendo al precio correcto.
+     *
+     * La opcion se valida CONTRA LA BASE (`resolverParaVenta`): el id lo escribe el cliente, y
+     * sin esa comprobacion se podria pagar una caseta cara al precio de la opcion barata de otra
+     * categoria.
      */
     private BigDecimal guardarDetalle(Long puestoId, Inscripcion inscripcion, TipoEntidad tipo,
-                                      Date ahora, Long usuarioId) {
+                                      Date ahora, Long usuarioId, Map<Long, Long> elegidas) {
         Puesto puesto = puestoService.findById(puestoId);
-        BigDecimal costo = funciones.obtenerCostoPuesto(
-                tipo.getId(), puesto.getTamano(),
-                puesto.getCategoria() != null ? puesto.getCategoria().getId() : null);
+        Long categoriaId = puesto.getCategoria() != null ? puesto.getCategoria().getId() : null;
+
+        CategoriaOpcion opcion = null;
+        if (categoriaId != null) {
+            opcion = opcionService.resolverParaVenta(
+                    categoriaId, elegidas == null ? null : elegidas.get(categoriaId));
+        }
+
+        BigDecimal costo = opcion != null ? opcion.getPrecio() : null;
+        if (costo == null) {
+            costo = funciones.obtenerCostoPuesto(tipo.getId(), puesto.getTamano(), categoriaId);
+        }
         if (costo == null) costo = BigDecimal.ZERO;
 
         InscripcionPuesto ip = new InscripcionPuesto();
         ip.setPuesto(puesto);
         ip.setInscripcion(inscripcion);
         ip.setCosto(costo);
+        ip.setOpcion(opcion);
         ip.setEstado(ACTIVO);
         sellar(ip, ahora, usuarioId);
         inscripcionPuestoService.save(ip);
