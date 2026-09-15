@@ -84,6 +84,36 @@ async function bajarVirtual(lista) {
   }
 }
 
+async function reenviarWhatsApp(lista) {
+  if (generando.value) return;
+  const aptas = lista.filter((x) => x.listo?.[ID_VIRTUAL]);
+  if (!aptas.length) {
+    alerta('Todavía no se puede reenviar: hace falta el comprobante de pago y la foto del responsable.',
+      'advertencia');
+    return;
+  }
+  generando.value = true;
+  mostrarCarga(aptas.length === 1 ? 'Reenviando por WhatsApp…'
+                                  : `Reenviando ${aptas.length} credenciales por WhatsApp…`);
+  try {
+    const r = await apiFetch('/api/app/credenciales/whatsapp', {
+      method: 'POST',
+      body: JSON.stringify({
+        inscripcionId: aptas[0].inscripcionId,
+        responsables: aptas.map((c) => c.responsableId),
+      }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.ok === false) throw new Error(d.mensaje || 'No se pudo reenviar por WhatsApp');
+    toast(d.mensaje || 'Reenviado por WhatsApp', 'ok');
+  } catch (e) {
+    alerta(e.message, 'error', 0);
+  } finally {
+    ocultarCarga();
+    generando.value = false;
+  }
+}
+
 const cargando = ref(true);
 const credenciales = ref([]);
 const busqueda = ref('');
@@ -491,6 +521,14 @@ onMounted(() => {
                     @click="bajarVirtual(g.responsables)">
               📱 Las {{ g.listasVirtual }}
             </button>
+            <button v-if="g.responsables.length > 1" class="btn btn-sm"
+                    :disabled="generando || !g.listasVirtual"
+                    :title="g.listasVirtual
+                      ? `Reenviar por WhatsApp las ${g.listasVirtual} credenciales de ${g.entidad}`
+                      : 'Ninguna está lista todavía'"
+                    @click="reenviarWhatsApp(g.responsables)">
+              WhatsApp {{ g.listasVirtual }}
+            </button>
           </div>
         </header>
 
@@ -551,6 +589,13 @@ onMounted(() => {
                         ? `Descargar la credencial virtual de ${c.nombre}`
                         : 'Falta el comprobante o la foto'"
                       @click="bajarVirtual([c])">📱 Credencial</button>
+
+              <button class="btn btn-sm"
+                      :disabled="generando || !c.listo?.[ID_VIRTUAL]"
+                      :title="c.listo?.[ID_VIRTUAL]
+                        ? `Reenviar por WhatsApp la credencial de ${c.nombre}`
+                        : 'Falta el comprobante o la foto'"
+                      @click="reenviarWhatsApp([c])">WhatsApp</button>
 
               <!-- El par v-if / v-else tiene que quedar PEGADO: entre medias, Vue se queda sin
                    el v-if al que engancharse y pinta los dos botones en la misma fila. -->

@@ -25,6 +25,7 @@ public enum PantallasSistema {
     MAPA("mapa", "Mapa de ventas", "Venta"),
     VENTA("venta", "Registrar venta", "Venta"),
     MIS_VENTAS("mis-ventas", "Mis ventas", "Venta"),
+    CATALOGO("catalogo", "Catalogo", "Venta"),
     TABLERO("tablero", "Tablero", "Venta"),
     EDITOR("editor", "Editor del plano", "Feria"),
     VENDEDORES("vendedores", "Vendedores", "Feria"),

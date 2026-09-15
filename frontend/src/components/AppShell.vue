@@ -33,6 +33,7 @@ const TODOS = [
   { a: '/mapa', p: 'mapa', icono: '🗺️', txt: 'Mapa de ventas' },
   { a: '/venta', p: 'venta', icono: '🛒', txt: 'Registrar venta' },
   { a: '/mis-ventas', p: 'mis-ventas', icono: '🧾', txt: 'Mis ventas' },
+  { a: '/catalogo', p: 'catalogo', icono: '🏷️', txt: 'Catálogo' },
   { a: '/escaner', p: 'escaner', icono: '📷', txt: 'Escanear credencial' },
   { a: '/notificaciones', p: 'notificaciones', icono: '🔔', txt: 'Notificaciones' },
   { a: '/tablero', p: 'tablero', icono: '📌', txt: 'Tablero' },

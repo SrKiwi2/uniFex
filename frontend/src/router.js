@@ -32,6 +32,7 @@ const router = createRouter({
         { path: 'mapa', component: () => import('./views/Mapa.vue'), meta: { titulo: 'Mapa de ventas', inmersivo: true, requiereAuth: true, pantalla: 'mapa'} },
         { path: 'venta', component: () => import('./views/Venta.vue'), meta: { titulo: 'Registrar venta', requiereAuth: true, pantalla: 'venta'} },
         { path: 'mis-ventas', component: () => import('./views/MisVentas.vue'), meta: { titulo: 'Mis ventas', requiereAuth: true, pantalla: 'mis-ventas'} },
+        { path: 'catalogo', component: () => import('./views/Catalogo.vue'), meta: { titulo: 'Catalogo', requiereAuth: true, pantalla: 'catalogo'} },
         { path: 'tablero', component: () => import('./views/Board.vue'), meta: { titulo: 'Tablero', requiereAuth: true, pantalla: 'tablero'} },
         { path: 'editor', component: () => import('./views/Editor.vue'), meta: { titulo: 'Editor del plano', inmersivo: true, requiereAuth: true, pantalla: 'editor'} },
         { path: 'usuarios', component: () => import('./views/Usuarios.vue'), meta: { titulo: 'Usuarios', requiereAuth: true, pantalla: 'usuarios'} },
