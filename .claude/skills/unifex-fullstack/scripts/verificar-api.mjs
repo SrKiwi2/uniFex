@@ -143,6 +143,38 @@ async function main() {
   paso('El endpoint /ws acepta la conexion WebSocket', await wsResponde(base));
 
   /*
+   * Una peticion NORMAL a /ws —sin cabeceras de upgrade— la rechaza Spring. Eso esta bien; lo
+   * que no estaba bien es que el aviso no dijera de DONDE venia: en produccion salia cada pocos
+   * segundos, sin parar, y no habia forma de saber si era un vendedor con el APK atascado, un
+   * monitor de red o alguien escaneando el puerto. Ahora lo dice `HandshakeWebSocketLog`.
+   *
+   * Las dos cosas van ATADAS: el mensaje original de Spring esta apagado en las propiedades
+   * porque el interceptor lo sustituye. Si alguien quita el interceptor y deja los loggers en
+   * OFF, los handshakes fallidos dejan de verse EN NINGUN SITIO — que es peor que el ruido
+   * original. Esta comprobacion existe para que eso no pase en silencio.
+   */
+  {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const { dirname, resolve } = await import('node:path');
+    const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..') + '/';
+    const leer = (x) => { try { return readFileSync(RAIZ + x, 'utf8'); } catch { return ''; } };
+
+    const config = leer('src/main/java/com/usic/uniFex/Config/WebSocketConfig.java');
+    const props = leer('src/main/resources/application.properties');
+    const hayInterceptor = config.includes('HandshakeWebSocketLog');
+    const apagado = /DefaultHandshakeHandler=OFF/.test(props);
+
+    const plano = await pedir(base, '/ws');
+    paso('un handshake mal formado se rechaza limpio, sin reventar el servidor',
+         plano.status === 400, `status=${plano.status}`);
+    paso('el interceptor que identifica al culpable sigue puesto', hayInterceptor);
+    paso('y el aviso de Spring solo esta apagado si ese interceptor existe',
+         hayInterceptor || !apagado,
+         apagado && !hayInterceptor ? 'los handshakes fallidos ya no se ven en ningun sitio' : '');
+  }
+
+  /*
    * 9. Lo que NO existe tiene que responder 404, nunca una redireccion al login.
    *
    * Un 404 dentro de una ruta permitida se reenvia a /error, y mientras /error exigio sesion

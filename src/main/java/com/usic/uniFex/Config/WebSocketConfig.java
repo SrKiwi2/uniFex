@@ -89,6 +89,11 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         // Si alguna vez una red bloquea el upgrade a WebSocket, anadir .withSockJS() aqui y
         // devolver el webSocketFactory en frontend/src/ws.js.
         registry.addEndpoint("/ws")
+                // Quien llame a /ws sin cabeceras de upgrade queda identificado en el registro.
+                // Sin esto, el "Handshake failed due to invalid Upgrade header: null" de Spring
+                // se repetia cada pocos segundos en produccion sin decir de donde venia, que es
+                // ruido que no deja actuar. Ver HandshakeWebSocketLog.
+                .addInterceptors(new HandshakeWebSocketLog())
                 .setAllowedOriginPatterns("*"); // dev: web y app en otros origenes
     }
 
