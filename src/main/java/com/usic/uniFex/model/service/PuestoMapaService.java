@@ -248,4 +248,68 @@ public class PuestoMapaService {
         return new ResultadoRenumeracion(true,
                 "Numeradas " + cambiados.size() + " caseta(s)", cambiados);
     }
+
+    /**
+     * Un precio propio pedido para una caseta. {@code precio} nulo = quitarselo y volver al
+     * de su categoria, que es una orden tan legitima como ponerlo.
+     */
+    public record PrecioCaseta(Long id, java.math.BigDecimal precio) {
+    }
+
+    /**
+     * Pone el precio propio de un grupo de casetas (V37).
+     *
+     * A diferencia de renumerar, esto NO es todo o nada, y la diferencia es deliberada:
+     * renumerar es una permutacion —un numero repetido a mitad de camino deja el plano
+     * incoherente— mientras que los precios son independientes entre si. Aqui, si una caseta
+     * del lote ya no existe, las demas se guardan igual y se informa de cuantas se tocaron.
+     * Rechazar las cuarenta porque una se anulo hace media hora seria peor.
+     *
+     * Lo que si se valida antes de escribir nada es el propio numero: un precio negativo no
+     * significa nada y solo puede venir de un tecleo. Ahi si se rechaza el lote entero, porque
+     * es un error de quien lo manda y no una carrera con otro usuario.
+     *
+     * <b>Se reprecian tambien las casetas vendidas y reservadas, a proposito.</b> El precio de
+     * la caseta es el VIGENTE, el de la proxima venta; el de una venta ya hecha esta congelado
+     * en {@code inscripcion_puesto.costo} y no lo toca nadie desde aqui. Bloquear la edicion
+     * de una caseta vendida no protegeria ese importe —ya esta a salvo— y en cambio impediria
+     * corregir el precio de cara a la siguiente edicion de la feria.
+     */
+    @Transactional
+    public ResultadoRenumeracion actualizarPrecios(List<PrecioCaseta> cambios, Long usuarioId) {
+        if (cambios == null || cambios.isEmpty()) {
+            return new ResultadoRenumeracion(false, "No se indico ninguna caseta", List.of());
+        }
+
+        Map<Long, java.math.BigDecimal> pedidos = new LinkedHashMap<>();
+        for (PrecioCaseta c : cambios) {
+            if (c == null || c.id() == null) {
+                return new ResultadoRenumeracion(false, "Llego una caseta sin identificador", List.of());
+            }
+            if (c.precio() != null && c.precio().signum() < 0) {
+                return new ResultadoRenumeracion(false, "Un precio no puede ser negativo", List.of());
+            }
+            if (pedidos.containsKey(c.id())) {
+                return new ResultadoRenumeracion(false, "La misma caseta viene dos veces en el lote", List.of());
+            }
+            // Se normaliza a 2 decimales, los mismos que guarda la columna: sin esto, mandar
+            // 1000.999 se guardaria redondeado y el cliente seguiria mostrando lo que escribio,
+            // asi que la pantalla y la base dirian cosas distintas hasta la siguiente recarga.
+            pedidos.put(c.id(), c.precio() == null
+                    ? null
+                    : c.precio().setScale(2, java.math.RoundingMode.HALF_UP));
+        }
+
+        List<Long> cambiados = new ArrayList<>();
+        for (Map.Entry<Long, java.math.BigDecimal> e : pedidos.entrySet()) {
+            if (puestoDao.actualizarPrecio(e.getKey(), e.getValue(), usuarioId) > 0) {
+                cambiados.add(e.getKey());
+            }
+        }
+
+        log.info("Precios propios: {} casetas cambiadas de {} enviadas (usuario {})",
+                cambiados.size(), pedidos.size(), usuarioId);
+        return new ResultadoRenumeracion(true,
+                "Precio guardado en " + cambiados.size() + " caseta(s)", cambiados);
+    }
 }

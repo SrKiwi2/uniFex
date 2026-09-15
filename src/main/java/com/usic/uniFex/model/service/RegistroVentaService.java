@@ -427,10 +427,22 @@ public class RegistroVentaService {
      * El costo se copia aqui a proposito: si mañana cambia el precio de la categoria, esta
      * venta debe seguir valiendo lo que valia el dia que se hizo.
      *
-     * De donde sale ese costo, en orden: la OPCION de precio elegida para la categoria; si no se
-     * eligio ninguna, la opcion predeterminada; y si la categoria todavia no tiene opciones, la
-     * funcion almacenada de siempre. Ese ultimo escalon no es decorativo: es lo que hace que una
-     * base que aun no aplico V33 siga vendiendo al precio correcto.
+     * De donde sale ese costo, en orden: el PRECIO PROPIO de la caseta (V37); la OPCION de
+     * precio elegida para la categoria; si no se eligio ninguna, la opcion predeterminada; y si
+     * la categoria todavia no tiene opciones, la funcion almacenada de siempre. Ese ultimo
+     * escalon no es decorativo: es lo que hace que una base que aun no aplico V33 siga
+     * vendiendo al precio correcto.
+     *
+     * <b>El precio propio va PRIMERO y gana a la opcion.</b> Es lo que se pidio: se crea la
+     * categoria con su precio, se colocan sus casetas, y despues algunas valen distinto; hay
+     * que poder tocar esas sin alterar las demas. La regla es la mas predecible que hay —el
+     * precio de la caseta ES el precio— y se lee igual en el mapa, en el carrito y aqui.
+     *
+     * Cuando manda el precio propio, la opcion se guarda como NULL <b>a proposito</b>.
+     * {@code costo} dice CUANTO se cobro y {@code id_categoria_opcion} dice POR QUE: apuntar a
+     * una opcion que no determino el precio seria escribir un porque falso, y dentro de un año
+     * alguien leeria "con tarima, 1.000" sobre una opcion de 1.200 y lo tomaria por un error.
+     * Un costo con la opcion vacia se lee sin ambiguedad: "esta caseta tenia precio propio".
      *
      * La opcion se valida CONTRA LA BASE (`resolverParaVenta`): el id lo escribe el cliente, y
      * sin esa comprobacion se podria pagar una caseta cara al precio de la opcion barata de otra
@@ -443,11 +455,19 @@ public class RegistroVentaService {
 
         CategoriaOpcion opcion = null;
         if (categoriaId != null) {
+            // Se resuelve SIEMPRE, tambien cuando hay precio propio: es lo que valida que el id
+            // que mando el cliente sea de esa categoria. Saltarse la comprobacion porque "total,
+            // no se va a usar" dejaria pasar sin protestar una opcion ajena.
             opcion = opcionService.resolverParaVenta(
                     categoriaId, elegidas == null ? null : elegidas.get(categoriaId));
         }
 
-        BigDecimal costo = opcion != null ? opcion.getPrecio() : null;
+        BigDecimal costo = null;
+        if (puesto.getPrecio() != null) {
+            costo = puesto.getPrecio();
+            opcion = null;   // el porque es "precio propio", no una opcion de la categoria
+        }
+        if (costo == null) costo = opcion != null ? opcion.getPrecio() : null;
         if (costo == null) {
             costo = funciones.obtenerCostoPuesto(tipo.getId(), puesto.getTamano(), categoriaId);
         }

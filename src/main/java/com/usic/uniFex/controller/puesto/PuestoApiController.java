@@ -413,6 +413,35 @@ public class PuestoApiController {
     }
 
     /**
+     * Pone el precio propio de un grupo de casetas (V37).
+     *
+     * El caso: se crea la categoria con su precio, se colocan todas sus casetas, y despues
+     * algunas valen distinto. Sin esto, la unica forma de cambiarle el precio a una era
+     * cambiarselo a la categoria entera, es decir, a todas.
+     *
+     * Va en lote porque asi se usa —se repasan las casetas de una categoria de una sentada— y
+     * porque la pantalla de Puestos ya guarda la numeracion del mismo modo.
+     *
+     * Un {@code precio} nulo devuelve la caseta al precio de su categoria. Es una orden, no un
+     * campo que falte: quien quita un precio especial quiere exactamente eso.
+     *
+     * Difunde, igual que el numero: el precio se lee en el mapa y en el carrito de todos los
+     * vendedores, y sin difundirlo seguirian vendiendo al importe viejo hasta recargar.
+     */
+    @PatchMapping("/precios")
+    @PreAuthorize(Roles.EDITA_PLANO)
+    public ResponseEntity<Map<String, Object>> actualizarPrecios(
+            @RequestBody List<PuestoMapaService.PrecioCaseta> cambios) {
+        Long usuarioId = usuarioActual();
+        if (usuarioId == null) return noAutenticado();
+
+        PuestoMapaService.ResultadoRenumeracion r = mapaService.actualizarPrecios(cambios, usuarioId);
+        if (r.ok()) publisher.publicarVarios(r.cambiados());
+        return ResponseEntity.status(r.ok() ? 200 : 409).body(Map.<String, Object>of(
+                "ok", r.ok(), "mensaje", r.mensaje(), "cambiados", r.cambiados().size()));
+    }
+
+    /**
      * Bloqueo por reparacion (LIBRE -> BLOQUEADO). No es una anulacion: la caseta sigue activa
      * y se ve gris en el mapa, pero no se puede reservar, liberar ni confirmar. Solo se bloquea
      * una caseta libre: nunca roba una reserva en curso (T) ni una venta (O).

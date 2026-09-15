@@ -77,12 +77,18 @@ function opcionDe(categoriaId) {
 }
 
 /**
- * Lo que cuesta una caseta segun la opcion elegida para su categoria.
+ * Lo que cuesta una caseta.
  *
- * Si la categoria no tiene opciones se usa el precio que trae la caseta, que es de donde salia
- * antes: una base sin la migracion de opciones sigue vendiendo bien.
+ * Orden: el PRECIO PROPIO de la caseta si lo tiene (V37), y si no la opcion elegida para su
+ * categoria. Si la categoria tampoco tiene opciones se usa el precio que trae la caseta, que
+ * es de donde salia antes: una base sin la migracion de opciones sigue vendiendo bien.
+ *
+ * El propio gana a la opcion, y es el mismo orden que aplica el servidor en
+ * `RegistroVentaService.guardarDetalle`. Tiene que ser el mismo: si aqui se cobrara la opcion
+ * y alli el precio propio, el vendedor le canta un total al cliente y el recibo sale con otro.
  */
 function precioDe(p) {
+  if (p.precioPropio) return Number(p.precio || 0);
   const o = opcionDe(p.categoriaId);
   return Number(o ? o.precio : (p.precio || 0));
 }
@@ -119,6 +125,17 @@ const porCategoria = computed(() => {
   // Los numeros, en orden: "6, 7 y 14" se lee; "14, 6 y 7" hace dudar de si falta alguna.
   for (const g of m.values()) {
     g.casetas.sort((a, b) => String(a.codigo).localeCompare(String(b.codigo), 'es', { numeric: true }));
+    /*
+     * Las que llevan precio propio (V37), y si por eso el grupo tiene precios mezclados.
+     *
+     * Hace falta porque el resumen decia "2 × 900 Bs = 1.800" dividiendo el subtotal entre las
+     * casetas. Con una a 800 y otra a 1.000 eso da un promedio que NO es el precio de ninguna
+     * de las dos, y es justo el numero que el vendedor le canta al cliente. Cuando los precios
+     * no son todos iguales hay que desglosar en vez de promediar.
+     */
+    g.propias = g.casetas.filter((c) => c.precioPropio);
+    const precios = new Set(g.casetas.map((c) => precioDe(c)));
+    g.preciosMezclados = precios.size > 1;
   }
   return [...m.values()];
 });
@@ -810,7 +827,11 @@ onUnmounted(() => {
           Solo aparece si hay algo que elegir: con una sola opcion no hay decision, y una fila
           de radios con un unico boton solo estorba.
         -->
-        <div v-if="porCategoria.some((g) => g.opciones.length > 1)" class="opciones-precio">
+        <!-- También cuando hay precios propios, aunque la categoría tenga una sola opción: ese
+             es el caso corriente (una categoría con su precio y unas pocas casetas distintas),
+             y sin esto el desglose no se vería nunca justo cuando más falta hace. -->
+        <div v-if="porCategoria.some((g) => g.opciones.length > 1 || g.preciosMezclados || g.propias.length)"
+             class="opciones-precio">
           <h3 class="titulo-bloque">Qué se está vendiendo</h3>
           <div v-for="g in porCategoria" :key="'op-' + g.categoria" class="grupo-opcion">
             <div class="cab-grupo-op">
@@ -835,8 +856,30 @@ onUnmounted(() => {
               {{ bs(opcionDe(g.categoriaId)?.precio ?? g.casetas[0]?.precio) }} Bs por caseta
             </p>
 
+            <!-- Con precio propio, elegir otra opción NO mueve esa caseta. Sin decirlo, el
+                 vendedor toca "con tarima", ve que el total no sube lo que esperaba y no
+                 tiene forma de saber por qué. -->
+            <p v-if="g.propias.length" class="aviso-propio">
+              Caseta{{ g.propias.length === 1 ? '' : 's' }}
+              {{ listar(g.propias.map((c) => c.codigo)) }}
+              {{ g.propias.length === 1 ? 'tiene' : 'tienen' }} precio propio y no
+              {{ g.propias.length === 1 ? 'cambia' : 'cambian' }} con la opción.
+            </p>
+
+            <!-- Precios mezclados: se desglosa. Un "2 × 900 Bs" sacado de promediar 800 y
+                 1.000 es un número que no le corresponde a ninguna de las dos casetas. -->
+            <ul v-if="g.preciosMezclados" class="desglose-op">
+              <li v-for="c in g.casetas" :key="c.id">
+                <span>Caseta {{ c.codigo }}<span v-if="c.precioPropio" class="marca-propio">precio propio</span></span>
+                <strong>{{ bs(precioDe(c)) }} Bs</strong>
+              </li>
+            </ul>
+
             <p class="subtotal-op">
-              {{ g.casetas.length }} × {{ bs(g.subtotal / (g.casetas.length || 1)) }} Bs =
+              <template v-if="!g.preciosMezclados">
+                {{ g.casetas.length }} × {{ bs(g.subtotal / (g.casetas.length || 1)) }} Bs =
+              </template>
+              <template v-else>Subtotal: </template>
               <strong>{{ bs(g.subtotal) }} Bs</strong>
             </p>
           </div>
@@ -1126,6 +1169,25 @@ onUnmounted(() => {
 .grupo-opcion { display: flex; flex-direction: column; gap: 0.45rem; }
 .cab-grupo-op { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
 .elecciones { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+/* Precio propio: ámbar, el mismo color con el que el resto de la aplicación dice "ojo con
+   esto". No es un error —el precio especial es intencional— pero sí algo que hay que leer
+   antes de cantar el total. */
+.aviso-propio {
+  margin: 0; font-size: 0.88rem; line-height: 1.4;
+  color: var(--tramite, #d97706);
+}
+.desglose-op { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+.desglose-op li {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem;
+  font-size: 0.92rem;
+}
+.marca-propio {
+  margin-left: 0.4rem; padding: 0.05rem 0.4rem; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 700;
+  color: var(--tramite, #d97706);
+  border: 1px solid color-mix(in srgb, var(--tramite, #d97706) 45%, transparent);
+}
 .opcion {
   flex: 1 1 160px; min-height: 56px; display: flex; flex-direction: column; justify-content: center;
   gap: 0.15rem; padding: 0.5rem 0.75rem; border-radius: 10px; cursor: pointer;

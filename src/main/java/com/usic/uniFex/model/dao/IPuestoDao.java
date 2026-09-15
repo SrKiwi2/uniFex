@@ -220,6 +220,27 @@ List<Puesto> findLibresPorCategoriaOrdenados(@Param("estadoPuesto") String estad
                          @Param("usuarioId") Long usuarioId);
 
     /**
+     * Pone (o quita) el precio propio de una caseta (V37).
+     *
+     * Un {@code null} en {@code precio} NO es un vacio que haya que ignorar: es la orden de
+     * devolver la caseta al precio de su categoria. Por eso este UPDATE escribe el valor tal
+     * cual y no lleva COALESCE — con COALESCE, "quitarle el precio especial" no haria nada y
+     * la caseta se quedaria con el importe viejo para siempre.
+     *
+     * El {@code CAST} es necesario: sin el, PostgreSQL no sabe de que tipo es el parametro
+     * cuando llega nulo y falla con "could not determine data type".
+     *
+     * No se toca una caseta anulada, igual que en el resto de escrituras del plano.
+     */
+    @Modifying(clearAutomatically = true)
+    @Query(value = "UPDATE puesto SET precio = CAST(:precio AS numeric), "
+           + "\"_fecha_modificacion\" = now(), \"_modificacion_id_usuario\" = :usuarioId "
+           + "WHERE id = :id AND (\"_estado\" IS NULL OR \"_estado\" <> 'X')", nativeQuery = true)
+    int actualizarPrecio(@Param("id") Long id,
+                         @Param("precio") java.math.BigDecimal precio,
+                         @Param("usuarioId") Long usuarioId);
+
+    /**
      * De un grupo de casetas, cuales NO se pueden renumerar porque arrastran una venta.
      *
      * El numero de la caseta no se copia a la venta: se lee en vivo con un JOIN a puesto

@@ -39,8 +39,13 @@ try {
       body: JSON.stringify({ usuario: ${JSON.stringify(USUARIO)}, contrasena: ${JSON.stringify(CLAVE)} }) });
     if (!r.ok) return 'HTTP ' + r.status;
     const d = await r.json();
+    // Las claves con la forma que espera stores/auth.js: "usuario" es el NOMBRE de usuario,
+    // una cadena. Guardando ahi el objeto entero, la cabecera pinta el JSON —con el token
+    // dentro— en mitad de la pantalla. (Sin acentos graves: esto vive dentro de una plantilla.)
     localStorage.setItem('token', d.token);
-    localStorage.setItem('usuario', JSON.stringify(d));
+    localStorage.setItem('usuario', String(d.usuario || ''));
+    localStorage.setItem('rol', String(d.rol || ''));
+    if (d.id != null) localStorage.setItem('id', String(d.id));
     return 'ok';
   })()`);
   ok(entro === 'ok', 'entra con la sesion de prueba', String(entro));
