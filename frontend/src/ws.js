@@ -82,9 +82,10 @@ export function crearClientePuestos(onEstado, onRechazo, onConectado, onNotifica
           /* ignora mensajes malformados */
         }
       });
-      // Cambios de asignacion: que caseta pasa a llevar quien. Llega el DELTA —solo las
-      // casetas que cambiaron— para que reasignar tres no cueste la lista entera a cada
-      // movil conectado. Una caseta sin vendedor viaja con vendedorId nulo.
+      // Cambios de asignacion: que caseta pasa a llevar quien. Llegan solo las casetas que
+      // cambiaron —no la lista entera— pero de cada una viene su lista COMPLETA de vendedores,
+      // porque una caseta puede llevarla mas de uno y un "a A ya no" no dice como queda.
+      // Una caseta que no lleva nadie viaja con vendedorId nulo.
       if (onAsignaciones) {
         client.subscribe('/topic/asignaciones', (msg) => {
           try {

@@ -32,6 +32,10 @@ import lombok.RequiredArgsConstructor;
  * seleccionarle 10 casetas no servia de nada porque le seguian saliendo todas). Se retiraron en
  * V23: si se le habilitan 10 casetas, ve 10 y vende 10.
  *
+ * **La misma caseta puede habilitarse a varios vendedores** (V32): varios atienden el mismo
+ * sector y registra quien cierra el trato primero. Que no se venda dos veces lo garantiza la
+ * reserva, no esta pantalla.
+ *
  * El mapa filtrado del vendedor lo sirve PuestoApiController, que usa este mismo servicio.
  */
 @RestController
@@ -87,9 +91,11 @@ public class VendedorAsignacionApiController {
             cuerpo.put("asignadas", r.asignadas());
             cuerpo.put("quitadas", r.quitadas());
             cuerpo.put("noDisponibles", r.noDisponibles());
+            // El motivo ya no puede ser "es de otro": desde V32 las casetas se comparten. Si
+            // algo no quedo es que esa caseta no existe o esta anulada.
             cuerpo.put("mensaje", r.noDisponibles().isEmpty()
                     ? "Casetas habilitadas"
-                    : r.noDisponibles().size() + " caseta(s) ya son de otro vendedor y no se tomaron");
+                    : r.noDisponibles().size() + " caseta(s) ya no existen y no se habilitaron");
             return ResponseEntity.ok(cuerpo);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("ok", false, "mensaje", e.getMessage()));

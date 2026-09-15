@@ -13,10 +13,13 @@ import com.usic.uniFex.model.entity.Puesto;
  * Hay UNA sola via de habilitacion: las casetas que se le seleccionan. Hubo otra por categoria
  * entera y se contradecian —con la categoria asignada, seleccionarle 10 casetas no servia de nada
  * porque le seguian saliendo todas—, asi que se retiro en V23.
+ *
+ * Una caseta puede estar habilitada a VARIOS vendedores (V32). La habilitacion dice quien puede
+ * intentar venderla; quien se la queda lo decide la reserva, no esta tabla.
  */
 public interface IVendedorAsignacionDao {
 
-    /** Habilita una caseta. Si ya es de otro vendedor no hace nada (indice unico de V20). */
+    /** Habilita una caseta a este vendedor. Repetir la misma pareja no hace nada (V32). */
     void asignarPuesto(Long usuarioId, Long puestoId, Long adminId);
 
     /** Retira una caseta de un vendedor. */
@@ -41,8 +44,11 @@ public interface IVendedorAsignacionDao {
     boolean vendedorTienePuesto(Long usuarioId, Long puestoId);
 
     /**
-     * Catalogo para el modal de habilitacion: cada caseta viva con su categoria y su duenio.
+     * Catalogo para el modal de habilitacion: cada caseta viva con su categoria y quien la lleva.
      * Columnas: id, codigo, categoriaId, categoriaNombre, estadoPuesto, usuarioId, username.
+     *
+     * Una fila POR PAREJA (caseta, vendedor) desde V32, porque una caseta puede llevarla mas de
+     * uno; la caseta sin habilitar sale una vez con las dos ultimas columnas en null.
      */
     List<Object[]> findCatalogoAsignable();
 
@@ -55,6 +61,8 @@ public interface IVendedorAsignacionDao {
     /**
      * Todas las asignaciones vigentes con el contacto del vendedor, para el mapa.
      * Columnas: idPuesto, idUsuario, nombre, paterno, materno, celular, username.
+     *
+     * Una caseta compartida aparece una vez por cada vendedor que la lleva.
      */
     List<Object[]> findAsignacionesConVendedor();
 }

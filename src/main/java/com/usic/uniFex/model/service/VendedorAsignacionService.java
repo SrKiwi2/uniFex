@@ -32,8 +32,13 @@ import lombok.RequiredArgsConstructor;
  * hubo un "cupo" aparte, que era una tercera forma de decir lo mismo y podia contradecir a la
  * seleccion. Las dos se retiraron en V23: si se le habilitan 10 casetas, ve 10 y vende 10.
  *
- * Una caseta habilitada es de UN solo vendedor (indice unico de V20), y **sin habilitaciones no
- * ve ninguna**: nadie vende hasta que administracion se las selecciona.
+ * **Una caseta puede estar habilitada a VARIOS vendedores** (V32). Lo contrario fue la regla
+ * hasta V20 y estorbaba: en la feria varios vendedores atienden el mismo sector, y quien cierra
+ * el trato primero registra. Que no se venda dos veces NO lo garantiza esta tabla, lo garantiza
+ * la maquina de estados de la caseta: el primero que reserva se lleva la fila y al resto les sale
+ * ocupada. Habilitar es dar permiso para intentarlo, no repartir propiedad.
+ *
+ * **Sin habilitaciones no ve ninguna**: nadie vende hasta que administracion se las selecciona.
  */
 @Service
 @RequiredArgsConstructor
@@ -78,9 +83,18 @@ public class VendedorAsignacionService {
         return dao.findPuestosVisiblesParaVendedor(vendedorId);
     }
 
-    /** Una caseta tal como la ve el modal de asignacion. */
+    /** Un vendedor que lleva una caseta, como lo lista el modal. */
+    public record Habilitado(Long id, String username) {
+    }
+
+    /**
+     * Una caseta tal como la ve el modal de habilitacion.
+     *
+     * `habilitados` es una LISTA, no un duenio suelto: desde V32 la misma caseta puede llevarla
+     * mas de un vendedor. Vacia significa que aun no la lleva nadie.
+     */
     public record CasetaAsignable(Long id, String codigo, Long categoriaId, String categoria,
-                                  String estado, Long asignadoAId, String asignadoA) {
+                                  String estado, List<Habilitado> habilitados) {
     }
 
     /** Cuantas casetas se sumaron y cuantas se quitaron de UNA categoria. */
@@ -103,11 +117,19 @@ public class VendedorAsignacionService {
      */
     @Transactional(readOnly = true)
     public List<CasetaAsignable> catalogoAsignable() {
-        return dao.findCatalogoAsignable().stream()
-                .map(x -> new CasetaAsignable(
-                        numero(x[0]), texto(x[1]), numero(x[2]), texto(x[3]), texto(x[4]),
-                        numero(x[5]), texto(x[6])))
-                .toList();
+        // La consulta trae una fila por PAREJA (caseta, vendedor), asi que una caseta compartida
+        // llega repetida. Se agrupa aqui conservando el orden de la consulta —por categoria y
+        // codigo— que es el orden en que la pantalla las pinta.
+        Map<Long, CasetaAsignable> porCaseta = new java.util.LinkedHashMap<>();
+        for (Object[] x : dao.findCatalogoAsignable()) {
+            Long id = numero(x[0]);
+            CasetaAsignable caseta = porCaseta.computeIfAbsent(id, k -> new CasetaAsignable(
+                    id, texto(x[1]), numero(x[2]), texto(x[3]), texto(x[4]),
+                    new java.util.ArrayList<>()));
+            Long vendedorId = numero(x[5]);
+            if (vendedorId != null) caseta.habilitados().add(new Habilitado(vendedorId, texto(x[6])));
+        }
+        return List.copyOf(porCaseta.values());
     }
 
     /**
@@ -117,8 +139,10 @@ public class VendedorAsignacionService {
      * mandarlo entero evita el ir y venir de una peticion por clic. El servicio calcula el
      * cambio para poder informarlo.
      *
-     * Una caseta que entretanto tomo otro vendedor no se roba: se salta y vuelve en
-     * {@code noDisponibles}, para que la pantalla lo diga en vez de mentir con un exito.
+     * {@code noDisponibles} ya no puede traer "es de otro vendedor": desde V32 las casetas se
+     * comparten y no hay nada que robar. Lo que trae es una caseta que se pidio y no quedo: no
+     * existe, o esta anulada. Se informa igual, porque un guardado que dice "listo" habiendo
+     * ignorado tres casetas es peor que uno que lo cuenta.
      */
     @Transactional
     public ResultadoAsignacion reemplazarPuestos(Long vendedorId, List<Long> puestoIds, Long adminId) {
@@ -244,8 +268,10 @@ public class VendedorAsignacionService {
      * Suelta todo lo que tenia asignado un vendedor. La llama la baja del usuario.
      *
      * Hace falta porque la baja es LOGICA: la fila del usuario se queda, y sus casetas con ella.
-     * Desde V20 una caseta asignada es exclusiva, asi que las de un vendedor eliminado quedaban
-     * bloqueadas para siempre, invisibles para todos y sin pantalla desde la que soltarlas.
+     * Mientras una caseta fue de un solo vendedor (V20), las de uno eliminado quedaban bloqueadas
+     * para siempre, invisibles para todos y sin pantalla desde la que soltarlas. Desde V32 ya no
+     * bloquean a nadie, pero siguen sobrando: su nombre y su telefono saldrian en el mapa como
+     * contacto de alguien que ya no esta.
      * Las asignaciones son configuracion, no historia: quien vendio que vive en la inscripcion.
      */
     @Transactional
@@ -298,23 +324,32 @@ public class VendedorAsignacionService {
      * Dos decisiones que importan:
      *
      * 1. Se RELEE el estado real de esas casetas en vez de deducirlo de lo que se acaba de
-     *    hacer. La tabla permite que una caseta este habilitada a mas de un vendedor (el
-     *    UNIQUE es sobre el par), asi que "se la quite a A" no significa "se quedo sin
-     *    dueño": podria seguir siendo de B. Deducirlo pintaria gris una caseta vendible.
+     *    hacer. Una caseta puede estar habilitada a varios vendedores (V32), asi que
+     *    "se la quite a A" no significa "se quedo sin nadie": puede seguir llevandola B.
+     *    Deducirlo pintaria gris una caseta que el otro si puede vender.
      *
-     * 2. Se publica DESPUES del commit. Publicar dentro de la transaccion y que esta falle
+     * 2. Se manda la lista COMPLETA de habilitados de cada caseta tocada, no el cambio suelto.
+     *    Un mensaje "A ya no la lleva" obligaria al cliente a recomponer la lista y a acertar
+     *    con el orden de llegada; mandando quien la lleva AHORA, el cliente solo reemplaza.
+     *    Una caseta que se quedo sin nadie viaja como una fila con los campos en null, que es
+     *    la forma que el cliente ya entiende como "borra lo que tengas de esta".
+     *
+     * 3. Se publica DESPUES del commit. Publicar dentro de la transaccion y que esta falle
      *    despues dejaria a los moviles mostrando una asignacion que nunca existio. Es la
      *    misma regla que sigue el estado de las casetas.
      */
     private void difundirCambios(List<Long> puestoIds) {
         if (puestoIds == null || puestoIds.isEmpty()) return;
 
-        Map<Long, AsignacionPuestoDTO> vigentes = asignacionesConVendedor().stream()
-                .filter(a -> puestoIds.contains(a.puestoId()))
-                .collect(Collectors.toMap(AsignacionPuestoDTO::puestoId, a -> a, (x, y) -> x));
+        Set<Long> tocadas = Set.copyOf(puestoIds);
+        Map<Long, List<AsignacionPuestoDTO>> vigentes = asignacionesConVendedor().stream()
+                .filter(a -> tocadas.contains(a.puestoId()))
+                .collect(Collectors.groupingBy(AsignacionPuestoDTO::puestoId));
 
-        List<AsignacionPuestoDTO> cambios = puestoIds.stream()
-                .map(id -> vigentes.getOrDefault(id, new AsignacionPuestoDTO(id, null, null, null)))
+        List<AsignacionPuestoDTO> cambios = puestoIds.stream().distinct()
+                .flatMap(id -> vigentes.containsKey(id)
+                        ? vigentes.get(id).stream()
+                        : Stream.of(new AsignacionPuestoDTO(id, null, null, null)))
                 .toList();
 
         if (TransactionSynchronizationManager.isSynchronizationActive()) {

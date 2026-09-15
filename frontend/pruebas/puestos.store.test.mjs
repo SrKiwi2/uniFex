@@ -114,6 +114,63 @@ test('un broadcast actualiza, agrega y da de baja casetas', async () => {
   assert.equal(t.puestos.length, 1, 'una caseta anulada desaparece');
 });
 
+/*
+ * Lo que llega del servidor se aplica AGRUPADO, un repintado por fotograma.
+ *
+ * Meter un lote al carrito son N mensajes, cada uno en su turno del bucle de eventos, y sin
+ * agrupar cada uno dispara su pasada de render sobre las ~400 casetas del plano. Medido con la
+ * CPU frenada 6x, un lote de 20 tardaba 309 ms en terminar de marcarse en la pantalla del otro
+ * vendedor, aunque el aviso hubiera llegado a los 16 ms.
+ */
+test('una ráfaga del servidor cuesta DOS pasadas, no una por mensaje', async () => {
+  const pendientes = [];
+  const rafOriginal = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = (fn) => { pendientes.push(fn); return pendientes.length; };
+  try {
+    const t = nuevaTienda();
+    respuesta = [caseta(1), caseta(2), caseta(3)];
+    await t.asegurar();
+
+    empujar(caseta(1, { estado: 'T' }));
+    empujar(caseta(2, { estado: 'T' }));
+    empujar(caseta(3, { estado: 'T' }));
+
+    assert.equal(pendientes.length, 1,
+      'tres mensajes abren UNA sola ventana, no tres');
+    assert.equal(t.puestos.find((p) => p.id === 1).estado, 'T',
+      'el primero se aplica en el acto: una caseta suelta no espera un fotograma');
+    assert.equal(t.puestos.filter((p) => p.estado === 'T').length, 1,
+      'y los de detras esperan a la ventana en vez de repintar cada uno');
+
+    pendientes.pop()();
+    assert.equal(t.puestos.filter((p) => p.estado === 'T').length, 3,
+      'al cerrarse la ventana entran los dos restantes de una vez');
+
+    // Gana el ultimo mensaje de cada caseta: cada uno trae el estado completo.
+    empujar(caseta(1, { estado: 'O' }));   // este abre ventana y se aplica ya
+    empujar(caseta(1, { estado: 'L' }));   // este se encola
+    empujar(caseta(1, { estado: 'X' }));   // y pisa al anterior en la cola
+    pendientes.pop()();
+    assert.equal(t.puestos.find((p) => p.id === 1).estado, 'X',
+      'de varios mensajes de la misma caseta gana el mas nuevo');
+
+    /*
+     * Un cambio local no puede quedar debajo de un mensaje encolado. Sin vaciar la cola antes,
+     * el pin se pintaria de vuelta a libre durante un fotograma justo tras reservarlo.
+     */
+    empujar(caseta(3, { estado: 'O' }));   // abre ventana
+    empujar(caseta(2, { estado: 'L' }));   // se queda encolado
+    t.aplicar(caseta(2, { estado: 'T' }));
+    assert.equal(t.puestos.find((p) => p.id === 2).estado, 'T',
+      'el cambio local queda ENCIMA de lo que habia encolado');
+    if (pendientes.length) pendientes.pop()();
+    assert.equal(t.puestos.find((p) => p.id === 2).estado, 'T',
+      'y el fotograma pendiente no lo deshace');
+  } finally {
+    globalThis.requestAnimationFrame = rafOriginal;
+  }
+});
+
 test('un broadcast NO pisa la geometria que el Editor no ha guardado', async () => {
   const t = nuevaTienda();
   respuesta = [caseta(1, { mapaX: 0.1, mapaY: 0.1 })];

@@ -22,7 +22,7 @@ const seleccion = ref(new Set());   // lo que quedara asignado a este vendedor
 const originales = ref(new Set());  // lo que tenia al abrir, para saber que cambio
 const colapsadas = ref(new Set());  // categorias plegadas
 const rangos = ref({});             // texto del cuadro de rango, por categoria
-const verDeOtros = ref(false);      // mostrar las casetas de otros vendedores, en gris
+const soloLibres = ref(false);      // ocultar las que ya lleva algun otro vendedor
 const cargandoCatalogo = ref(false);
 const guardando = ref(false);
 
@@ -73,7 +73,7 @@ async function cargarCatalogo(vendedorId) {
     catalogo.value = await r.json();
     // La seleccion arranca en lo que ya tiene, y a partir de ahi se edita en local.
     seleccion.value = new Set(
-      catalogo.value.filter((p) => p.asignadoAId === vendedorId).map((p) => p.id),
+      catalogo.value.filter((p) => laLleva(p, vendedorId)).map((p) => p.id),
     );
     originales.value = new Set(seleccion.value);
   } catch (e) {
@@ -83,10 +83,22 @@ async function cargarCatalogo(vendedorId) {
   }
 }
 
-/** Las casetas que este vendedor puede tomar: las libres y las que ya son suyas. */
-const disponiblesParaEste = computed(() => {
+/** ¿La lleva este vendedor? */
+const laLleva = (p, vid) => (p.habilitados || []).some((h) => h.id === vid);
+
+/** Los OTROS vendedores que ya la llevan. Vacio = la lleva solo este, o nadie. */
+const otrosQueLlevan = (p, vid) => (p.habilitados || []).filter((h) => h.id !== vid);
+
+/**
+ * Las casetas que no lleva ningun otro vendedor.
+ *
+ * Es solo un filtro de pantalla para repartir territorios sin pisarse. NO es una restriccion:
+ * una caseta que ya lleva otro se puede habilitar igual, y es lo normal cuando varios atienden
+ * el mismo sector.
+ */
+const sinOtroVendedor = computed(() => {
   const vid = vendedorSel.value?.id;
-  return catalogo.value.filter((p) => !p.asignadoAId || p.asignadoAId === vid);
+  return catalogo.value.filter((p) => otrosQueLlevan(p, vid).length === 0);
 });
 
 /**
@@ -96,7 +108,7 @@ const disponiblesParaEste = computed(() => {
 const grupos = computed(() => {
   const q = busquedaPuesto.value.trim().toLowerCase();
   const vid = vendedorSel.value?.id;
-  const fuente = verDeOtros.value ? catalogo.value : disponiblesParaEste.value;
+  const fuente = soloLibres.value ? sinOtroVendedor.value : catalogo.value;
   const porCategoria = new Map();
 
   for (const p of fuente) {
@@ -110,8 +122,9 @@ const grupos = computed(() => {
   return [...porCategoria.values()].map((g) => ({
     ...g,
     elegidas: g.casetas.filter((p) => seleccion.value.has(p.id)).length,
-    // Cuantas de esta categoria estan tomadas por otro, para poder decirlo sin listarlas.
-    deOtros: catalogo.value.filter((p) => p.categoriaId === g.id && p.asignadoAId && p.asignadoAId !== vid).length,
+    // Cuantas de esta categoria lleva ademas otro vendedor. Es informacion, no un impedimento:
+    // se pueden habilitar igual. Sirve para ver de un vistazo donde se esta compartiendo.
+    deOtros: catalogo.value.filter((p) => p.categoriaId === g.id && otrosQueLlevan(p, vid).length).length,
     // Vendidas: siguen siendo asignables a proposito (ver la nota del template), pero el
     // administrador tiene que saber cuantas de ese grupo ya no se pueden volver a vender.
     vendidas: g.casetas.filter((p) => p.estado === 'O').length,
@@ -129,7 +142,6 @@ const resumenCambios = computed(() => {
 });
 
 function alternar(p) {
-  if (p.asignadoAId && p.asignadoAId !== vendedorSel.value?.id) return; // es de otro
   if (seleccion.value.has(p.id)) {
     // Quitarle una caseta YA VENDIDA es casi siempre un error: la venta es suya y dejaria de
     // verla en su mapa. No se prohibe (puede hacer falta al reorganizar territorios), pero se
@@ -142,7 +154,6 @@ function alternar(p) {
 
 function marcarGrupo(grupo, marcar) {
   for (const p of grupo.casetas) {
-    if (p.asignadoAId && p.asignadoAId !== vendedorSel.value?.id) continue;
     if (marcar) seleccion.value.add(p.id);
     else seleccion.value.delete(p.id);
   }
@@ -185,11 +196,12 @@ function aplicarRango(grupo, marcar) {
   const pedidos = codigosDelRango(texto);
   if (!pedidos.size) { toast('Escribe un rango, por ejemplo 1-20', 'error'); return; }
 
+  const vid = vendedorSel.value?.id;
   let tocadas = 0;
-  let deOtros = 0;
+  let compartidas = 0;
   for (const p of grupo.casetas) {
     if (!pedidos.has(String(p.codigo).trim())) continue;
-    if (p.asignadoAId && p.asignadoAId !== vendedorSel.value?.id) { deOtros++; continue; }
+    if (marcar && otrosQueLlevan(p, vid).length) compartidas++;
     if (marcar) seleccion.value.add(p.id);
     else seleccion.value.delete(p.id);
     tocadas++;
@@ -197,8 +209,10 @@ function aplicarRango(grupo, marcar) {
   seleccion.value = new Set(seleccion.value);
   rangos.value = { ...rangos.value, [grupo.id]: '' };
 
-  if (!tocadas && !deOtros) { toast('Ninguna caseta con esos números en ' + grupo.nombre, 'error'); return; }
-  const cola = deOtros ? ` (${deOtros} son de otro vendedor)` : '';
+  if (!tocadas) { toast('Ninguna caseta con esos números en ' + grupo.nombre, 'error'); return; }
+  // Se avisa de las compartidas sin impedirlas: es una decision deliberada del administrador,
+  // pero conviene que sepa que esas casetas las lleva alguien mas.
+  const cola = compartidas ? ` (${compartidas} las lleva también otro vendedor)` : '';
   toast(`${marcar ? 'Marcadas' : 'Desmarcadas'} ${tocadas} en ${grupo.nombre}${cola}`, 'ok');
 }
 
@@ -293,16 +307,17 @@ const esAdmin = computed(() => auth.puedeEditarPlano);
       <div class="barra-puestos">
         <input v-model="busquedaPuesto" class="control" placeholder="Buscar por categoría o número…" />
         <label class="check-otros">
-          <input type="checkbox" v-model="verDeOtros" />
-          Ver las de otros vendedores
+          <input type="checkbox" v-model="soloLibres" />
+          Ocultar las que ya lleva otro
         </label>
       </div>
 
       <p class="muted ayuda">
         Escribe un rango por categoría, por ejemplo <strong>1-20</strong> o <strong>3, 7, 12-15</strong>,
         y pulsa <strong>+</strong> para asignarlas o <strong>−</strong> para quitarlas.
-        Las casetas de otro vendedor no se pueden tomar. Las <strong>vendidas</strong> sí se
-        asignan: quien la vendió necesita seguir viéndola en su mapa.
+        Una caseta puede llevarla <strong>más de un vendedor</strong>: la vende quien la reserve
+        primero, y al resto les sale ocupada. Las <strong>vendidas</strong> también se habilitan:
+        quien la vendió necesita seguir viéndola en su mapa.
       </p>
 
       <div v-if="cargandoCatalogo" class="vacio">Cargando casetas…</div>
@@ -317,7 +332,7 @@ const esAdmin = computed(() => auth.puedeEditarPlano);
               {{ g.elegidas }} / {{ g.casetas.length }}
             </span>
             <span v-if="g.vendidas" class="badge badge-vendida">{{ g.vendidas }} vendida{{ g.vendidas > 1 ? 's' : '' }}</span>
-            <span v-if="g.deOtros" class="muted de-otros">{{ g.deOtros }} de otros</span>
+            <span v-if="g.deOtros" class="muted de-otros">{{ g.deOtros }} compartida{{ g.deOtros > 1 ? 's' : '' }}</span>
             <span class="crecer"></span>
             <span class="acciones-grupo" @click.stop>
               <input
@@ -340,15 +355,17 @@ const esAdmin = computed(() => auth.puedeEditarPlano);
               class="caseta"
               :class="{
                 elegida: seleccion.has(p.id),
-                ajena: p.asignadoAId && p.asignadoAId !== vendedorSel?.id,
+                compartida: otrosQueLlevan(p, vendedorSel?.id).length,
                 vendida: p.estado === 'O',
               }"
-              :disabled="p.asignadoAId && p.asignadoAId !== vendedorSel?.id"
-              :title="p.asignadoAId && p.asignadoAId !== vendedorSel?.id
-                ? 'Asignada a ' + p.asignadoA
+              :title="otrosQueLlevan(p, vendedorSel?.id).length
+                ? 'La lleva también ' + otrosQueLlevan(p, vendedorSel?.id).map((h) => h.username).join(', ')
                 : (p.estado === 'O' ? 'Vendida' : 'Libre')"
               @click="alternar(p)">
               {{ p.codigo }}
+              <!-- El punto avisa de que esa caseta la lleva alguien mas. No la bloquea: solo
+                   evita compartirla sin darse cuenta. -->
+              <span v-if="otrosQueLlevan(p, vendedorSel?.id).length" class="punto-compartida">•</span>
             </button>
           </div>
         </section>
@@ -450,7 +467,13 @@ const esAdmin = computed(() => auth.puedeEditarPlano);
 }
 .caseta:hover:not(:disabled) { border-color: var(--acento); transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
 .caseta.elegida { background: var(--acento); border-color: var(--acento); color: var(--acento-texto); }
-.caseta.ajena { opacity: 0.4; cursor: not-allowed; text-decoration: line-through; background: var(--panel-2); }
+/* Compartida: se puede elegir igual, asi que NADA de tacharla ni de bajarle la opacidad como
+   cuando estaba prohibida. Solo un punto que avisa de que la lleva alguien mas. */
+.caseta.compartida { position: relative; }
+.caseta .punto-compartida {
+  position: absolute; top: 1px; right: 3px;
+  font-size: 1rem; line-height: 1; color: var(--aviso, #d08700);
+}
 .caseta.vendida:not(.elegida) { border-style: dashed; }
 
 .resumen-cambios { margin-right: auto; font-size: 0.9rem; color: var(--muted); display: flex; gap: 0.5rem; align-items: center; }

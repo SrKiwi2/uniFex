@@ -88,10 +88,11 @@ function sesionCaducada() {
 }
 
 /**
- * Quien responde por una caseta, o null si no la tiene nadie.
- * Es lo que convierte "esa no te toca" en "esa la lleva fulano, este es su telefono".
+ * Quienes pueden vender una caseta. Lista vacia = no la lleva nadie todavia.
+ * Es lo que convierte "esa no te toca" en "esa la llevan fulano y mengano, estos son sus
+ * telefonos". Son varios porque una caseta puede habilitarse a mas de un vendedor.
  */
-const asignacionDe = (p) => tienda.asignaciones.get(p.id) || null;
+const asignacionDe = (p) => tienda.asignaciones.get(p.id) || [];
 
 /**
  * ¿Puede quien mira vender esta caseta?
@@ -103,8 +104,7 @@ const asignacionDe = (p) => tienda.asignaciones.get(p.id) || null;
  */
 const puedoVender = (p) => {
   if (!auth.esVendedor) return true;
-  const a = asignacionDe(p);
-  return a != null && a.vendedorId === auth.id;
+  return asignacionDe(p).some((a) => a.vendedorId === auth.id);
 };
 
 /**
@@ -120,7 +120,8 @@ const sinHabilitadas = computed(() =>
   auth.esVendedor
   && !tienda.cargando
   && tienda.puestos.length > 0
-  && ![...tienda.asignaciones.values()].some((a) => a.vendedorId === auth.id));
+  && ![...tienda.asignaciones.values()]
+        .some((lista) => lista.some((a) => a.vendedorId === auth.id)));
 
 /** ¿La reserva en tramite de esta caseta es de quien esta mirando? */
 /*
@@ -137,8 +138,10 @@ const esMia = (p) => p.estado === 'T' && p.reservadoPor != null && auth.id != nu
  */
 function rotulo(p) {
   if (!puedoVender(p)) {
-    const a = asignacionDe(p);
-    return `${p.categoria} ${p.codigo} · ${a ? `la vende ${a.vendedor}` : 'sin vendedor asignado'}`;
+    const quienes = asignacionDe(p).map((a) => a.vendedor).filter(Boolean);
+    return `${p.categoria} ${p.codigo} · ${quienes.length
+      ? `la vende${quienes.length > 1 ? 'n' : ''} ${quienes.join(', ')}`
+      : 'sin vendedor asignado'}`;
   }
   const duenio = esMia(p) ? ' (tuya)' : p.estado === 'T' ? ' (de otro vendedor)' : '';
   const precio = p.precio > 0 ? ` · ${p.precio} Bs` : ' · sin precio';
@@ -355,7 +358,7 @@ onUnmounted(() => {
       :puesto="casetaEnFicha"
       :es-mia="casetaEnFicha ? esMia(casetaEnFicha) : false"
       :vendible="casetaEnFicha ? puedoVender(casetaEnFicha) : true"
-      :asignacion="casetaEnFicha ? asignacionDe(casetaEnFicha) : null"
+      :asignaciones="casetaEnFicha ? asignacionDe(casetaEnFicha) : []"
       :ocupado="casetaEnFicha ? enPeticion.has(casetaEnFicha.id) : false"
       @cerrar="seleccionada = null"
       @agregar="(p) => click(p)"

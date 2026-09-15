@@ -74,11 +74,15 @@ public class VendedorAsignacionDaoImpl implements IVendedorAsignacionDao {
     }
 
     /**
-     * Todas las casetas vivas con su categoria y a quien estan asignadas (o null).
+     * Todas las casetas vivas con su categoria y a quien estan habilitadas (o null).
      *
      * Una sola consulta para llenar el modal entero: agrupar por categoria, marcar las del
-     * vendedor y esconder las de otros son decisiones de pantalla, y hacerlas aqui obligaria a
+     * vendedor y senalar las compartidas son decisiones de pantalla, y hacerlas aqui obligaria a
      * ir y volver al servidor por cada una.
+     *
+     * Desde V32 una caseta puede estar habilitada a VARIOS vendedores, asi que devuelve una fila
+     * POR PAREJA (caseta, vendedor) y quien llama las agrupa. Una caseta sin habilitar sigue
+     * saliendo una vez, con los dos ultimos campos en null: por eso el LEFT JOIN.
      */
     @Override
     @SuppressWarnings("unchecked")
@@ -91,7 +95,7 @@ public class VendedorAsignacionDaoImpl implements IVendedorAsignacionDao {
                   LEFT JOIN vendedor_puesto vp ON vp.id_puesto = p.id
                   LEFT JOIN usuario u ON u.id = vp.id_usuario
                  WHERE p._estado <> 'X' AND p.estado_puesto <> 'X'
-                 ORDER BY c.nombre, length(p.codigo), p.codigo
+                 ORDER BY c.nombre, length(p.codigo), p.codigo, u.username
                 """).getResultList();
     }
 
@@ -102,9 +106,10 @@ public class VendedorAsignacionDaoImpl implements IVendedorAsignacionDao {
      * altas y bajas sueltas: el modal manda la seleccion final de una vez, asi que guardar 40
      * cambios cuesta dos consultas en lugar de 40 peticiones.
      *
-     * El INSERT ignora las casetas que ya tengan otro duenio ({@code ON CONFLICT DO NOTHING}
-     * sobre el indice de V20) en vez de reventar: quien llama compara lo pedido con lo que quedo
-     * y avisa de las que no pudo tomar.
+     * El {@code ON CONFLICT DO NOTHING} va sobre el indice de PAREJA (V32): lo unico que descarta
+     * es volver a insertar una habilitacion que este vendedor ya tenia. Ya NO descarta casetas de
+     * otros vendedores —desde V32 se comparten— asi que lo que vuelva en {@code noDisponibles}
+     * solo puede ser una caseta que no existe o que esta anulada.
      */
     @Override
     @SuppressWarnings("unchecked")
