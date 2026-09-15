@@ -36,6 +36,28 @@ export const usePuestosStore = defineStore('puestos', () => {
    * y el telefono del vendedor en cada mensaje de WebSocket. Mismo criterio que las fotos.
    */
   const asignaciones = ref(new Map());
+  /**
+   * Quien TIENE cada caseta no libre: puestoId -> { vendedorId, vendedor, celular, estado }.
+   *
+   * No confundir con `asignaciones`, que es quien PUEDE venderla y pueden ser varios. Esto es
+   * uno solo: el que la reservo o el que ya la vendio.
+   *
+   * Se mantiene por dos vias distintas, y la diferencia importa:
+   *
+   * - **En tramite**: la difusion ya trae `reservadoPor`, asi que se resuelve AQUI, contra el
+   *   `directorio`, sin pedir nada. Reservar es lo que mas pasa en la feria; salir al servidor
+   *   por cada reserva ajena seria una peticion por cada toque de cada vendedor.
+   * - **Vendida**: al vender, el servidor pone `reservado_por_id_usuario` a NULL, asi que el
+   *   mensaje NO dice quien fue. Eso obliga a volver a pedir la lista, pero vender es raro
+   *   comparado con reservar, y la peticion va agrupada (ver `pedirOcupacion`).
+   */
+  const ocupacion = ref(new Map());
+  /**
+   * vendedorId -> { vendedor, celular }. Es lo que permite ponerle nombre a un `reservadoPor`
+   * recien llegado sin salir a la red. Se llena con las asignaciones y con la ocupacion, que
+   * entre las dos nombran a todo el que puede aparecer en el plano.
+   */
+  const directorio = ref(new Map());
   /** Momento de la ultima lista completa recibida del servidor (ms). 0 = ninguna todavia. */
   const ultimaSync = ref(0);
 
@@ -55,6 +77,9 @@ export const usePuestosStore = defineStore('puestos', () => {
    */
   let etagPuestos = null;
   let etagAsignaciones = null;
+  let etagOcupacion = null;
+  /** Temporizador de la relectura agrupada de ocupacion (ver `pedirOcupacion`). */
+  let pendienteOcupacion = null;
   let sondeo = null;
   let oyentesCiclo = false;
 
@@ -108,6 +133,12 @@ export const usePuestosStore = defineStore('puestos', () => {
     try {
       localStorage.setItem(CLAVE_CACHE, JSON.stringify({
         ts: Date.now(), lista: ultimaLista, asignaciones: [...asignaciones.value.entries()],
+        // Se guarda el DIRECTORIO (quien es quien) y NO la ocupacion (quien tiene que caseta).
+        // Un nombre y un telefono no caducan, asi que en frio una caseta en tramite se resuelve
+        // al instante con el `reservadoPor` que ya trae la lista. Quien VENDIO cada caseta si
+        // caduca, y pintarlo desde una copia vieja seria afirmarle al vendedor que una caseta
+        // la vendio alguien que quiza ya la cancelo. Eso se espera a que lo confirme el servidor.
+        directorio: [...directorio.value.entries()],
       }));
     } catch {
       // Cuota llena o modo privado. La copia es un lujo: nunca se aborta una carga por esto.
@@ -133,6 +164,9 @@ export const usePuestosStore = defineStore('puestos', () => {
           ([id, v]) => [id, Array.isArray(v) ? v : [v]],
         ));
       }
+      // Una copia guardada por una version anterior no lo trae: sin el, las casetas en tramite
+      // salen sin nombre hasta que conteste el servidor, que es un segundo.
+      if (Array.isArray(guardado.directorio)) directorio.value = new Map(guardado.directorio);
       desdeCache.value = true;
       return true;
     } catch {
@@ -233,8 +267,14 @@ export const usePuestosStore = defineStore('puestos', () => {
     const i = puestos.value.findIndex((p) => p.id === dto.id);
     if (dto.activo === false) {
       if (i >= 0) puestos.value.splice(i, 1);
+      if (ocupacion.value.has(dto.id)) {
+        const m = new Map(ocupacion.value);
+        m.delete(dto.id);
+        ocupacion.value = m;
+      }
       return;
     }
+    sincronizarOcupacion(dto);
     if (i < 0) {
       // Una caseta que no estaba en la lista se agrega, sea quien sea el que mira.
       //
@@ -324,6 +364,117 @@ export const usePuestosStore = defineStore('puestos', () => {
     guardarCache();
   }
 
+  /**
+   * Reemplaza la ocupacion con la lista completa del servidor.
+   *
+   * Se REEMPLAZA entera y no se fusiona: el servidor manda todas las casetas no libres, asi
+   * que lo que no venga en la lista es precisamente lo que ya no tiene dueño. Fusionando,
+   * una caseta liberada mientras la peticion viajaba se quedaria marcada como reservada.
+   */
+  function aplicarOcupacion(filas) {
+    if (!Array.isArray(filas)) return;
+    const m = new Map();
+    for (const o of filas) {
+      if (o?.puestoId == null || o.vendedorId == null) continue;
+      m.set(o.puestoId, {
+        vendedorId: o.vendedorId,
+        vendedor: o.vendedor ?? null,
+        celular: o.celular ?? null,
+        estado: o.estado ?? null,
+        desde: o.desde ?? null,
+      });
+      anotarEnDirectorio(o.vendedorId, o.vendedor, o.celular);
+    }
+    ocupacion.value = m;
+    guardarCache();
+  }
+
+  /** Lee quien tiene cada caseta. Condicionada: si nada cambio, el servidor contesta 304. */
+  async function cargarOcupacion() {
+    const r = await apiFetch('/api/app/puestos/ocupacion', condicional(etagOcupacion));
+    if (r.status === 304 || !r.ok) return;
+    etagOcupacion = r.headers.get('ETag') || etagOcupacion;
+    aplicarOcupacion(await r.json().catch(() => []));
+  }
+
+  /** Mete a alguien en el directorio si trae nombre. Nunca lo borra: un nombre no caduca. */
+  function anotarEnDirectorio(vendedorId, vendedor, celular) {
+    if (vendedorId == null || !vendedor) return;
+    const previo = directorio.value.get(vendedorId);
+    if (previo && previo.vendedor === vendedor && previo.celular === celular) return;
+    directorio.value = new Map(directorio.value).set(vendedorId, { vendedor, celular: celular ?? null });
+  }
+
+  /**
+   * Vuelve a leer quien tiene cada caseta, AGRUPANDO las peticiones.
+   *
+   * Registrar una venta de doce casetas difunde doce mensajes, y cada uno descubre que no sabe
+   * quien la vendio. Sin agrupar serian doce lecturas de la lista entera para enterarse de lo
+   * mismo. Con la espera, son una.
+   */
+  function pedirOcupacion() {
+    if (pendienteOcupacion) return;
+    pendienteOcupacion = setTimeout(() => {
+      pendienteOcupacion = null;
+      cargarOcupacion().catch(() => {
+        // Sin esto el mapa sigue siendo correcto: solo se queda sin el nombre de quien la
+        // vendio, que es informativo. La siguiente resincronizacion lo vuelve a intentar.
+      });
+    }, 700);
+  }
+
+  /**
+   * Ajusta la ocupacion de UNA caseta a partir de su estado.
+   *
+   * Se llama desde `aplicar`, asi que cubre por igual lo que llega del servidor y el pintado
+   * optimista del propio vendedor: al reservar, su nombre aparece en el acto porque ya esta
+   * en el directorio.
+   */
+  function sincronizarOcupacion(dto) {
+    const previa = ocupacion.value.get(dto.id);
+
+    if (dto.estado === 'T' && dto.reservadoPor != null) {
+      const quien = directorio.value.get(dto.reservadoPor);
+      // Ya estaba anotada a nombre del mismo: no se toca el Map, que dispararia un render.
+      if (previa && previa.estado === 'T' && previa.vendedorId === dto.reservadoPor) return;
+      ocupacion.value = new Map(ocupacion.value).set(dto.id, {
+        vendedorId: dto.reservadoPor,
+        vendedor: quien?.vendedor ?? null,
+        celular: quien?.celular ?? null,
+        estado: 'T',
+        desde: null,
+      });
+      // Alguien que el directorio no conoce: administracion vendiendo, o un vendedor sin
+      // ninguna caseta habilitada todavia. Se pide la lista para ponerle nombre.
+      if (!quien) pedirOcupacion();
+      return;
+    }
+
+    if (dto.estado === 'O') {
+      // El mensaje no dice quien la vendio (al ocupar se borra `reservado_por_id_usuario`),
+      // asi que si no lo sabiamos ya, hay que preguntarlo. Si la anotacion previa era la
+      // reserva de esa misma persona, se conserva su nombre mientras llega la confirmacion:
+      // casi siempre vende quien la tenia reservada, y asi no parpadea a "sin nombre".
+      if (previa?.estado === 'O') return;
+      ocupacion.value = new Map(ocupacion.value).set(dto.id, {
+        vendedorId: previa?.vendedorId ?? null,
+        vendedor: previa?.vendedor ?? null,
+        celular: previa?.celular ?? null,
+        estado: 'O',
+        desde: null,
+      });
+      pedirOcupacion();
+      return;
+    }
+
+    // Libre o bloqueada: no la tiene nadie.
+    if (previa) {
+      const m = new Map(ocupacion.value);
+      m.delete(dto.id);
+      ocupacion.value = m;
+    }
+  }
+
   /** Registra un guardia de cambios sin guardar. Devuelve la funcion para quitarlo. */
   function protegerLocales(fn) {
     guardias.add(fn);
@@ -344,9 +495,10 @@ export const usePuestosStore = defineStore('puestos', () => {
         // asignaciones, las casetas propias saldrian grises— y en serie serian dos esperas.
         // Y van CONDICIONADAS: si nada cambio desde la ultima vez, el servidor contesta 304
         // sin cuerpo y esto no descarga nada.
-        const [r, rAsig] = await Promise.all([
+        const [r, rAsig, rOcup] = await Promise.all([
           apiFetch('/api/app/puestos', condicional(etagPuestos)),
           apiFetch('/api/app/puestos/asignaciones', condicional(etagAsignaciones)).catch(() => null),
+          apiFetch('/api/app/puestos/ocupacion', condicional(etagOcupacion)).catch(() => null),
         ]);
 
         if (r.status !== 304) {
@@ -364,8 +516,13 @@ export const usePuestosStore = defineStore('puestos', () => {
             if (a?.puestoId == null) continue;
             if (!m.has(a.puestoId)) m.set(a.puestoId, []);
             m.get(a.puestoId).push(a);
+            anotarEnDirectorio(a.vendedorId, a.vendedor, a.celular);
           }
           asignaciones.value = m;
+        }
+        if (rOcup && rOcup.status !== 304 && rOcup.ok) {
+          etagOcupacion = rOcup.headers.get('ETag') || etagOcupacion;
+          aplicarOcupacion(await rOcup.json().catch(() => []));
         }
 
         desdeCache.value = false;
@@ -528,6 +685,8 @@ export const usePuestosStore = defineStore('puestos', () => {
     desdeCache.value = false;
     ultimaSync.value = 0;
     asignaciones.value = new Map();
+    ocupacion.value = new Map();
+    if (pendienteOcupacion) { clearTimeout(pendienteOcupacion); pendienteOcupacion = null; }
     // Un lote a medio aplicar no puede sobrevivir al cierre de sesion: se pintaria encima de
     // la lista del siguiente usuario.
     enCola = null;
@@ -536,6 +695,7 @@ export const usePuestosStore = defineStore('puestos', () => {
     // otra, y arrastrar la etiqueta vieja pediria un 304 sobre datos que no son los suyos.
     etagPuestos = null;
     etagAsignaciones = null;
+    etagOcupacion = null;
     // La copia en disco NO se borra: es el mismo mapa para todos los vendedores y es lo que
     // hace que el proximo arranque sea instantaneo. No lleva nada privado que no vuelva a
     // llegar en la primera respuesta.
@@ -543,6 +703,7 @@ export const usePuestosStore = defineStore('puestos', () => {
 
   return {
     puestos, cargando, error, enVivo, desdeCache, ultimaSync, ubicadas, carritoDe, asignaciones,
+    ocupacion, directorio,
     aplicar, aplicarDelServidor, aplicarAsignaciones, protegerLocales, cargar, recargar, conectar, asegurar, desconectar,
     registrarNotificaciones, reintentar, sinAsignaciones,
   };

@@ -24,12 +24,14 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.usic.uniFex.model.dao.IPuestoDao;
 import com.usic.uniFex.model.dto.AsignacionPuestoDTO;
+import com.usic.uniFex.model.dto.OcupacionPuestoDTO;
 import com.usic.uniFex.model.dto.PuestoEstadoDTO;
 import com.usic.uniFex.model.dto.PuestoFotoDTO;
 import com.usic.uniFex.model.entity.Puesto;
 import com.usic.uniFex.model.service.PuestoEventPublisher;
 import com.usic.uniFex.model.service.PuestoFotoService;
 import com.usic.uniFex.model.service.PuestoMapaService;
+import com.usic.uniFex.model.service.PuestoOcupacionService;
 import com.usic.uniFex.model.service.PuestoReservaService;
 import com.usic.uniFex.model.service.VendedorAsignacionService;
 import com.usic.uniFex.security.JwtUser;
@@ -57,6 +59,7 @@ public class PuestoApiController {
     private final PuestoFotoService fotoService;
     private final IPuestoDao puestoDao;
     private final VendedorAsignacionService vendedorAsignacionService;
+    private final PuestoOcupacionService ocupacionService;
 
     /**
      * Estado de TODAS las casetas no anuladas (opcionalmente filtrado por categoria).
@@ -92,6 +95,27 @@ public class PuestoApiController {
     @GetMapping("/asignaciones")
     public List<AsignacionPuestoDTO> asignaciones() {
         return usuarioActual() == null ? List.of() : vendedorAsignacionService.asignacionesConVendedor();
+    }
+
+    /**
+     * Quien TIENE cada caseta no libre: el que la esta registrando y el que ya la vendio.
+     *
+     * No es lo mismo que {@link #asignaciones()} y conviene no confundirlos: habilitado es
+     * quien PUEDE venderla, y pueden ser varios; esto es quien se la LLEVO, que es uno solo.
+     * Una caseta puede estar habilitada a tres vendedores y vendida por el que la reservo
+     * primero.
+     *
+     * Va aparte de {@code PuestoEstadoDTO} por lo mismo que las asignaciones —el nombre y el
+     * telefono de una persona no caben en un mensaje que se difunde en cada movimiento del
+     * plano— y ademas porque la mitad "vendida" ni siquiera esta en la caseta: hay que ir a
+     * buscarla a la inscripcion (ver {@code findOcupacionConVendedor}).
+     *
+     * Lo ve cualquier autenticado, igual que el contacto del companiero: el vendedor esta
+     * delante del cliente y "ya esta vendida" a secas no le sirve para responder nada.
+     */
+    @GetMapping("/ocupacion")
+    public List<OcupacionPuestoDTO> ocupacion() {
+        return usuarioActual() == null ? List.of() : ocupacionService.ocupacionConVendedor();
     }
 
     // ===== Venta: cualquier usuario autenticado =====

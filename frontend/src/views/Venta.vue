@@ -11,6 +11,7 @@ import { partirNombre } from '../ui/nombres';
 import CampoCelular from '../components/CampoCelular.vue';
 import { mostrarCarga, ocultarCarga, textoCarga } from '../ui/cargando';
 import { alerta, aviso, alertaConAccion } from '../ui/alerta';
+import { marcarAvance, limpiarAvance } from '../ui/presencia';
 
 /*
  * Registro de una venta. Es la pantalla que convierte un carrito de casetas en una
@@ -325,47 +326,99 @@ const intentado = ref(false);
 
 const algoEscrito = (p) => Boolean(p.nombre || p.paterno || p.materno || p.ci || p.celular);
 
-const faltantes = computed(() => {
-  const falta = new Map();
-  const pide = (clave, etiqueta, cumplido) => {
-    if (!cumplido) falta.set(clave, etiqueta);
+/**
+ * Todo lo obligatorio del formulario ENTERO, paso a paso: [{ paso, clave, etiqueta, ok }].
+ *
+ * Una sola lista para las dos preguntas que se hacen sobre ella —"¿puedo pasar de paso?" y
+ * "¿cuanto llevo?"— porque si cada una tuviera la suya, acabarian discrepando: se añadiria un
+ * campo obligatorio a la validacion y el porcentaje seguiria diciendo 100% sin el.
+ */
+const requisitos = computed(() => {
+  const lista = [];
+  const pide = (paso, clave, etiqueta, cumplido) => {
+    lista.push({ paso, clave, etiqueta, ok: Boolean(cumplido) });
   };
 
-  if (paso.value === 0) {
-    pide('entidadNombre', 'Nombre de la entidad', form.entidadNombre.trim());
-    pide('tipoEntidadId', 'Tipo de entidad', form.tipoEntidadId);
-    pide('representanteLegal', 'Nombre del responsable legal', form.representanteLegal.trim());
-    pide('ciRepresentante', 'C.I. del responsable legal', form.ciRepresentante.trim());
-    pide('celularRepresentante', 'Celular del responsable legal', form.celularRepresentante.trim());
-  }
-  if (paso.value === 1) {
-    const r0 = form.responsables[0] || {};
-    pide('r0.nombre', 'Nombre del Responsable 1', (r0.nombre || '').trim());
-    pide('r0.ci', 'C.I. del Responsable 1', (r0.ci || '').trim());
-    /*
-     * Del SEGUNDO en adelante solo se exige el NOMBRE.
-     *
-     * El C.I. era obligatorio y frenaba ventas por un dato que muchas veces no esta a mano: los
-     * acompañantes suelen ser familiares o empleados que ni siquiera estan en el mostrador. Sin
-     * C.I. se registra igual y se completa despues desde Mis ventas; lo que no se puede es
-     * dejarlo sin nombre, porque entonces no hay a quien acreditar.
-     */
-    for (let i = 1; i < form.responsables.length; i++) {
-      const r = form.responsables[i];
-      if (r && algoEscrito(r)) {
-        pide(`r${i}.nombre`, `Nombre del Responsable ${i + 1}`, (r.nombre || '').trim());
-      }
+  pide(0, 'entidadNombre', 'Nombre de la entidad', form.entidadNombre.trim());
+  pide(0, 'tipoEntidadId', 'Tipo de entidad', form.tipoEntidadId);
+  pide(0, 'representanteLegal', 'Nombre del responsable legal', form.representanteLegal.trim());
+  pide(0, 'ciRepresentante', 'C.I. del responsable legal', form.ciRepresentante.trim());
+  pide(0, 'celularRepresentante', 'Celular del responsable legal', form.celularRepresentante.trim());
+
+  const r0 = form.responsables[0] || {};
+  pide(1, 'r0.nombre', 'Nombre del Responsable 1', (r0.nombre || '').trim());
+  pide(1, 'r0.ci', 'C.I. del Responsable 1', (r0.ci || '').trim());
+  /*
+   * Del SEGUNDO en adelante solo se exige el NOMBRE.
+   *
+   * El C.I. era obligatorio y frenaba ventas por un dato que muchas veces no esta a mano: los
+   * acompañantes suelen ser familiares o empleados que ni siquiera estan en el mostrador. Sin
+   * C.I. se registra igual y se completa despues desde Mis ventas; lo que no se puede es
+   * dejarlo sin nombre, porque entonces no hay a quien acreditar.
+   */
+  for (let i = 1; i < form.responsables.length; i++) {
+    const r = form.responsables[i];
+    if (r && algoEscrito(r)) {
+      pide(1, `r${i}.nombre`, `Nombre del Responsable ${i + 1}`, (r.nombre || '').trim());
     }
   }
-  if (paso.value === 2) {
-    // Sin forma de pago la venta queda sin decir como se cobro, y eso no se deduce despues:
-    // o fue efectivo o fue un deposito, y son cobros que se cuadran distinto.
-    pide('formaPago', 'Cómo pagó (contado o depósito)', form.formaPago);
-  }
-  return falta;
+
+  // Sin forma de pago la venta queda sin decir como se cobro, y eso no se deduce despues:
+  // o fue efectivo o fue un deposito, y son cobros que se cuadran distinto.
+  pide(2, 'formaPago', 'Cómo pagó (contado o depósito)', form.formaPago);
+  return lista;
 });
 
+const faltantes = computed(() => new Map(
+  requisitos.value
+    .filter((r) => r.paso === paso.value && !r.ok)
+    .map((r) => [r.clave, r.etiqueta]),
+));
+
 const falta = (clave) => intentado.value && faltantes.value.has(clave);
+
+/**
+ * Cuanto lleva del registro, de 0 a 100, contando el formulario ENTERO.
+ *
+ * Se cuentan campos obligatorios cumplidos, no pasos: "va por el paso 2 de 3" dice 66% de un
+ * vendedor que solo escribio el nombre de la entidad. Lo que administracion mira en la
+ * pantalla de seguimiento es si alguien se quedo trabado, y para eso hace falta el detalle.
+ *
+ * Los opcionales (NIT, rubro, C.I. del segundo responsable) no cuentan: si contaran, una venta
+ * lista para registrar se quedaria en el 70% y el numero dejaria de significar "le falta algo".
+ */
+const avanceRegistro = computed(() => {
+  const total = requisitos.value.length;
+  if (!total) return 0;
+  return Math.round((requisitos.value.filter((r) => r.ok).length / total) * 100);
+});
+
+/** Lo que le falta, en las mismas palabras que lee el vendedor en su pantalla. */
+const faltanTodos = computed(() => requisitos.value.filter((r) => !r.ok).map((r) => r.etiqueta));
+
+/*
+ * Informar el avance al seguimiento en vivo.
+ *
+ * Solo mientras haya casetas en el carrito: sin ellas no hay ninguna venta empezada que
+ * seguir, y un formulario vacio abierto por curiosidad no es trabajo a medias.
+ *
+ * No late en cada tecla —`marcarAvance` solo anota— asi que esto puede correr con cada
+ * pulsacion sin costar una peticion. El latido del intervalo se lleva lo ultimo anotado.
+ */
+watch([avanceRegistro, paso, faltanTodos, carrito], () => {
+  if (!carrito.value.length) { marcarAvance(); return; }
+  marcarAvance({
+    porcentaje: avanceRegistro.value,
+    paso: PASOS[paso.value],
+    // Tres bastan para saber que falta; la lista entera no cabe en una linea de la tabla.
+    faltan: faltanTodos.value.slice(0, 3).join(', '),
+  });
+}, { immediate: true });
+
+// Salir de la pantalla deja de informar: el numero congelado de una venta abandonada parece
+// un vendedor trabado. `marcarPantalla` ya lo limpia al navegar, pero esta vista vive dentro
+// de <KeepAlive> en algunas rutas y conviene no depender solo de eso.
+onUnmounted(() => limpiarAvance());
 
 function siguiente() {
   intentado.value = true;

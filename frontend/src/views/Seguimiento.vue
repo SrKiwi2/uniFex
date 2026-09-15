@@ -29,6 +29,25 @@ const enLinea = computed(() => gente.value.filter((g) => g.enLinea));
 const ausentes = computed(() => gente.value.filter((g) => !g.enLinea));
 const vendiendo = computed(() => enLinea.value.filter((g) => g.registrando));
 
+/**
+ * Casetas tomadas ahora mismo, sumando a todos los de la lista —tambien a los ausentes—.
+ *
+ * Los ausentes cuentan a proposito: sus casetas siguen bloqueadas para el resto de vendedores
+ * hasta que venza la reserva, y son justamente las que hay que mirar.
+ */
+const casetasEnTramite = computed(() =>
+  gente.value.reduce((s, g) => s + (Number(g.casetasEnCarrito) || 0), 0));
+
+/**
+ * Vendidas por la gente QUE APARECE EN ESTA LISTA, no por toda la feria.
+ *
+ * La lista solo tiene a quien dio señales en los ultimos quince minutos, asi que este total
+ * sube y baja segun quien este conectado: no es el avance de la feria y por eso el rotulo
+ * dice "de los listados". El total real de la feria esta en Reportes, que lee la base entera.
+ */
+const vendidasTotal = computed(() =>
+  gente.value.reduce((s, g) => s + (Number(g.vendidas) || 0), 0));
+
 async function cargar() {
   try {
     const r = await apiFetch('/api/app/presencia');
@@ -73,6 +92,9 @@ const iniciales = (n) => (n || '?').split(/\s+/).slice(0, 2).map((x) => x[0]).jo
     <div class="card resumen"><strong>{{ enLinea.length }}</strong><span>en línea</span></div>
     <div class="card resumen"><strong>{{ vendiendo.length }}</strong><span>registrando una venta</span></div>
     <div class="card resumen"><strong>{{ ausentes.length }}</strong><span>sin actividad reciente</span></div>
+    <!-- Casetas, no ventas: una venta de tres casetas son tres, que es como se lee el plano. -->
+    <div class="card resumen"><strong>{{ casetasEnTramite }}</strong><span>casetas en trámite</span></div>
+    <div class="card resumen"><strong>{{ vendidasTotal }}</strong><span>casetas vendidas (de los listados)</span></div>
   </div>
 
   <p v-if="error" class="card aviso-error">{{ error }}</p>
@@ -103,6 +125,24 @@ const iniciales = (n) => (n || '?').split(/\s+/).slice(0, 2).map((x) => x[0]).jo
             <span>{{ g.casetasEnCarrito }} caseta{{ g.casetasEnCarrito === 1 ? '' : 's' }}
               en el carrito: {{ g.casetas.join(', ') }}</span>
           </div>
+          <!-- Cuánto lleva del formulario. Lo cuenta su propia aplicación, así que solo
+               aparece si la tiene abierta en Registrar venta: quien dejó el formulario y se
+               fue al mapa sigue teniendo la venta abierta, pero ya no informa avance. -->
+          <div v-if="g.registrando && g.avance != null" class="avance">
+            <div class="avance-cab">
+              <span class="badge badge-muted">{{ g.avancePaso || 'formulario' }}</span>
+              <strong>{{ g.avance }}%</strong>
+              <span v-if="g.avance >= 100" class="muted">listo para registrar</span>
+              <span v-else-if="g.avanceFaltan" class="muted">falta: {{ g.avanceFaltan }}</span>
+            </div>
+            <div class="barra-avance" role="progressbar" :aria-valuenow="g.avance"
+                 aria-valuemin="0" aria-valuemax="100">
+              <span :style="{ width: g.avance + '%' }" :class="{ completo: g.avance >= 100 }"></span>
+            </div>
+          </div>
+          <div class="linea4">
+            <span class="muted">{{ g.vendidas }} caseta{{ g.vendidas === 1 ? '' : 's' }} vendida{{ g.vendidas === 1 ? '' : 's' }} en esta edición</span>
+          </div>
         </div>
       </li>
     </ul>
@@ -129,6 +169,10 @@ const iniciales = (n) => (n || '?').split(/\s+/).slice(0, 2).map((x) => x[0]).jo
             <div v-if="g.registrando" class="linea3">
               <span class="badge badge-aviso">venta a medias</span>
               <span>{{ g.casetas.join(', ') }}</span>
+              <!-- Lo último que informó antes de callarse: dice si se fue con el formulario
+                   casi terminado o sin empezar, que es lo que decide si vale la pena
+                   llamarle o liberarle las casetas. -->
+              <span v-if="g.avance != null" class="muted">· iba por el {{ g.avance }}%</span>
             </div>
           </div>
         </li>
@@ -141,7 +185,12 @@ const iniciales = (n) => (n || '?').split(/\s+/).slice(0, 2).map((x) => x[0]).jo
 .nota { margin: 0 0 1rem; line-height: 1.5; }
 .chico { font-size: 0.85rem; }
 
-.tarjetas-resumen { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-bottom: 1.25rem; }
+.tarjetas-resumen {
+  display: grid; gap: 0.75rem; margin-bottom: 1.25rem;
+  /* auto-fit y no un numero fijo: con cinco tarjetas, repeat(3,1fr) dejaba dos solas
+     en una segunda fila ocupando media pantalla cada una. */
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
 .resumen { padding: 0.8rem; display: flex; flex-direction: column; align-items: center; gap: 0.15rem; text-align: center; }
 .resumen strong { font-size: 1.8rem; line-height: 1; }
 .resumen span { font-size: 0.85rem; opacity: 0.75; }
@@ -163,7 +212,23 @@ const iniciales = (n) => (n || '?').split(/\s+/).slice(0, 2).map((x) => x[0]).jo
 .avatar.activo { box-shadow: 0 0 0 2px var(--ok, #16a34a); }
 
 .datos { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
-.linea1, .linea2, .linea3 { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.linea1, .linea2, .linea3, .linea4 { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.linea4 { font-size: 0.85rem; }
+
+/* El avance del formulario. La barra es la que se lee de un vistazo desde lejos; el
+   porcentaje en numero esta para cuando hay que decidir si llamar a alguien. */
+.avance { display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.15rem; }
+.avance-cab { display: flex; align-items: baseline; gap: 0.4rem; flex-wrap: wrap; font-size: 0.85rem; }
+.barra-avance {
+  height: 6px; border-radius: 999px; overflow: hidden;
+  background: var(--panel-2, rgba(128,128,128,0.2));
+}
+.barra-avance span {
+  display: block; height: 100%; border-radius: 999px;
+  background: var(--tramite, #d97706); transition: width 0.3s ease;
+}
+/* Verde solo al llegar a 100: el ambar dice "a medias" y el verde, "ya puede registrar". */
+.barra-avance span.completo { background: var(--libre, #16a34a); }
 .pantalla { font-weight: 500; }
 .aviso-error { padding: 0.8rem; }
 
