@@ -934,6 +934,9 @@ cuándo y hasta cuándo puede vender un vendedor?) más la notificación de que 
 
 ## Hecho (histórico)
 
+- [x] Mensaje postventa de WhatsApp con 10 variantes: ronda mezclada sin repetir ninguna hasta
+      usar las diez y sin repetir dos consecutivas, incluso con ventas simultáneas — 2026-09-15
+
 - [x] Inventario completo del proyecto — 2026-08-11
 - [x] **`AppLayout.vue` global**: menú, cabecera y pie se montan una sola vez
 - [x] **Carga diferida** de las 10 vistas, un chunk por vista
