@@ -31,6 +31,7 @@ public enum PantallasSistema {
     CATEGORIAS("categorias", "Categorías", "Feria"),
     PUESTOS("puestos", "Puestos", "Feria"),
     SEGUIMIENTO("seguimiento", "Seguimiento en vivo", "Administracion"),
+    ANUNCIOS("anuncios", "Anuncios", "Administracion"),
     VENDEDORES("vendedores", "Vendedores", "Feria"),
     INSCRIPCIONES("inscripciones", "Inscripciones", "Feria"),
     INTERESADOS("interesados", "Interesados en exponer", "Feria"),

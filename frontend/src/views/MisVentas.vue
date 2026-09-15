@@ -4,7 +4,7 @@ import { apiFetch } from '../api';
 import { toast } from '../ui/toast';
 import { descargarRecibo, compartirRecibo } from '../ui/descargas';
 import { alerta, aviso } from '../ui/alerta';
-import { mostrarCarga, ocultarCarga } from '../ui/cargando';
+import { mostrarCarga, ocultarCarga, cambiarTextoCarga } from '../ui/cargando';
 import { url as urlApi } from '../config';
 import { usePuestosStore } from '../stores/puestos.js';
 import UiModal from '../components/UiModal.vue';
@@ -371,6 +371,7 @@ async function guardarResponsableNuevo() {
   }
   guardandoResp.value = true;
   mostrarCarga('Agregando al responsable…');
+  let velado = true;
   try {
     const fd = new FormData();
     fd.append('nombre', modalResp.nombre.trim().toUpperCase());
@@ -386,30 +387,45 @@ async function guardarResponsableNuevo() {
     const d = await r.json().catch(() => ({}));
     if (!r.ok || d.ok === false) { await alerta(d.mensaje || 'No se pudo agregar', 'error', 0); return; }
 
-    let avisoWhatsApp = '';
-    if (d.responsableId) {
-      textoCarga.value = 'Subiendo foto del responsable…';
+    /*
+     * A partir de aqui el responsable YA EXISTE en la base. Lo que queda —foto y WhatsApp— son
+     * pasos de mas: si fallan, se avisa, pero no se puede decir "no se pudo agregar" ni dejar
+     * al vendedor sin saber que la persona ya esta registrada. Por eso cada uno va en su propio
+     * try y lo unico que se lleva un fallo es el texto del aviso final.
+     */
+    let avisoExtra = '';
+    if (d.responsableId && modalResp.foto) {
+      cambiarTextoCarga('Subiendo la foto del responsable…');
       try {
         await subirFotoResponsableNuevo(inscripcionId, d.responsableId);
-        textoCarga.value = 'Enviando credencial por WhatsApp…';
+        cambiarTextoCarga('Enviando la credencial por WhatsApp…');
         await enviarWhatsAppResponsableNuevo(inscripcionId, d.responsableId);
-        avisoWhatsApp = '\n\nSe envió por WhatsApp la credencial de este responsable.';
+        avisoExtra = '\n\nSe envió por WhatsApp la credencial de este responsable.';
       } catch (e) {
-        avisoWhatsApp = `\n\nNo se pudo enviar la credencial por WhatsApp: ${e.message}. Puedes reenviarla desde Credenciales.`;
+        avisoExtra = `\n\nEl responsable quedó registrado, pero no se pudo completar: ${e.message}.`
+          + ' Puedes subir la foto desde esta misma ficha y reenviar la credencial desde Credenciales.';
       }
     }
 
     modalResp.abierto = false;
-    await alerta(d.cobrado
-      ? `Responsable agregado. Se registró el cobro de ${d.monto} Bs.${avisoWhatsApp}`
-      : `Responsable agregado.${avisoWhatsApp}`, 'ok');
-    // Se recarga la ficha entera: cambian los responsables, el cupo y el "faltan fotos".
+    // Se recarga la ficha ANTES del aviso: al cerrarlo, lo que queda detras ya esta al dia.
     await abrirFicha(inscripcionId);
+    // El velo baja ANTES de abrir ningun dialogo. Aunque ya no lo tape (el velo bajo a 1500),
+    // dejar girando un indicador de progreso detras de un mensaje de "listo" es mentir sobre
+    // que algo sigue trabajando.
+    ocultarCarga();
+    velado = false;
+    await alerta(d.cobrado
+      ? `Responsable agregado. Se registró el cobro de ${d.monto} Bs.${avisoExtra}`
+      : `Responsable agregado.${avisoExtra}`, 'ok');
   } catch (e) {
+    if (velado) { ocultarCarga(); velado = false; }
     await alerta(e.message, 'error', 0);
   } finally {
     guardandoResp.value = false;
-    ocultarCarga();
+    // Solo si sigue puesto: `ocultarCarga` lleva un contador y bajarlo dos veces por una
+    // subida deja el contador en cero con otra operacion todavia en curso.
+    if (velado) ocultarCarga();
   }
 }
 

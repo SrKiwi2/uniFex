@@ -12,6 +12,8 @@ import { alerta } from '../ui/alerta';
 import { iniciarMedicion, marcarPintado, marcarRed, purgarMediciones } from '../ui/medir';
 import { CLASE_ESTADO, ETIQUETA_ESTADO, LEYENDA, anchoParaLeer, anchoParaTocar, estiloPin, numerosVisibles } from '../mapa';
 import { asegurarCategorias, opcionesDe, tieneVariosPrecios } from '../ui/catalogoCategorias';
+import RotuloPlano from '../components/RotuloPlano.vue';
+import { usePlanoTextosStore } from '../stores/planoTextos.js';
 
 // Las casetas y la conexion en tiempo real son compartidas con el Tablero y el Editor:
 // una sola descarga y un solo WebSocket para toda la app (ver stores/puestos.js).
@@ -19,6 +21,7 @@ const tienda = usePuestosStore();
 // El plano ya no viaja en el bundle: lo sirve el backend por edicion, para poder cambiarlo
 // sin recompilar el APK (ver stores/plano.js y V13).
 const planoTienda = usePlanoStore();
+const textosTienda = usePlanoTextosStore();
 // Ids con una peticion en vuelo: evita disparar dos veces sobre LA MISMA caseta
 // (el backend igualmente la protege) sin congelar el resto del mapa.
 const enPeticion = ref(new Set());
@@ -313,6 +316,9 @@ onMounted(() => {
   // El catalogo de opciones, para poder avisar en el rotulo de que una caseta tiene varios
   // precios. No se espera: si tarda, el rotulo enseña el precio vigente igual que antes.
   asegurarCategorias();
+  // Los rotulos del plano, con su propio canal en vivo: si administracion mueve "ENTRADA"
+  // mientras el vendedor tiene el mapa abierto, lo ve sin recargar.
+  textosTienda.asegurar();
   planoTienda.asegurar();
   // Delata las mediciones cuyo broadcast nunca llego: sin esto, un mensaje perdido
   // se confunde con uno lento (la linea simplemente no aparece).
@@ -453,6 +459,11 @@ onUnmounted(() => {
           @pointerdown.stop
           @click="abrirFicha(p)"
         ><span class="num-caseta">{{ p.codigo }}</span></button>
+
+        <!-- Los rotulos del plano ("ENTRADA", "TARIMA"). Van DESPUES de los pines para quedar
+             por encima, y no reciben toques: aqui son decoracion, y un rotulo que robara el
+             toque impediria seleccionar la caseta que tiene debajo. -->
+        <RotuloPlano v-for="t in textosTienda.textos" :key="t.id" :texto="t" />
       </div>
     </PanZoom>
 </template>

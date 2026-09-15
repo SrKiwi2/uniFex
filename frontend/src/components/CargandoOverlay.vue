@@ -58,7 +58,19 @@ onUnmounted(() => { clearTimeout(tAparecer); clearInterval(cronometro); });
  * Lo que si hace es comerse los toques, para que no se dispare dos veces la misma venta.
  */
 .velo-carga {
-  position: fixed; inset: 0; z-index: 2500;
+  /*
+   * DEBAJO del modal de aviso (2000) y ENCIMA de los dialogos de formulario (UiModal, 900).
+   *
+   * Estaba en 2500, por encima de todo, y eso convertia cualquier error en un cuelgue: el
+   * codigo hace `catch -> await alerta(...)`, el aviso se abria DEBAJO del velo —invisible y
+   * sin poder pulsarlo—, y como `ocultarCarga()` vive en el `finally` que espera a ese await,
+   * el velo se quedaba para siempre. Lo que el usuario veia era "Agregando al responsable…
+   * Parece que no hay señal" eternamente, con la aplicacion trabada.
+   *
+   * La regla: un velo de progreso tapa lo que NO se debe tocar mientras algo trabaja; nunca
+   * tapa la respuesta a eso que estaba trabajando.
+   */
+  position: fixed; inset: 0; z-index: 1500;
   display: grid; place-items: center;
   background: rgba(2, 6, 23, 0.35);
   backdrop-filter: blur(1.5px);

@@ -8,6 +8,8 @@ import { usePuestosStore } from '../stores/puestos';
 import { usePlanoStore } from '../stores/plano';
 import { anchoParaLeer, anchoParaTocar, estiloPin, numeracionCompacta, numerosVisibles, ordenLectura } from '../mapa';
 import * as pdfjsLib from 'pdfjs-dist';
+import RotuloPlano from '../components/RotuloPlano.vue';
+import { usePlanoTextosStore } from '../stores/planoTextos.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
@@ -39,7 +41,24 @@ const tienda = usePuestosStore();
 const planoTienda = usePlanoStore();
 const puestos = computed(() => tienda.puestos);
 const catSel = ref(null);
-const modo = ref('mapa'); // mapa | colocar | seleccionar
+const modo = ref('mapa'); // mapa | colocar | seleccionar | texto
+
+/*
+ * ---- rotulos libres del plano ----
+ *
+ * "ENTRADA", "TARIMA", "ZONA A". Antes habia que quemarlos en la imagen del plano, asi que
+ * cambiar una palabra obligaba a rehacerla en otro programa y volver a subirla — con el riesgo
+ * de mover el encuadre y descolocar las 400 casetas, porque sus coordenadas son fracciones de
+ * ESA imagen.
+ *
+ * Van por su propio canal en vivo: al guardar, el mapa de todos los vendedores lo ve sin
+ * recargar. Se guardan de uno en uno (no con el lote de posiciones) porque son pocos y se tocan
+ * de a uno; meterlos en el guardado por lotes obligaria a distinguir dos tipos de "sucio".
+ */
+const textosTienda = usePlanoTextosStore();
+const textoSelId = ref(null);
+const textoSel = computed(() => textosTienda.textos.find((t) => t.id === textoSelId.value) || null);
+let arrastreTexto = null;   // { id, x0, y0, base, movido }
 const seleccion = ref(new Set());
 const dirty = ref(new Set());
 /** Devuelto por el store al registrar el guardia de cambios sin guardar; se llama al desmontar. */
@@ -198,6 +217,13 @@ function onDown(e) {
   lienzo.value.setPointerCapture(e.pointerId);
   const p = norm(e);
 
+  if (modo.value === 'texto') {
+    // Tocar el fondo crea un rotulo AHI y lo deja seleccionado, listo para escribirle encima.
+    // Pedir el texto antes de colocarlo obligaria a un dialogo y a adivinar donde va a caer.
+    crearTexto(p);
+    return;
+  }
+
   if (modo.value === 'colocar') {
     if (catSel.value == null) { mensaje.value = 'Elige o crea una categoría.'; return; }
     linea.activo = true; lineaActiva.value = true;
@@ -213,6 +239,68 @@ function onDown(e) {
   pintarCaja();
 }
 
+// ---------------------------------------------------------------- rotulos del plano
+
+/**
+ * Guarda un cambio del rotulo. El servidor lo difunde y todos los planos abiertos lo aplican,
+ * incluido este: por eso no hace falta recargar la lista despues.
+ */
+async function guardarTexto(id, cambios) {
+  try {
+    const r = await apiFetch(`/api/app/plano-textos/${id}`, {
+      method: 'PATCH', body: JSON.stringify(cambios),
+    });
+    if (!r.ok) { mensaje.value = 'No se pudo guardar el texto.'; return; }
+    textosTienda.aplicar(await r.json());
+  } catch (e) {
+    mensaje.value = e.message;
+  }
+}
+
+async function crearTexto(punto) {
+  try {
+    const r = await apiFetch('/api/app/plano-textos', {
+      method: 'POST',
+      body: JSON.stringify({ contenido: 'TEXTO', mapaX: punto.x, mapaY: punto.y }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { mensaje.value = d.mensaje || 'No se pudo crear el texto.'; return; }
+    textosTienda.aplicar(d);
+    textoSelId.value = d.id;
+    mensaje.value = 'Escribe el texto en el panel de la izquierda.';
+  } catch (e) {
+    mensaje.value = e.message;
+  }
+}
+
+function onTextoDown(e, t) {
+  if (modo.value !== 'texto') return;
+  e.stopPropagation();
+  lienzo.value.setPointerCapture(e.pointerId);
+  textoSelId.value = t.id;
+  const p = norm(e);
+  arrastreTexto = { id: t.id, x0: p.x, y0: p.y,
+                    base: { x: t.mapaX ?? 0.5, y: t.mapaY ?? 0.5 }, movido: false };
+}
+
+async function borrarTexto() {
+  const t = textoSel.value;
+  if (!t) return;
+  if (!confirm(`¿Quitar el texto "${t.contenido}" del plano?`)) return;
+  try {
+    const r = await apiFetch(`/api/app/plano-textos/${t.id}`, { method: 'DELETE' });
+    if (!r.ok) { mensaje.value = 'No se pudo quitar el texto.'; return; }
+    // No se espera al aviso del canal: quien borra tiene que verlo desaparecer ya.
+    textosTienda.aplicar({ id: t.id, activo: false });
+    textoSelId.value = null;
+  } catch (e) {
+    mensaje.value = e.message;
+  }
+}
+
+/** El tamaño y el grosor se manejan en numeros legibles y se guardan como fracciones. */
+const aMilesimas = (v) => Math.round((Number(v) || 0) * 1000);
+
 function onPinDown(e, p) {
   if (modo.value !== 'seleccionar') return;
   e.stopPropagation();
@@ -226,6 +314,20 @@ function onPinDown(e, p) {
 }
 
 function onMove(e) {
+  if (arrastreTexto) {
+    const q = norm(e);
+    const dx = q.x - arrastreTexto.x0;
+    const dy = q.y - arrastreTexto.y0;
+    if (Math.abs(dx) + Math.abs(dy) > 0.0005) arrastreTexto.movido = true;
+    // Escritura optimista: se mueve en la lista local y el servidor se entera al soltar. Un
+    // PATCH por pixel serian cientos de peticiones por arrastre.
+    const t = textosTienda.textos.find((x) => x.id === arrastreTexto.id);
+    if (t) {
+      t.mapaX = Math.min(1, Math.max(0, arrastreTexto.base.x + dx));
+      t.mapaY = Math.min(1, Math.max(0, arrastreTexto.base.y + dy));
+    }
+    return;
+  }
   if (linea.activo) { const p = norm(e); linea.x1 = p.x; linea.y1 = p.y; pintarGuia(); return; }
   if (caja.activo) { const p = norm(e); caja.x1 = p.x; caja.y1 = p.y; pintarCaja(); return; }
   if (arrastre) {
@@ -246,6 +348,15 @@ function onMove(e) {
 }
 
 function onUp() {
+  if (arrastreTexto) {
+    const { id, movido } = arrastreTexto;
+    arrastreTexto = null;
+    if (movido) {
+      const t = textosTienda.textos.find((x) => x.id === id);
+      if (t) guardarTexto(id, { mapaX: t.mapaX, mapaY: t.mapaY });
+    }
+    return;
+  }
   if (arrastre) {
     // Un arrastre entero es UN paso del historial, no uno por pixel. Al soltar se confirma
     // el estado reactivo (un solo re-render, y el DOM ya tiene los valores, asi que el
@@ -1010,6 +1121,9 @@ onMounted(async () => {
   // guardia hace que se acepte el estado de venta pero se conserve la posicion local.
   quitarGuardia = tienda.protegerLocales((id) => dirty.value.has(id));
   planoTienda.asegurar();
+  // Los rotulos del plano, con su canal en vivo: dos administradores editando a la vez ven
+  // los cambios del otro sin recargar.
+  textosTienda.asegurar();
   await tienda.asegurar(sesionCaducada);
   if (catSel.value == null && categorias.value.length) catSel.value = categorias.value[0].id;
 });
@@ -1029,6 +1143,54 @@ onUnmounted(() => {
         <button :class="{ on: modo === 'mapa' }" @click="modo = 'mapa'" title="Navegar el plano">🖐 Mapa</button>
         <button :class="{ on: modo === 'colocar' }" @click="modo = 'colocar'" title="Tocar coloca; arrastrar coloca una línea">➕ Colocar</button>
         <button :class="{ on: modo === 'seleccionar' }" @click="modo = 'seleccionar'" title="Arrastrar selecciona; arrastrar un pin lo mueve">⬚ Seleccionar</button>
+        <button :class="{ on: modo === 'texto' }" @click="modo = 'texto'"
+                title="Tocar el plano coloca un texto; arrastrarlo lo mueve">🔤 Texto</button>
+      </div>
+
+      <!-- Panel del rotulo. Solo en modo texto: en los otros modos ocuparia sitio para algo
+           que no se puede tocar. -->
+      <div v-if="modo === 'texto'" class="grupo grupo-texto">
+        <template v-if="textoSel">
+          <label class="campo">
+            <span>Texto</span>
+            <input class="control" :value="textoSel.contenido" maxlength="200"
+                   @input="guardarTexto(textoSel.id, { contenido: $event.target.value })" />
+          </label>
+          <label class="campo">
+            <span>Tamaño · {{ aMilesimas(textoSel.tamano) }}‰</span>
+            <input type="range" min="5" max="120" :value="aMilesimas(textoSel.tamano)"
+                   @input="guardarTexto(textoSel.id, { tamano: Number($event.target.value) / 1000 })" />
+          </label>
+          <div class="dos-colores">
+            <label class="campo">
+              <span>Color</span>
+              <input type="color" class="control control-color" :value="textoSel.color"
+                     @input="guardarTexto(textoSel.id, { color: $event.target.value })" />
+            </label>
+            <label class="campo">
+              <span>Borde</span>
+              <input type="color" class="control control-color" :value="textoSel.colorBorde"
+                     @input="guardarTexto(textoSel.id, { colorBorde: $event.target.value })" />
+            </label>
+          </div>
+          <label class="campo">
+            <span>Grosor del borde · {{ aMilesimas(textoSel.grosorBorde) }}‰</span>
+            <!-- El grosor es fraccion del TAMAÑO de la letra, no del plano: asi el contorno
+                 crece con ella en vez de quedarse fino al agrandar el texto. -->
+            <input type="range" min="0" max="400" :value="aMilesimas(textoSel.grosorBorde)"
+                   @input="guardarTexto(textoSel.id, { grosorBorde: Number($event.target.value) / 1000 })" />
+          </label>
+          <label class="campo">
+            <span>Giro · {{ Math.round(textoSel.rotacion || 0) }}°</span>
+            <input type="range" min="-180" max="180" :value="textoSel.rotacion || 0"
+                   @input="guardarTexto(textoSel.id, { rotacion: Number($event.target.value) })" />
+          </label>
+          <button class="btn-peligro" @click="borrarTexto">🗑 Quitar texto</button>
+        </template>
+        <p v-else class="ayuda-texto">
+          Toca el plano para poner un texto. Luego tócalo para seleccionarlo y arrástralo
+          para moverlo.
+        </p>
       </div>
 
       <label v-if="modo === 'colocar'" class="campo">
@@ -1242,6 +1404,13 @@ onUnmounted(() => {
                :title="`${p.categoria} ${p.codigo}`"
                @pointerdown="onPinDown($event, p)"><span class="num-caseta">{{ p.codigo }}</span></div>
 
+          <!-- Los rotulos. En modo texto reciben el toque para poder seleccionarlos y
+               arrastrarlos; en los demas modos NO, o taparian las casetas de debajo. -->
+          <RotuloPlano v-for="t in textosTienda.textos" :key="t.id" :texto="t"
+                       :seleccionado="modo === 'texto' && textoSelId === t.id"
+                       :class="{ tocable: modo === 'texto' }"
+                       @pointerdown="onTextoDown($event, t)" />
+
           <div v-if="lineaActiva" ref="guia" class="guia"></div>
 
           <div v-if="cajaActiva" ref="caja" class="caja"></div>
@@ -1251,6 +1420,15 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+/* En modo texto el rotulo SI recibe toques; el componente los desactiva por defecto para no
+   robarle el toque a la caseta que tenga debajo. */
+.plano :deep(.rotulo.tocable) { pointer-events: auto; cursor: move; }
+.grupo-texto { display: flex; flex-direction: column; gap: 0.5rem; min-width: 220px; }
+.grupo-texto .campo { display: flex; flex-direction: column; gap: 0.2rem; }
+.dos-colores { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.control-color { height: 34px; padding: 2px; }
+.ayuda-texto { margin: 0; font-size: 0.85rem; line-height: 1.4; opacity: 0.8; max-width: 220px; }
+
 .toolbar {
   display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
   padding: 0.6rem 1rem; border-bottom: 1px solid var(--border); background: var(--panel);
