@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import { alerta } from '../ui/alerta';
 
 const usuario = ref('');
 const contrasena = ref('');
@@ -36,6 +37,9 @@ async function entrar() {
     router.push('/');
   } catch (e) {
     error.value = e.message;
+    if (e.codigo === 'MANTENIMIENTO') {
+      alerta(e.message, 'advertencia', 0);
+    }
   } finally {
     cargando.value = false;
   }

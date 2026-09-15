@@ -20,6 +20,8 @@ import java.util.List;
 
 import com.usic.uniFex.security.JwtAuthFilter;
 import com.usic.uniFex.security.JwtService;
+import com.usic.uniFex.security.MantenimientoApiFilter;
+import com.usic.uniFex.model.service.MantenimientoService;
 
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 
@@ -121,7 +123,8 @@ public class SecurityConfig {
      */
     @Bean
     @Order(1)
-    public SecurityFilterChain apiSecurityFilterChain(HttpSecurity http, JwtService jwtService) throws Exception {
+    public SecurityFilterChain apiSecurityFilterChain(HttpSecurity http, JwtService jwtService,
+                                                      MantenimientoService mantenimientoService) throws Exception {
         http
                 // AntPathRequestMatcher (ruta pura) evita una peculiaridad del MvcRequestMatcher
                 // con /** que dejaba GET /api/app/puestos fuera de esta cadena.
@@ -158,7 +161,8 @@ public class SecurityConfig {
                             res.setContentType("application/json;charset=UTF-8");
                             res.getWriter().write("{\"ok\":false,\"mensaje\":\"Sin permiso\"}");
                         }))
-                .addFilterBefore(new JwtAuthFilter(jwtService), UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(new JwtAuthFilter(jwtService), UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(new MantenimientoApiFilter(mantenimientoService), JwtAuthFilter.class);
         return http.build();
     }
 

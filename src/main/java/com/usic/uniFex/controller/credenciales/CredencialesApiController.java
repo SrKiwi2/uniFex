@@ -1,5 +1,6 @@
 package com.usic.uniFex.controller.credenciales;
 
+import java.io.ByteArrayOutputStream;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,10 +20,14 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import com.usic.uniFex.model.dto.CredencialDTO;
 import com.usic.uniFex.model.dto.PlantillaCredencial;
+import com.usic.uniFex.model.entity.Inscripcion;
+import com.usic.uniFex.model.IService.IInscripcionService;
 import com.usic.uniFex.model.service.CredencialCodigoService;
 import com.usic.uniFex.model.service.CredencialPdfService;
 import com.usic.uniFex.model.service.CredencialImagenService;
 import com.usic.uniFex.model.service.CredencialService;
+import com.usic.uniFex.model.service.ReciboPdfService;
+import com.usic.uniFex.model.service.WhatsAppService;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -47,6 +52,9 @@ public class CredencialesApiController {
     private final CredencialPdfService pdfService;
     private final CredencialImagenService imagenService;
     private final CredencialCodigoService codigos;
+    private final ReciboPdfService reciboPdfService;
+    private final WhatsAppService whatsApp;
+    private final IInscripcionService inscripcionService;
     private final com.usic.uniFex.model.dao.CredencialImpresionDao impresiones;
 
     /**
@@ -218,6 +226,9 @@ public class CredencialesApiController {
                               Boolean forzar) {
     }
 
+    public record PeticionWhatsApp(Long inscripcionId, List<Long> responsables) {
+    }
+
     @PostMapping("/pdf")
     @PreAuthorize(Roles.USA_CREDENCIALES)
     public ResponseEntity<byte[]> pdf(@RequestBody(required = false) PeticionPdf req) {
@@ -318,7 +329,7 @@ public class CredencialesApiController {
     @GetMapping("/{responsableId}/virtual")
     @PreAuthorize(Roles.USA_CREDENCIALES)
     public ResponseEntity<byte[]> virtual(@PathVariable Long responsableId,
-                                          @RequestParam(value = "forzar", defaultValue = "false") boolean forzar) {
+                                           @RequestParam(value = "forzar", defaultValue = "false") boolean forzar) {
         Long soloMias = alcanceDelUsuario();
         if (soloMias != null && !credencialService.esDeUsuario(responsableId, soloMias)) {
             return ResponseEntity.status(403).build();
@@ -348,6 +359,82 @@ public class CredencialesApiController {
                 .body(png);
     }
 
+    /**
+     * Reenvia por WhatsApp el recibo y una o varias credenciales virtuales de una venta.
+     *
+     * Si `responsables` viene vacio, se envian todas las credenciales listas de la inscripcion.
+     * Si trae ids, se envia solo esa seleccion. Un vendedor queda limitado a sus propias ventas.
+     */
+    @PostMapping("/whatsapp")
+    @PreAuthorize(Roles.USA_CREDENCIALES)
+    public ResponseEntity<Map<String, Object>> whatsapp(@RequestBody(required = false) PeticionWhatsApp req) {
+        log.info("[WHATSAPP-REENVIO] Peticion recibida inscripcion={} responsables={}",
+                req == null ? null : req.inscripcionId(), req == null ? null : req.responsables());
+        if (req == null || req.inscripcionId() == null) {
+            return ResponseEntity.badRequest().body(Map.of("ok", false, "mensaje", "Falta la inscripción"));
+        }
+        if (!whatsApp.habilitado()) {
+            return ResponseEntity.status(409).body(Map.of("ok", false, "mensaje", "WhatsApp no está configurado"));
+        }
+
+        Inscripcion inscripcion = inscripcionService.findById(req.inscripcionId());
+        if (inscripcion == null || inscripcion.getEntidad() == null) {
+            return ResponseEntity.status(404).body(Map.of("ok", false, "mensaje", "La inscripción no existe"));
+        }
+        Long soloMias = alcanceDelUsuario();
+        if (soloMias != null && !soloMias.equals(inscripcion.getRegistroIdUsuario())) {
+            return ResponseEntity.status(403).body(Map.of("ok", false, "mensaje", "Solo puedes reenviar tus ventas"));
+        }
+
+        String celular = normalizarCelular(inscripcion.getEntidad().getCelularRepresentante());
+        log.info("[WHATSAPP-REENVIO] Inscripcion={} entidad='{}' celularOriginal='{}' celularNormalizado='{}'",
+                req.inscripcionId(), inscripcion.getEntidad().getNombre(),
+                inscripcion.getEntidad().getCelularRepresentante(), celular);
+        if (celular == null || celular.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("ok", false, "mensaje", "La venta no tiene celular del cliente"));
+        }
+
+        PlantillaCredencial plantilla = PlantillaCredencial.CREDENCIAL_VIRTUAL;
+        List<Long> seleccion = req.responsables() == null ? List.of() : req.responsables();
+        var todas = credencialService.porInscripcion(req.inscripcionId());
+        log.info("[WHATSAPP-REENVIO] Credenciales de inscripcion={} total={} seleccion={}",
+                req.inscripcionId(), todas.size(), seleccion);
+        List<CredencialDTO> credenciales = todas.stream()
+                .filter(c -> seleccion.isEmpty() || seleccion.contains(c.responsableId()))
+                .peek(c -> log.info("[WHATSAPP-REENVIO] Candidata responsable={} nombre='{}' fotoUrl='{}' conFoto={} conComprobante={} aptaVirtual={}",
+                        c.responsableId(), c.nombre(), c.fotoUrl(), c.conFoto(), c.conComprobante(), c.apto(plantilla.id())))
+                .filter(c -> c.apto(plantilla.id()))
+                .toList();
+        log.info("[WHATSAPP-REENVIO] Credenciales aptas inscripcion={} cantidad={}",
+                req.inscripcionId(), credenciales.size());
+        if (credenciales.isEmpty()) {
+            return ResponseEntity.status(409).body(Map.of("ok", false,
+                    "mensaje", "No hay credenciales listas para reenviar. Falta comprobante o foto."));
+        }
+
+        try {
+            ByteArrayOutputStream recibo = new ByteArrayOutputStream();
+            reciboPdfService.generarRecibo(req.inscripcionId(), recibo);
+            log.info("[WHATSAPP-REENVIO] Recibo generado inscripcion={} bytes={}",
+                    req.inscripcionId(), recibo.size());
+            List<byte[]> imagenes = credenciales.stream()
+                    .map(c -> imagenService.generar(c, plantilla, raizPublica()))
+                    .toList();
+            log.info("[WHATSAPP-REENVIO] Imagenes de credencial generadas inscripcion={} cantidad={}",
+                    req.inscripcionId(), imagenes.size());
+            whatsApp.enviarBienvenidaVentaConPdfs(celular, inscripcion.getEntidad().getNombre(),
+                    req.inscripcionId(), recibo.toByteArray(), imagenes, raizPublica());
+
+            return ResponseEntity.ok(Map.of("ok", true,
+                    "mensaje", "Reenvío enviado por WhatsApp",
+                    "credenciales", credenciales.size()));
+        } catch (Exception e) {
+            log.warn("No se pudo reenviar WhatsApp de inscripcion {}: {}", req.inscripcionId(), e.getMessage());
+            return ResponseEntity.status(500).body(Map.of("ok", false,
+                    "mensaje", "No se pudo reenviar por WhatsApp"));
+        }
+    }
+
     /** Quien imprimio esta credencial, cuando, con que plantilla y que faltaba entonces. */
     @GetMapping("/{responsableId}/impresiones")
     @PreAuthorize(Roles.USA_CREDENCIALES)
@@ -370,6 +457,13 @@ public class CredencialesApiController {
     private String raizPublica() {
         if (baseUrlPublica != null && !baseUrlPublica.isBlank()) return baseUrlPublica.trim();
         return ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString();
+    }
+
+    private static String normalizarCelular(String celular) {
+        if (celular == null || celular.isBlank()) return null;
+        String n = celular.replaceAll("[^0-9]", "");
+        if (n.startsWith("0")) n = n.substring(1);
+        return n.length() == 8 ? "591" + n : n;
     }
 
     private Long usuarioActual() {

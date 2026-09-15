@@ -98,6 +98,11 @@ public interface IUsuarioDao extends JpaRepository<Usuario, Long> {
               + "order by u.username")
       List<Usuario> findByRolNombre(@Param("rolNombre") String rolNombre);
 
+      /** Usuarios conectables que deben ser expulsados cuando se activa mantenimiento. */
+      @Query("select u.id from Usuario u where u.rol.nombre <> 'SUPER USUARIO' "
+              + "and (u.estado is null or u.estado = 'ACTIVO')")
+      List<Long> idsNoSuperUsuario();
+
       /**
        * Usuarios que pueden entrar HOY con ese rol, sin contar a uno dado. Sirve para no dejar
        * el sistema sin ningun SUPER USUARIO activo, que es un estado del que no se sale desde

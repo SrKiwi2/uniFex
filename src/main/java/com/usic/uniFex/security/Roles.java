@@ -29,6 +29,9 @@ public final class Roles {
     public static final java.util.List<String> AUTORIDADES_ADMINISTRA =
             java.util.List.of("ROLE_SUPER_USUARIO", "ROLE_ADMINISTRADOR");
 
+    /** Solo quien puede entrar aun cuando el sistema esta en mantenimiento. */
+    public static final String SOLO_SUPER_USUARIO = "hasRole('SUPER_USUARIO')";
+
     /**
      * Quien puede rediseñar el plano: crear categorias, mover o redimensionar casetas, bloquear.
      * Son operaciones destructivas para la venta, asi que se reservan a la administracion.

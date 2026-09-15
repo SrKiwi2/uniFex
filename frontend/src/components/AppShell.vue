@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/auth';
 import { usePermisosStore } from '../stores/permisos';
 import { usePuestosStore } from '../stores/puestos';
 import { toast } from '../ui/toast';
+import { alerta } from '../ui/alerta';
 import { tema, alternarTema } from '../ui/tema';
 import { iniciarPresencia, marcarPantalla, detenerPresencia } from '../ui/presencia';
 
@@ -34,6 +35,7 @@ const TODOS = [
   { a: '/mapa', p: 'mapa', icono: '🗺️', txt: 'Mapa de ventas' },
   { a: '/venta', p: 'venta', icono: '🛒', txt: 'Registrar venta' },
   { a: '/mis-ventas', p: 'mis-ventas', icono: '🧾', txt: 'Mis ventas' },
+  { a: '/catalogo', p: 'catalogo', icono: '🏷️', txt: 'Catálogo' },
   { a: '/escaner', p: 'escaner', icono: '📷', txt: 'Escanear credencial' },
   { a: '/notificaciones', p: 'notificaciones', icono: '🔔', txt: 'Notificaciones' },
   { a: '/tablero', p: 'tablero', icono: '📌', txt: 'Tablero' },
@@ -50,6 +52,7 @@ const TODOS = [
   { a: '/personal-apoyo', p: 'personal-apoyo', icono: '👥', txt: 'Personal de apoyo' },
   { a: '/usuarios', p: 'usuarios', icono: '👤', txt: 'Usuarios' },
   { a: '/roles', p: 'roles', icono: '🛡️', txt: 'Roles' },
+  { a: '/mantenimiento', p: 'mantenimiento', icono: '⚙️', txt: 'Mantenimiento' },
   { a: '/permisos', p: 'permisos', icono: '🔐', txt: 'Permisos por rol' },
 ];
 
@@ -73,6 +76,10 @@ const iconoTema = computed(() => (tema.value === 'dark' ? '🌙' : tema.value ==
  *     mientras tiene el telefono en el bolsillo.
  */
 function alCambiarPermisos(n) {
+  if (n?.tipo === 'MANTENIMIENTO_ACTIVO') {
+    expulsarPorMantenimiento(n.cuerpo || n.asunto || 'Sistema en mantenimiento');
+    return;
+  }
   if (n?.tipo !== 'PERMISOS_CAMBIADOS') return;
   permisos.recargar().then(() => {
     toast('Cambiaron tus opciones del menú', 'info');
@@ -82,12 +89,26 @@ function alCambiarPermisos(n) {
   });
 }
 
+function expulsarPorMantenimiento(mensaje) {
+  if (mantenimientoMostrado) return;
+  mantenimientoMostrado = true;
+  permisos.limpiar();
+  auth.logout();
+  router.push('/login');
+  alerta(mensaje || 'Sistema en mantenimiento', 'advertencia', 0);
+}
+
+function alMantenimientoHttp(e) {
+  expulsarPorMantenimiento(e.detail?.mensaje);
+}
+
 function alVolverAlFrente() {
   if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
   permisos.recargar();
 }
 
 let quitarOyente = null;
+let mantenimientoMostrado = false;
 onMounted(() => {
   /*
    * `conectar()` y no `asegurar()`: lo unico que hace falta aqui es el canal de avisos
@@ -100,6 +121,7 @@ onMounted(() => {
    */
   tienda.conectar();
   quitarOyente = tienda.registrarNotificaciones(alCambiarPermisos);
+  window.addEventListener('unifex:mantenimiento', alMantenimientoHttp);
   document.addEventListener('visibilitychange', alVolverAlFrente);
   window.addEventListener('online', alVolverAlFrente);
   // El latido que alimenta "Seguimiento en vivo". Va aqui y no en cada vista: se late mientras
@@ -113,6 +135,7 @@ onMounted(() => {
 watch(() => route.fullPath, () => marcarPantalla(route.meta?.pantalla, route.meta?.titulo));
 onUnmounted(() => {
   if (quitarOyente) quitarOyente();
+  window.removeEventListener('unifex:mantenimiento', alMantenimientoHttp);
   document.removeEventListener('visibilitychange', alVolverAlFrente);
   window.removeEventListener('online', alVolverAlFrente);
 });
