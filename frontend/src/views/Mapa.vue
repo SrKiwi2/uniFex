@@ -11,6 +11,7 @@ import { toast } from '../ui/toast';
 import { alerta } from '../ui/alerta';
 import { iniciarMedicion, marcarPintado, marcarRed, purgarMediciones } from '../ui/medir';
 import { CLASE_ESTADO, ETIQUETA_ESTADO, LEYENDA, anchoParaLeer, anchoParaTocar, estiloPin, numerosVisibles } from '../mapa';
+import { asegurarCategorias, opcionesDe, tieneVariosPrecios } from '../ui/catalogoCategorias';
 
 // Las casetas y la conexion en tiempo real son compartidas con el Tablero y el Editor:
 // una sola descarga y un solo WebSocket para toda la app (ver stores/puestos.js).
@@ -23,8 +24,6 @@ const planoTienda = usePlanoStore();
 const enPeticion = ref(new Set());
 /** Caseta cuya ficha esta abierta, o null. */
 const seleccionada = ref(null);
-/** Ids de casetas que tienen alguna foto, para distinguirlas en el plano. */
-const conFoto = ref(new Set());
 let temporizadorMedicion = null;
 const auth = useAuthStore();
 const router = useRouter();
@@ -162,8 +161,25 @@ function rotulo(p) {
       : 'sin vendedor asignado'}`;
   }
   const duenio = esMia(p) ? ' (tuya)' : p.estado === 'T' ? ' (de otro vendedor)' : '';
-  const precio = p.precio > 0 ? ` · ${p.precio} Bs` : ' · sin precio';
-  return `${p.categoria} ${p.codigo} · ${p.tamano || ''} · ${ETIQUETA_ESTADO[p.estado]}${duenio}${precio}`;
+  return `${p.categoria} ${p.codigo} · ${p.tamano || ''} · ${ETIQUETA_ESTADO[p.estado]}${duenio}${precioRotulo(p)}`;
+}
+
+/**
+ * El precio, dicho sin mentir.
+ *
+ * Una categoria puede venderse de varias formas, y el mapa cantaba UNA cifra como si fuera la
+ * definitiva: el vendedor se la decia al cliente y luego, al registrar, salia otra. Cuando hay
+ * varias opciones se dice DESDE cuanto y cuantas hay; el desglose esta en la ficha, que es
+ * donde cabe. Con una sola opcion —o con precio propio de la caseta— no hay nada que matizar
+ * y se enseña la cifra tal cual, que es lo que el vendedor quiere leer de un vistazo.
+ */
+function precioRotulo(p) {
+  const ops = tieneVariosPrecios(p) ? opcionesDe(p.categoriaId) : [];
+  if (ops.length > 1) {
+    const desde = Math.min(...ops.map((o) => Number(o.precio) || 0));
+    return ` · desde ${desde} Bs (${ops.length} precios)`;
+  }
+  return p.precio > 0 ? ` · ${p.precio} Bs` : ' · sin precio';
 }
 
 /**
@@ -275,17 +291,13 @@ async function vaciarCarrito() {
 // AppLayout al salir de la sesion. Ademas esta vista vive en <KeepAlive>, donde
 // onUnmounted no se dispara al navegar — ahi estaba la fuga de conexiones.
 /**
- * Ids de casetas con foto. Se piden UNA vez y no por caseta: con ~500 pines en pantalla,
- * consultarlo pin a pin seria un N+1 en el navegador.
+ * La marca de "esta caseta tiene foto" se retiro del plano (y con ella su peticion).
+ *
+ * Casi ninguna caseta tenia foto, asi que el distintivo no distinguia nada: era una esquina de
+ * color en unos pocos pines que nadie sabia leer. La galeria ya se habia quitado de la ficha por
+ * el mismo motivo. Si algun dia se vuelven a subir fotos en serio, esto es
+ * `GET /api/app/puestos/con-foto` y una clase en el pin.
  */
-async function cargarCualesTienenFoto() {
-  try {
-    const r = await apiFetch('/api/app/puestos/con-foto');
-    if (r.ok) conFoto.value = new Set(await r.json());
-  } catch {
-    /* el mapa funciona igual sin el distintivo */
-  }
-}
 
 // El cambio de asignaciones llega por el topic personal. El store ya recarga la lista solo;
 // aqui solo se muestra el mensaje, que es lo que le dice al vendedor QUE cambio y de que
@@ -298,8 +310,10 @@ onMounted(() => {
     if (n?.tipo === 'ASIGNACION_CAMBIADA' && n.cuerpo) alerta(n.cuerpo, 'info', 8000);
   });
   tienda.asegurar(sesionCaducada);
+  // El catalogo de opciones, para poder avisar en el rotulo de que una caseta tiene varios
+  // precios. No se espera: si tarda, el rotulo enseña el precio vigente igual que antes.
+  asegurarCategorias();
   planoTienda.asegurar();
-  cargarCualesTienenFoto();
   // Delata las mediciones cuyo broadcast nunca llego: sin esto, un mensaje perdido
   // se confunde con uno lento (la linea simplemente no aparece).
   if (import.meta.env.DEV) {
@@ -430,10 +444,10 @@ onUnmounted(() => {
         <button
           v-for="p in ubicados"
           :key="p.id"
-          v-memo="[p.estado, esMia(p), conFoto.has(p.id), p.mapaX, p.mapaY, p.mapaEscala, p.mapaRotacion, p.tamanoMapa, p.color, p.forma, p.codigo, puedoVender(p), ocupanteDe(p)?.vendedor]"
+          v-memo="[p.estado, esMia(p), p.mapaX, p.mapaY, p.mapaEscala, p.mapaRotacion, p.tamanoMapa, p.color, p.forma, p.codigo, puedoVender(p), ocupanteDe(p)?.vendedor]"
           class="pin"
           :class="[CLASE_ESTADO[p.estado], `forma-${p.forma || 'cuadrado'}`,
-                   { mia: esMia(p), 'con-foto': conFoto.has(p.id), ajena: !puedoVender(p) }]"
+                   { mia: esMia(p), ajena: !puedoVender(p) }]"
           :style="{ ...estiloPin(p), '--categoria': p.color || 'transparent' }"
           :title="rotulo(p)"
           @pointerdown.stop
@@ -582,15 +596,6 @@ onUnmounted(() => {
    con un borde: desde que la propia es azul y la ajena naranja, el color solo basta. */
 .pin.tramite { cursor: default; }
 .pin.tramite.mia { cursor: pointer; }
-
-/* Las casetas con foto se distinguen con un punto blanco en la esquina. No lleva icono ni
-   texto a propósito: al zoom normal un pin mide pocos píxeles y cualquier glifo sería una
-   mancha ilegible. */
-.pin.con-foto::after {
-  content: ""; position: absolute; top: 8%; right: 8%;
-  width: 26%; height: 26%; border-radius: 50%;
-  background: #fff; box-shadow: 0 0 0 var(--borde) rgba(2, 6, 23, 0.35);
-}
 
 /* ---- carrito ---- */
 .carrito {

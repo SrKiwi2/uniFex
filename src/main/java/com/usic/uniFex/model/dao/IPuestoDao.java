@@ -15,6 +15,24 @@ public interface IPuestoDao extends JpaRepository <Puesto, Long>{
     @EntityGraph(attributePaths = {"categoria"})
     List<Puesto> findAll();
 
+    /**
+     * Casetas CON su categoria ya cargada, para difundir.
+     *
+     * Existe por el coste de difundir, que es lo que decide cuanto tarda el mapa de los OTROS
+     * vendedores en enterarse. `findById` trae la caseta con la categoria lazy, y
+     * {@code PuestoEstadoDTO.de} le pide el nombre, el color, la forma, el tamaño y el precio:
+     * eso son DOS viajes a la base por caseta. Difundir un lote de 20 costaba 40.
+     *
+     * Con esto es UNA consulta para todo el lote. No cambia lo que se difunde —el mismo
+     * PuestoEstadoDTO, uno por caseta— solo lo que cuesta averiguarlo.
+     *
+     * Importa mas de lo que parece porque la base puede no estar al lado del servidor: con la
+     * de produccion al otro lado de una IP publica, cada viaje son cientos de milisegundos y
+     * la cuenta se paga entera ANTES de que salga el primer mensaje.
+     */
+    @EntityGraph(attributePaths = {"categoria"})
+    List<Puesto> findWithCategoriaByIdIn(Collection<Long> ids);
+
     @Query("SELECT p FROM Puesto p WHERE p.estadoPuesto = 'L' ORDER BY p.codigo ASC")
     List<Puesto> listarPuestos();
 

@@ -565,10 +565,25 @@ export const usePuestosStore = defineStore('puestos', () => {
    * Tres redes, de la mas barata a la mas cara:
    *   1. cada RE-conexion vuelve a pedir la lista (los mensajes perdidos no se recuperan);
    *   2. al volver la app al frente o al recuperar la red, se resincroniza siempre;
-   *   3. mientras NO haya tiempo real, se sondea cada 20 s.
+   *   3. mientras NO haya tiempo real, se sondea cada 5 s (peticion condicionada: 304 sin cuerpo).
    * Con tiempo real funcionando, la 3 no hace ni una peticion.
    */
-  const SONDEO_MS = 20000;
+  /*
+   * Cada cuanto se sondea CUANDO NO HAY TIEMPO REAL. Con WebSocket funcionando esto no hace
+   * ni una peticion (ver la guarda `if (enVivo.value) return`).
+   *
+   * Estaba en 20 s y se reporto desde la feria que un vendedor tardaba varios segundos en ver
+   * la caseta que otro acababa de meter al carrito. La causa de fondo era que el WebSocket no
+   * pasaba por el proxy —y sin el, 20 s es lo que hay—, pero aun con el proxy arreglado esta
+   * red de seguridad tiene que ser mas tupida: es la unica que queda cuando el tiempo real
+   * falla, y la consecuencia de ir tarde aqui es que dos vendedores le ofrezcan la misma
+   * caseta a dos clientes.
+   *
+   * 5 s cuesta practicamente nada porque la peticion va CONDICIONADA (`If-None-Match`): si
+   * nada cambio, el servidor contesta 304 **sin cuerpo**. Medido: 200 = 139 KB, 304 = 0 bytes.
+   * Con 35 vendedores son 7 peticiones por segundo que casi siempre no transportan nada.
+   */
+  const SONDEO_MS = 5000;
 
   function arrancarSondeo() {
     if (sondeo) return;

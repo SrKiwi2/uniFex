@@ -2,7 +2,7 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { apiFetch } from '../api';
 import { ETIQUETA_ESTADO, CLASE_ESTADO } from '../mapa';
-import { url } from '../config';
+import { categorias, asegurarCategorias } from '../ui/catalogoCategorias';
 
 /*
  * Ficha de una caseta: lo que el vendedor le enseña al cliente.
@@ -36,9 +36,6 @@ const props = defineProps({
 });
 const emit = defineEmits(['cerrar', 'agregar', 'quitar']);
 
-const fotos = ref([]);
-const cargandoFotos = ref(false);
-const indice = ref(0);
 
 const accion = computed(() => {
   if (!props.puesto) return null;
@@ -115,24 +112,37 @@ watch(() => props.puesto?.id, (id) => {
 }, { immediate: true });
 onBeforeUnmount(() => clearInterval(reloj));
 
-// Las fotos se piden al abrir la ficha, no con el mapa: son ~500 casetas y traerlas todas
-// de golpe cargaria megas que casi nunca se miran.
-watch(() => props.puesto?.id, async (id) => {
-  fotos.value = [];
-  indice.value = 0;
-  if (!id) return;
-  cargandoFotos.value = true;
-  try {
-    const r = await apiFetch(`/api/app/puestos/${id}/fotos`);
-    if (r.ok) fotos.value = await r.json();
-  } catch {
-    /* sin fotos la ficha sigue siendo util: precio, medida y ubicacion */
-  } finally {
-    cargandoFotos.value = false;
-  }
-}, { immediate: true });
+/*
+ * ---- las opciones de precio de la categoria ----
+ *
+ * Una categoria puede venderse de varias formas ("PYMES" a 800, "PYMES con tarima" a 1.200).
+ * La ficha enseñaba UN precio y punto, asi que el vendedor le cantaba al cliente una cifra que
+ * no era la unica posible. Aqui se listan todas; cual se cobra se elige al registrar la venta.
+ *
+ * El catalogo vive en `ui/catalogoCategorias`, compartido con el mapa: el rotulo del pin
+ * necesita lo mismo para poder avisar de que hay varios precios, y dos caches separados serian
+ * dos descargas de la misma lista.
+ */
+
+watch(() => props.puesto?.id, (id) => { if (id) asegurarCategorias(); }, { immediate: true });
+
+/** Las opciones VIVAS de la categoria de esta caseta, ordenadas como las definio administracion. */
+const opciones = computed(() => {
+  const c = (categorias.value || []).find((x) => x.id === props.puesto?.categoriaId);
+  return (c?.opciones || []).slice().sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
+});
+
+/**
+ * ¿Hay varios precios que enseñar?
+ *
+ * Solo cuando la categoria tiene MAS DE UNA opcion **y** la caseta no lleva precio propio. Un
+ * precio propio (V37) manda sobre las opciones, asi que listarlas ahi seria enseñar importes
+ * que esa caseta no va a cobrar — justo el error que se viene a corregir, pero al reves.
+ */
+const hayVariosPrecios = computed(() => !props.puesto?.precioPropio && opciones.value.length > 1);
 
 const precio = computed(() => Number(props.puesto?.precio || 0));
+const bs = (n) => Number(n || 0).toLocaleString('es-BO');
 
 /** Deja un celular listo para `tel:`: sin espacios ni guiones. */
 const telefono = (celular) => (celular || '').replace(/[^\d+]/g, '');
@@ -171,24 +181,40 @@ async function copiarContacto(a) {
             <button class="btn btn-fantasma btn-icono" aria-label="Cerrar" @click="emit('cerrar')">✕</button>
           </header>
 
-          <!-- Fotos: lo que de verdad le enseña al cliente cómo es la caseta -->
-          <div v-if="cargandoFotos" class="galeria vacia">Cargando fotos…</div>
-          <div v-else-if="fotos.length" class="galeria">
-            <!-- `url()` antepone el servidor cuando toca: el backend devuelve la ruta como
-                 /files/..., que en el APK apuntaria al contenedor de la app y no cargaria. -->
-            <img :src="url(fotos[indice].url)" :alt="fotos[indice].descripcion || 'Foto de la caseta'"
-                 loading="lazy" decoding="async" />
-            <div v-if="fotos.length > 1" class="puntos">
-              <button v-for="(f, i) in fotos" :key="f.id" class="punto"
-                      :class="{ on: i === indice }" :aria-label="`Foto ${i + 1}`"
-                      @click="indice = i"></button>
-            </div>
-            <p v-if="fotos[indice].descripcion" class="pie">{{ fotos[indice].descripcion }}</p>
+          <!-- La galería de fotos se retiró a propósito: casi ninguna caseta tenía foto, así
+               que la ficha se abría con un recuadro de "Sin fotos todavía" ocupando el sitio
+               de lo que sí se consulta —el precio— y costaba una petición por cada caseta que
+               el vendedor tocaba. Para volver a ponerla, el endpoint sigue estando:
+               GET /api/app/puestos/{id}/fotos. -->
+
+          <!-- Varios precios: se listan TODOS en vez de enseñar uno como si fuera el definitivo.
+               Cuál se cobra se decide al registrar la venta, no aquí. -->
+          <div v-if="hayVariosPrecios" class="precios">
+            <p class="titulo-precios">
+              Esta categoría se vende de {{ opciones.length }} formas
+              <span class="muted">· el precio depende de cuál se elija al registrar</span>
+            </p>
+            <ul>
+              <li v-for="o in opciones" :key="o.id">
+                <span class="nom">
+                  {{ o.nombre }}
+                  <span v-if="o.predeterminada" class="marca">por defecto</span>
+                </span>
+                <strong>{{ bs(o.precio) }} Bs</strong>
+              </li>
+            </ul>
           </div>
-          <div v-else class="galeria vacia">Sin fotos todavía</div>
 
           <dl class="datos">
-            <div><dt>Precio</dt><dd class="precio">{{ precio > 0 ? precio.toLocaleString('es-BO') + ' Bs' : 'sin precio' }}</dd></div>
+            <!-- Un solo precio: se enseña tal cual, que es lo que el vendedor canta. Con varios,
+                 el precio vive en el bloque de arriba y aquí sobraría (diría uno de los tres). -->
+            <div v-if="!hayVariosPrecios">
+              <dt>Precio</dt>
+              <dd class="precio">
+                {{ precio > 0 ? bs(precio) + ' Bs' : 'sin precio' }}
+                <span v-if="puesto.precioPropio" class="marca">precio propio</span>
+              </dd>
+            </div>
             <div><dt>Medida</dt><dd>{{ puesto.tamano || '—' }}</dd></div>
             <div v-if="puesto.referencia" class="ancho"><dt>Ubicación</dt><dd>{{ puesto.referencia }}</dd></div>
           </dl>
@@ -280,21 +306,6 @@ header { display: flex; align-items: flex-start; justify-content: space-between;
 header h2 { margin: 0 0 0.35rem; font-size: 1.35rem; }
 .chip { padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; }
 
-.galeria { position: relative; border-radius: var(--radio-sm); overflow: hidden; background: var(--panel-2); }
-/* 3:2 en vez de 4:3: la foto de una caseta es apaisada y con 4:3 se recortaba por los
-   lados justo lo que se quiere enseñar. */
-.galeria img { width: 100%; display: block; aspect-ratio: 3 / 2; object-fit: cover; }
-.galeria.vacia {
-  display: grid; place-items: center; aspect-ratio: 3 / 2;
-  color: var(--muted); font-size: 0.95rem; border: 1px dashed var(--border);
-}
-.puntos { position: absolute; bottom: 0.5rem; left: 0; right: 0; display: flex; justify-content: center; gap: 0.35rem; }
-.punto {
-  width: 8px; height: 8px; border-radius: 50%; border: none; padding: 0;
-  background: rgba(255, 255, 255, 0.55);
-}
-.punto.on { background: #fff; }
-.pie { margin: 0.4rem 0 0; font-size: 0.82rem; color: var(--muted); }
 
 .datos { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; margin: 0; }
 .datos .ancho { grid-column: 1 / -1; }
@@ -302,6 +313,30 @@ header h2 { margin: 0 0 0.35rem; font-size: 1.35rem; }
 .datos dd { margin: 0.15rem 0 0; font-size: 1.1rem; }
 /* El precio es el dato que se dice en voz alta: se lee de lejos y sin buscarlo. */
 .datos .precio { font-weight: 800; font-size: 1.45rem; font-variant-numeric: tabular-nums; }
+
+/* Las formas de vender una categoría. Ocupa el sitio donde antes iba la galería, que es el
+   primer golpe de vista de la ficha: es lo que el cliente pregunta. */
+.precios {
+  display: flex; flex-direction: column; gap: 0.5rem;
+  padding: 0.9rem 1rem; border-radius: var(--radio-sm);
+  background: var(--panel-2); border: 1px solid var(--border);
+}
+.titulo-precios { margin: 0; font-size: 0.95rem; line-height: 1.4; }
+.precios ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.45rem; }
+.precios li {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 0.8rem;
+  padding-top: 0.45rem; border-top: 1px solid var(--border);
+}
+.precios li:first-child { border-top: none; padding-top: 0; }
+.precios .nom { font-size: 1.05rem; }
+/* Los importes se comparan entre sí, así que van alineados y con cifras de ancho fijo. */
+.precios strong { font-size: 1.25rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.marca {
+  margin-left: 0.4rem; padding: 0.05rem 0.45rem; border-radius: 999px;
+  font-size: 0.7rem; font-weight: 700; vertical-align: middle;
+  color: var(--acento); border: 1px solid color-mix(in srgb, var(--acento) 45%, transparent);
+}
+.muted { color: var(--muted); }
 
 .ajena {
   display: flex; flex-direction: column; gap: 0.6rem;
