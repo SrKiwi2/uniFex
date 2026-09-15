@@ -459,16 +459,29 @@ public class RegistroVentaService {
 
     private void enviarWhatsAppVentaConPdfs(String celular, String nombreEntidad, Long inscripcionId) {
         try {
+            log.info("[WHATSAPP-VENTA] Inicio envio automatico inscripcion={} celular={} entidad='{}' baseUrl={}",
+                    inscripcionId, celular, nombreEntidad, baseUrl);
             ByteArrayOutputStream salidaRecibo = new ByteArrayOutputStream();
             reciboPdf.generarRecibo(inscripcionId, salidaRecibo);
+            log.info("[WHATSAPP-VENTA] Recibo generado inscripcion={} bytes={}",
+                    inscripcionId, salidaRecibo.size());
 
             PlantillaCredencial plantilla = PlantillaCredencial.POR_DEFECTO;
-            List<byte[]> credenciales = credencialService.porInscripcion(inscripcionId).stream()
+            var datosCredenciales = credencialService.porInscripcion(inscripcionId);
+            log.info("[WHATSAPP-VENTA] Credenciales encontradas inscripcion={} cantidad={}",
+                    inscripcionId, datosCredenciales.size());
+            List<byte[]> credenciales = datosCredenciales.stream()
+                    .peek(c -> log.info("[WHATSAPP-VENTA] Preparando credencial responsable={} nombre='{}' fotoUrl='{}' conFoto={} conComprobante={} aptaVirtual={}",
+                            c.responsableId(), c.nombre(), c.fotoUrl(), c.conFoto(), c.conComprobante(), c.apto(plantilla.id())))
                     .map(c -> credencialImagen.generar(c, plantilla, baseUrl))
                     .toList();
+            log.info("[WHATSAPP-VENTA] Credenciales generadas inscripcion={} cantidad={}",
+                    inscripcionId, credenciales.size());
 
             whatsApp.enviarBienvenidaVentaConPdfs(celular, nombreEntidad, inscripcionId,
                     salidaRecibo.toByteArray(), credenciales, baseUrl);
+            log.info("[WHATSAPP-VENTA] Fin envio automatico inscripcion={} archivosCredencial={}",
+                    inscripcionId, credenciales.size());
         } catch (Exception e) {
             log.warn("No se pudieron generar/enviar PDFs por WhatsApp para inscripcion {}: {}",
                     inscripcionId, e.getMessage());

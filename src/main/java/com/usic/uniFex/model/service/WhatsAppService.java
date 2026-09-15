@@ -53,9 +53,15 @@ public class WhatsAppService {
     private boolean enabled;
 
     public boolean habilitado() {
-        return enabled && apiBaseUrl != null && !apiBaseUrl.isBlank()
+        boolean ok = enabled && apiBaseUrl != null && !apiBaseUrl.isBlank()
                 && apiKey != null && !apiKey.isBlank()
                 && instance != null && !instance.isBlank();
+        if (!ok) {
+            log.info("[WHATSAPP] No habilitado enabled={} apiUrlConfig={} apiKeyConfig={} instanceConfig={}",
+                    enabled, apiBaseUrl != null && !apiBaseUrl.isBlank(),
+                    apiKey != null && !apiKey.isBlank(), instance != null && !instance.isBlank());
+        }
+        return ok;
     }
 
     /**
@@ -128,6 +134,8 @@ public class WhatsAppService {
         }
 
         try {
+            log.info("[WHATSAPP] Enviando archivo numero={} fileName='{}' mediatype={} mimetype={} bytes={} url={}sendMedia/{}",
+                    numero, fileName, mediatype, mimetype, bytes.length, apiBaseUrl, instance);
             var payload = new DocumentoPayload(numero, mediatype, mimetype,
                     caption != null ? caption : "", Base64.getEncoder().encodeToString(bytes), fileName);
             RequestBody requestBody = RequestBody.create(mapper.writeValueAsString(payload), JSON);
@@ -142,15 +150,18 @@ public class WhatsAppService {
             try (Response response = client.newCall(request).execute()) {
                 String respBody = response.body() != null ? response.body().string() : "";
                 if (response.isSuccessful()) {
-                    log.info("WhatsApp archivo enviado a {} ({})", numero, fileName);
+                    log.info("[WHATSAPP] Archivo enviado numero={} fileName='{}' status={} respuesta={}",
+                            numero, fileName, response.code(), respBody);
                     return true;
                 } else {
-                    log.warn("WhatsApp archivo falló ({}) a {}: {}", response.code(), numero, respBody);
+                    log.warn("[WHATSAPP] Archivo fallo numero={} fileName='{}' status={} respuesta={}",
+                            numero, fileName, response.code(), respBody);
                     return false;
                 }
             }
         } catch (IOException e) {
-            log.error("Error enviando WhatsApp archivo a {}: {}", numero, e.getMessage());
+            log.error("[WHATSAPP] Error enviando archivo numero={} fileName='{}': {}",
+                    numero, fileName, e.getMessage());
             return false;
         }
     }
@@ -184,12 +195,18 @@ public class WhatsAppService {
                 "Mensaje enviado desde el sistema automatizado de la Universidad Amazónica de Pando.",
                 "¡Nos vemos en la feria!");
 
-        enviarTexto(celular, mensaje);
+        log.info("[WHATSAPP] Inicio paquete venta inscripcion={} celular={} reciboBytes={} credenciales={} baseUrl={}",
+                inscripcionId, celular, reciboPdf == null ? 0 : reciboPdf.length,
+                credencialesPng == null ? 0 : credencialesPng.size(), baseUrl);
+
+        boolean textoOk = enviarTexto(celular, mensaje);
+        log.info("[WHATSAPP] Texto bienvenida inscripcion={} enviado={}", inscripcionId, textoOk);
 
         // 2. Recibo PDF
         if (reciboPdf != null && reciboPdf.length > 0) {
-            enviarDocumento(celular, reciboPdf, "recibo-" + inscripcionId + ".pdf",
+            boolean reciboOk = enviarDocumento(celular, reciboPdf, "recibo-" + inscripcionId + ".pdf",
                     "📄 Recibo de compra - Inscripción #" + inscripcionId);
+            log.info("[WHATSAPP] Recibo inscripcion={} enviado={}", inscripcionId, reciboOk);
         }
 
         // 3. Credenciales virtuales (una por responsable), iguales a las descargables.
@@ -197,12 +214,15 @@ public class WhatsAppService {
             for (int i = 0; i < credencialesPng.size(); i++) {
                 byte[] credencial = credencialesPng.get(i);
                 if (credencial != null && credencial.length > 0) {
-                    enviarImagen(celular, credencial,
+                    boolean credencialOk = enviarImagen(celular, credencial,
                             "credencial-" + inscripcionId + "-" + (i + 1) + ".png",
                             "🎫 Credencial #" + (i + 1) + " - Inscripción #" + inscripcionId);
+                    log.info("[WHATSAPP] Credencial inscripcion={} indice={} bytes={} enviada={}",
+                            inscripcionId, i + 1, credencial.length, credencialOk);
                 }
             }
         }
+        log.info("[WHATSAPP] Fin paquete venta inscripcion={}", inscripcionId);
     }
 
     private record Payload(String number, String text) {

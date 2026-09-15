@@ -64,6 +64,8 @@ public class CredencialImagenService {
 
     public byte[] generar(CredencialDTO c, PlantillaCredencial plantilla, String urlBase) {
         try {
+            log.info("[CREDENCIAL-WA] Generando credencial responsable={} inscripcion={} nombre='{}' fotoUrl='{}' plantilla={} urlBase={}",
+                    c.responsableId(), c.inscripcionId(), c.nombre(), c.fotoUrl(), plantilla.id(), urlBase);
             BufferedImage fondo = leerPlantilla(plantilla.imagen());
             // Se copia para no dibujar sobre la imagen cacheada de la plantilla.
             BufferedImage lienzo = new BufferedImage(
@@ -93,6 +95,8 @@ public class CredencialImagenService {
             g.dispose();
             ByteArrayOutputStream salida = new ByteArrayOutputStream();
             ImageIO.write(lienzo, "png", salida);
+            log.info("[CREDENCIAL-WA] Credencial generada responsable={} inscripcion={} bytes={}",
+                    c.responsableId(), c.inscripcionId(), salida.size());
             return salida.toByteArray();
         } catch (IOException e) {
             throw new IllegalStateException("No se pudo generar la credencial virtual", e);
@@ -135,13 +139,19 @@ public class CredencialImagenService {
      * lo que hace cualquier aplicacion con las fotos de perfil.
      */
     private void dibujarFoto(Graphics2D g, Caja caja, int w, int h, CredencialDTO c) {
-        if (caja == null) return;
+        if (caja == null) {
+            log.info("[CREDENCIAL-WA] Plantilla sin caja de foto responsable={} inscripcion={}",
+                    c.responsableId(), c.inscripcionId());
+            return;
+        }
         int ladoHueco = (int) Math.round(caja.ancho() * w);
         int xh = (int) Math.round(caja.x() * w);
         int yh = (int) Math.round(caja.y() * h);
 
         BufferedImage foto = leerFoto(c.fotoUrl());
         if (foto == null) {
+            log.warn("[CREDENCIAL-WA] No se pudo usar foto real; se dibuja silueta responsable={} inscripcion={} fotoUrl='{}' uploadRoot='{}'",
+                    c.responsableId(), c.inscripcionId(), c.fotoUrl(), uploadRoot);
             /*
              * SIN FOTO SE TAPA EL HUECO, no se deja como esta.
              *
@@ -153,6 +163,9 @@ public class CredencialImagenService {
             siluetaSinFoto(g, xh, yh, ladoHueco);
             return;
         }
+
+        log.info("[CREDENCIAL-WA] Foto real leida responsable={} inscripcion={} foto={}x{} hueco={}x{}",
+                c.responsableId(), c.inscripcionId(), foto.getWidth(), foto.getHeight(), ladoHueco, ladoHueco);
 
         int lado = ladoHueco;
         int x = xh;
@@ -208,17 +221,33 @@ public class CredencialImagenService {
      * Una credencial sin foto es mejor que un error.
      */
     private BufferedImage leerFoto(String fotoUrl) {
-        if (fotoUrl == null || fotoUrl.isBlank()) return null;
+        if (fotoUrl == null || fotoUrl.isBlank()) {
+            log.warn("[CREDENCIAL-WA] fotoUrl vacio; no hay archivo que leer");
+            return null;
+        }
         String relativa = fotoUrl.startsWith("/files/") ? fotoUrl.substring("/files/".length()) : fotoUrl;
         try {
             Path base = Paths.get(uploadRoot).toAbsolutePath().normalize();
             Path destino = base.resolve(relativa).normalize();
+            log.info("[CREDENCIAL-WA] Resolviendo foto fotoUrl='{}' relativa='{}' base='{}' destino='{}'",
+                    fotoUrl, relativa, base, destino);
             // Sin esta comprobacion, una ruta con ".." en la base leeria cualquier archivo del
             // servidor y lo imprimiria en una credencial.
-            if (!destino.startsWith(base) || !Files.isRegularFile(destino)) return null;
-            return ImageIO.read(destino.toFile());
+            if (!destino.startsWith(base)) {
+                log.warn("[CREDENCIAL-WA] Foto rechazada por salir de uploadRoot destino='{}' base='{}'", destino, base);
+                return null;
+            }
+            if (!Files.isRegularFile(destino)) {
+                log.warn("[CREDENCIAL-WA] Archivo de foto no existe o no es archivo regular destino='{}'", destino);
+                return null;
+            }
+            BufferedImage img = ImageIO.read(destino.toFile());
+            if (img == null) {
+                log.warn("[CREDENCIAL-WA] ImageIO no pudo decodificar la foto destino='{}'", destino);
+            }
+            return img;
         } catch (IOException | RuntimeException e) {
-            log.warn("No se pudo leer la foto {}: {}", fotoUrl, e.getMessage());
+            log.warn("[CREDENCIAL-WA] No se pudo leer la foto {}: {}", fotoUrl, e.getMessage());
             return null;
         }
     }
