@@ -26,6 +26,19 @@ class RegistroErroresTest {
     @TempDir Path directorio;
     final ObjectMapper json = new ObjectMapper();
 
+    @Test void descargaCompletaYVaciaSoloElArchivoSeleccionado() throws Exception {
+        var servicio = new RegistroErroresService(directorio.toString(), json);
+        String texto = "Error de José\nSegunda línea\n";
+        Files.writeString(directorio.resolve("errores.txt"), texto);
+        Files.writeString(directorio.resolve("errores.2026-09-15.0.txt"), "histórico");
+        assertEquals(texto, new String(servicio.descargar("errores.txt"), StandardCharsets.UTF_8));
+        assertThrows(IllegalArgumentException.class, () -> servicio.vaciar("../otro.txt"));
+        assertThrows(IllegalArgumentException.class, () -> servicio.descargar("../otro.txt"));
+        servicio.vaciar("errores.txt");
+        assertEquals(0, Files.size(directorio.resolve("errores.txt")));
+        assertEquals("histórico", Files.readString(directorio.resolve("errores.2026-09-15.0.txt")));
+    }
+
     @Test void conservaUsuarioEnTrabajoAsincronoInclusoSiFalla() {
         MDC.put("usuario", "vendedor");
         Runnable tarea = com.usic.uniFex.Config.ContextoRegistro.conservar(() -> {

@@ -58,4 +58,36 @@ class RegistroErroresApiTest {
                 .contentType("application/json").content("{\"mensaje\":\"" + "x".repeat(2001) + "\"}"))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test void descargaYVaciadoExigenAdministradorYConfirmacion() throws Exception {
+        mvc.perform(get("/api/app/errores/descargar")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/app/errores/descargar").header("Authorization", "Bearer vendedor"))
+                .andExpect(status().isForbidden());
+        mvc.perform(delete("/api/app/errores").param("archivo", "errores.txt").param("confirmar", "true"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(delete("/api/app/errores").param("archivo", "errores.txt").param("confirmar", "true")
+                .header("Authorization", "Bearer vendedor")).andExpect(status().isForbidden());
+        mvc.perform(delete("/api/app/errores").param("archivo", "errores.txt")
+                .header("Authorization", "Bearer administrador")).andExpect(status().isBadRequest());
+    }
+
+    @Test void elAppenderSigueGuardandoDespuesDeVaciarElArchivoActivo() throws Exception {
+        var logger = org.slf4j.LoggerFactory.getLogger("prueba.vaciado");
+        String anterior = "anterior-" + java.util.UUID.randomUUID();
+        logger.error(anterior);
+        mvc.perform(get("/api/app/errores/descargar").header("Authorization", "Bearer administrador"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", "attachment; filename=\"errores.txt\""))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString(anterior)));
+        mvc.perform(delete("/api/app/errores").param("archivo", "errores.txt").param("confirmar", "true")
+                .header("Authorization", "Bearer administrador")).andExpect(status().isNoContent());
+        String nuevo = "nuevo-" + java.util.UUID.randomUUID();
+        logger.error(nuevo);
+        mvc.perform(get("/api/app/errores/descargar").header("Authorization", "Bearer administrador"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString(nuevo)))
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString(anterior))));
+        mvc.perform(get("/api/app/errores").param("buscar", nuevo).header("Authorization", "Bearer administrador"))
+                .andExpect(jsonPath("$.errores[0].mensaje").value(nuevo));
+    }
 }

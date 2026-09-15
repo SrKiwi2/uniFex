@@ -1,6 +1,8 @@
 <script setup>
 import { onMounted, ref, watch } from 'vue';
 import { apiFetch } from '../api.js';
+import { descargarArchivo } from '../ui/descargas.js';
+import UiModal from '../components/UiModal.vue';
 
 const archivos = ref([]);
 const archivo = ref('errores.txt');
@@ -10,6 +12,10 @@ const errores = ref([]);
 const anterior = ref(0);
 const cargando = ref(false);
 const fallo = ref('');
+const descargando = ref(false);
+const vaciando = ref(false);
+const confirmarArchivo = ref(null);
+const aviso = ref('');
 watch([archivo, buscar, usuario], () => { errores.value = []; anterior.value = 0; });
 
 async function cargar(mas = false) {
@@ -37,6 +43,36 @@ async function cargar(mas = false) {
 }
 
 function fecha(valor) { return new Date(valor).toLocaleString('es-BO'); }
+
+async function descargar() {
+  if (descargando.value) return;
+  descargando.value = true;
+  fallo.value = '';
+  aviso.value = '';
+  try {
+    const resultado = await descargarArchivo(`/api/app/errores/descargar?${new URLSearchParams({ archivo: archivo.value })}`, archivo.value);
+    aviso.value = resultado.destino === 'telefono' ? 'Texto guardado en Documentos.' : 'Texto descargado.';
+  } catch (error) { fallo.value = error.message || 'No se pudo descargar el texto.'; }
+  finally { descargando.value = false; }
+}
+
+async function vaciar() {
+  if (vaciando.value || !confirmarArchivo.value) return;
+  vaciando.value = true;
+  fallo.value = '';
+  aviso.value = '';
+  try {
+    const parametros = new URLSearchParams({ archivo: confirmarArchivo.value, confirmar: 'true' });
+    const respuesta = await apiFetch(`/api/app/errores?${parametros}`, { method: 'DELETE' });
+    if (!respuesta.ok) throw new Error('No se pudo vaciar el archivo.');
+    confirmarArchivo.value = null;
+    errores.value = [];
+    anterior.value = 0;
+    aviso.value = 'Archivo vaciado. Los nuevos errores se seguirán registrando.';
+    await cargar();
+  } catch (error) { fallo.value = error.message || 'No se pudo vaciar el archivo.'; confirmarArchivo.value = null; }
+  finally { vaciando.value = false; }
+}
 onMounted(() => cargar());
 </script>
 
@@ -57,6 +93,12 @@ onMounted(() => cargar());
       <label class="campo"><span>Buscar</span><input v-model="buscar" class="control" :disabled="cargando" placeholder="Mensaje, ruta o módulo" maxlength="200" /></label>
       <button class="btn" :disabled="cargando">Filtrar</button>
     </form>
+    <div class="acciones-archivo">
+      <button class="btn" :disabled="cargando || descargando || vaciando || !archivos.includes(archivo)" @click="descargar">{{ descargando ? 'Descargando…' : 'Descargar texto' }}</button>
+      <button class="btn vaciar" :disabled="cargando || descargando || vaciando || !archivos.includes(archivo)" @click="confirmarArchivo = archivo">Vaciar archivo</button>
+      <span class="muted">Se aplica al archivo completo seleccionado, incluidos los errores ocultos por los filtros.</span>
+    </div>
+    <p v-if="aviso" role="status">{{ aviso }}</p>
     <p v-if="fallo" class="fallo" role="alert">{{ fallo }}</p>
     <p v-if="!cargando && !errores.length && !fallo" class="card vacio">No se encontraron errores en el tramo consultado.</p>
     <p class="muted">{{ errores.length }} errores mostrados. «Sistema» indica un proceso sin usuario; «Sin autenticar», una petición sin sesión identificada.</p>
@@ -77,6 +119,14 @@ onMounted(() => cargar());
       </details>
     </article>
     <button v-if="anterior > 0" class="btn anteriores" :disabled="cargando" @click="cargar(true)">{{ cargando ? 'Cargando…' : 'Buscar errores anteriores' }}</button>
+    <UiModal v-if="confirmarArchivo" titulo="¿Vaciar el archivo de errores?" @cerrar="!vaciando && (confirmarArchivo = null)">
+      <p>Se borrará todo el contenido de <strong>{{ confirmarArchivo }}</strong>. Esta acción no se puede deshacer.</p>
+      <p>Descarga el texto antes si quieres conservar una copia. Los demás archivos no se vaciarán y los nuevos errores se seguirán registrando.</p>
+      <template #pie>
+        <button class="btn btn-fantasma" :disabled="vaciando" @click="confirmarArchivo = null">Cancelar</button>
+        <button class="btn vaciar" :disabled="vaciando" @click="vaciar">{{ vaciando ? 'Vaciando…' : 'Sí, vaciar archivo' }}</button>
+      </template>
+    </UiModal>
   </section>
 </template>
 
@@ -96,6 +146,8 @@ summary { cursor: pointer; color: var(--acento); }
 pre { font-size: 0.8rem; background: var(--panel-2); padding: 0.75rem; border-radius: var(--radio-sm); max-height: 24rem; overflow: auto; }
 .fallo { color: var(--danger); }
 .anteriores { align-self: center; }
+.acciones-archivo { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+.vaciar { color: var(--danger); border-color: var(--danger); }
 @media (max-width: 850px) { .filtros { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 560px) { .filtros { grid-template-columns: 1fr; } .entrada time { width: 100%; margin-left: 0; } }
 </style>
