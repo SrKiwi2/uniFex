@@ -6,6 +6,7 @@ import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,6 +63,11 @@ public class GestionUsuarioService {
     private final GestionPersonaService gestionPersona;
     private final PasswordEncoder passwordEncoder;
     private final VendedorAsignacionService vendedorAsignacion;
+    private final WhatsAppService whatsApp;
+
+    /** Enlace de la plataforma que se manda junto con la clave (en prod: https://fexpo-uapv2.uap.edu.bo/app/). */
+    @Value("${app.base-url:https://fexpo-uapv2.uap.edu.bo/app/}")
+    private String baseUrl;
 
     /**
      * Quien ejecuta la operacion. El rol viaja junto al id porque las reglas de privilegio de
@@ -192,11 +198,67 @@ public class GestionUsuarioService {
         problema = validarPassword(nueva, u.getUsername());
         if (problema != null) return Resultado.error(problema);
 
+        // La clave en texto plano solo existe en `nueva`: una vez encriptada ya no se recupera.
+        // Se guarda primero y se avisa despues con la misma variable, que sigue en memoria.
+        // Asi nunca se avisa una clave que no quedo persistida (si el guardado falla, no se
+        // manda nada y el admin lo reintenta).
         u.setPassword(passwordEncoder.encode(nueva));
         u.setModificacion(new Date());
         u.setModificacionIdUsuario(actor.id());
+        Usuario guardado = usuarioDao.save(u);
         logger.info("Contrasena cambiada al usuario {} por usuario {}", u.getUsername(), actor.id());
-        return Resultado.exito("Contrasena actualizada.", usuarioDao.save(u));
+        return Resultado.exito("Contrasena actualizada." + avisarClavePorWhatsApp(guardado, nueva), guardado);
+    }
+
+    /**
+     * Manda la clave recien reseteada al WhatsApp del usuario, con el enlace de la plataforma.
+     *
+     * El numero sale de la persona (su celular), no de un parametro: el admin no lo teclea y no
+     * puede mandarlo a otro lado por error. Si no hay numero o el servicio esta deshabilitado,
+     * igual se guarda la clave y solo se informa, para que el admin la dicte por otro medio.
+     *
+     * @return el sufijo para el mensaje al admin (siempre empieza con espacio o es vacio).
+     */
+    private String avisarClavePorWhatsApp(Usuario u, String clavePlana) {
+        String celular = u.getPersona() != null ? u.getPersona().getCelular() : null;
+        String numero = normalizarCelular(celular);
+        if (numero == null) {
+            return " Sin envio por WhatsApp: el usuario no tiene celular registrado.";
+        }
+        if (!whatsApp.habilitado()) {
+            return " Sin envio por WhatsApp: servicio deshabilitado.";
+        }
+        String nombre = u.getPersona() != null ? u.getPersona().getNombreCompleto() : u.getUsername();
+        String mensaje = String.join("\n",
+                "🔑 FEXPO UAP - Acceso a la plataforma",
+                "",
+                "Hola " + (nombre != null && !nombre.isBlank() ? nombre : u.getUsername()) + ",",
+                "Tu contrasena fue restablecida por administracion.",
+                "",
+                "👤 Usuario: " + u.getUsername(),
+                "🔐 Contrasena: " + clavePlana,
+                "",
+                "Ingresa aqui: " + baseUrl,
+                "",
+                "No compartas esta clave con nadie.",
+                "",
+                "Mensaje enviado desde el sistema automatizado de la Universidad Amazonica de Pando.");
+        boolean ok = whatsApp.enviarTexto(numero, mensaje);
+        if (ok) return " Clave enviada por WhatsApp al " + numero + ".";
+        logger.warn("No se pudo enviar la clave reseteada por WhatsApp al usuario {}", u.getUsername());
+        return " No se pudo enviar por WhatsApp al " + numero + ".";
+    }
+
+    /**
+     * Celular a formato internacional sin +, espacios ni guiones. Asume Bolivia (591) cuando
+     * llega con 8 digitos, igual que el envio post-venta.
+     */
+    private static String normalizarCelular(String celular) {
+        if (celular == null || celular.isBlank()) return null;
+        String n = celular.replaceAll("[^0-9]", "");
+        if (n.startsWith("0")) n = n.substring(1);
+        if (n.length() == 8) n = "591" + n;
+        return n.length() >= 8 ? n : null;
     }
 
     /** Activa o desactiva. No permite que un admin se desactive a si mismo (se quedaria fuera). */

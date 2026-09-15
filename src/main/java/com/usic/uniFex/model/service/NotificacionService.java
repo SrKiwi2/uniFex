@@ -127,8 +127,8 @@ public class NotificacionService {
                             n.getPuesto() != null ? n.getPuesto().getId() : null,
                             n.getFechaRegistro()));
         } catch (Exception e) {
-            log.warn("No se pudo difundir notificación {} a usuario {}: {}",
-                    n.getId(), n.getUsuarioDestino().getId(), e.getMessage());
+            log.error("No se pudo difundir notificación {} a usuario {}",
+                    n.getId(), n.getUsuarioDestino().getId(), e);
         }
     }
 

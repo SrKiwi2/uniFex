@@ -68,7 +68,7 @@ public class PuestoEventPublisher {
         } catch (Exception e) {
             // Igual que el estado de las casetas: un fallo al difundir NUNCA puede tumbar la
             // operacion que ya se guardo. El cliente se enterara al resincronizar.
-            log.warn("No se pudieron difundir los cambios de asignacion: {}", e.getMessage());
+            log.error("No se pudieron difundir los cambios de asignacion", e);
         }
     }
 
@@ -99,7 +99,9 @@ public class PuestoEventPublisher {
         } catch (Exception e) {
             // Un fallo al difundir NUNCA puede tumbar la operacion que ya se guardo: la venta
             // esta hecha. El cliente se pondra al dia en la siguiente resincronizacion.
-            log.warn("No se pudo difundir el estado de {} caseta(s): {}", puestoIds.size(), e.getMessage());
+            // La traza entera, no solo el mensaje: si esto falla, el mapa de todos se queda
+            // viejo y `e.getMessage()` a secas no dice en que linea se rompio.
+            log.error("No se pudo difundir el estado de {} caseta(s)", puestoIds.size(), e);
         }
     }
 }

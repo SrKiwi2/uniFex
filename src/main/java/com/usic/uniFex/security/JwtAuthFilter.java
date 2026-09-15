@@ -34,6 +34,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 var auth = new UsernamePasswordAuthenticationToken(
                         user, null, List.of(new SimpleGrantedAuthority("ROLE_" + user.rolNormalizado())));
                 SecurityContextHolder.getContext().setAuthentication(auth);
+                org.slf4j.MDC.put("usuario", user.username());
+                org.slf4j.MDC.put("usuarioId", String.valueOf(user.id()));
             } catch (Exception e) {
                 // Token invalido o expirado: se continua sin autenticacion (endpoint protegido -> 401/403).
                 SecurityContextHolder.clearContext();

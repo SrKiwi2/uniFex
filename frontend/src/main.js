@@ -4,6 +4,7 @@ import App from './App.vue';
 import router from './router';
 import { EN_APK } from './config.js';
 import { observarTeclado } from './ui/teclado.js';
+import { instalarRegistroErrores } from './ui/registroErrores.js';
 import './style.css';
 
 /*
@@ -19,4 +20,6 @@ if (EN_APK) document.documentElement.classList.add('apk');
 // Publica el alto del teclado en `--kb`, para que el contenido pueda apartarse de el.
 observarTeclado();
 
-createApp(App).use(createPinia()).use(router).mount('#app');
+const app = createApp(App);
+instalarRegistroErrores(app, router);
+app.use(createPinia()).use(router).mount('#app');

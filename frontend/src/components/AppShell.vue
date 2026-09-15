@@ -54,10 +54,12 @@ const TODOS = [
   { a: '/usuarios', p: 'usuarios', icono: '👤', txt: 'Usuarios' },
   { a: '/roles', p: 'roles', icono: '🛡️', txt: 'Roles' },
   { a: '/mantenimiento', p: 'mantenimiento', icono: '⚙️', txt: 'Mantenimiento' },
+  { a: '/errores', soloAdministracion: true, icono: '⚠️', txt: 'Registro de errores' },
   { a: '/permisos', p: 'permisos', icono: '🔐', txt: 'Permisos por rol' },
 ];
 
-const enlaces = computed(() => TODOS.filter((e) => permisos.puedeVer(e.p)));
+const enlaces = computed(() => TODOS.filter((e) => e.soloAdministracion
+  ? auth.puedeEditarPlano : permisos.puedeVer(e.p)));
 
 // Las 4 tareas del día a día del vendedor, para la barra inferior estilo app: los mismos
 // destinos de siempre, solo que a mano del pulgar en vez de en un cajón que hay que abrir.

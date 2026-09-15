@@ -37,7 +37,7 @@ public class InteresadoStandEventPublisher {
         try {
             messaging.convertAndSend(TOPIC, InteresadoStandDTO.de(interesado));
         } catch (Exception e) {
-            log.warn("No se pudo difundir el interesado {}: {}", interesado.getId(), e.getMessage());
+            log.error("No se pudo difundir el interesado {}", interesado.getId(), e);
         }
     }
 }

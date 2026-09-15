@@ -7,6 +7,45 @@
 
 ## 1. Variables de entorno
 
+### Registro de errores
+
+El nuevo despliegue guarda los errores de UniFex en `logs/errores.txt`, relativo al directorio
+de ejecución del proceso Java. Puede fijarse una carpeta persistente mediante:
+
+```properties
+UNIFEX_LOGS_DIR=/var/log/unifex
+```
+
+La carpeta debe ser escribible por el usuario que ejecuta Java y quedar fuera de `DocumentRoot`
+y `app.upload-root`. Si el servicio corre como `unifex`, preparar con:
+
+```bash
+sudo install -d -o unifex -g unifex -m 750 /var/log/unifex
+```
+
+Configurar la variable en el entorno del servicio (no solo en la terminal), desplegar el JAR
+y la SPA actualizados y reiniciar el servicio Java. No requiere SQL ni cambios en Apache.
+En desarrollo se usa por defecto `logs/` del proyecto (ignorado por Git).
+
+- Texto UTF-8, un JSON por línea: fecha UTC, usuario/ID, ruta, petición, origen, mensaje y traza.
+- Rotación diaria o a 10 MB: `errores.AAAA-MM-DD.N.txt`; retención de hasta 30 días y 300 MB de
+  históricos, más el archivo activo. Un solo proceso Java por directorio de logs.
+- Menú **Registro de errores**, ruta SPA `/errores`: solo SUPER USUARIO y ADMINISTRADOR,
+  también protegida en el backend. Selección de archivo, usuario, búsqueda y detalle.
+- Cada página lee como máximo 2 MB y muestra hasta 100 coincidencias. «Buscar errores anteriores»
+  sigue recorriendo el archivo seleccionado. Durante una rotación, actualizar o elegir el histórico.
+- Errores del servidor y HTTP 4xx/5xx; informes de errores de la SPA autenticada, con límite de
+  20 por usuario/minuto y agrupación de mensajes repetidos. INFO y advertencias normales no se guardan.
+- «Sistema» indica procesos sin petición; «Sin autenticar» incluye un handshake WebSocket que
+  falla antes del CONNECT autenticado. No se inventa una identidad a partir de un token inválido.
+- La cola de la SPA es temporal: se reintenta al recuperar red con la app abierta, y se descarta
+  si cambia la sesión. No recupera errores anteriores al despliegue, de Apache ni excepciones
+  silenciadas sin log/respuesta de error. No registra cuerpos de peticiones ni cabeceras; oculta
+  formatos habituales de contraseñas y tokens en los mensajes existentes.
+
+Validación: provocar un error controlado en desarrollo, abrir la vista como administrador,
+confirmar la identidad y comprobar que un vendedor recibe 403 al consultar `/api/app/errores`.
+
 ### Obligatorias — la app no arranca sin ellas (fail-fast, a propósito)
 
 | Variable | Qué es |

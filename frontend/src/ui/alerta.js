@@ -1,4 +1,5 @@
 import { ref, reactive } from 'vue';
+import { registrarError } from './registroErrores.js';
 
 /**
  * Modal de aviso global (lo pinta AlertaModal, montado una sola vez en App.vue): círculo con
@@ -33,6 +34,7 @@ const TITULOS = { ok: 'Éxito', error: 'Error', advertencia: 'Atención', info: 
 let resolvePromesa = null;
 
 function mostrar(opciones, resolve) {
+  if (opciones.tipo === 'error') registrarError(opciones.mensaje);
   // Una alerta que reemplaza a otra abierta: la anterior se da por cerrada, no queda colgada.
   if (resolvePromesa) resolvePromesa(false);
   resolvePromesa = resolve;

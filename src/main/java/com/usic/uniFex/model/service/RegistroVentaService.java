@@ -526,8 +526,9 @@ public class RegistroVentaService {
         if (normalizado.length() == 8) normalizado = "591" + normalizado;
 
         final String numeroFinal = normalizado;
-        Runnable envio = () -> CompletableFuture.runAsync(
+        Runnable tarea = com.usic.uniFex.Config.ContextoRegistro.conservar(
                 () -> enviarWhatsAppVentaConPdfs(numeroFinal, nombreEntidad, inscripcionId));
+        Runnable envio = () -> CompletableFuture.runAsync(tarea);
 
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             envio.run();
@@ -567,8 +568,8 @@ public class RegistroVentaService {
             log.info("[WHATSAPP-VENTA] Fin envio automatico inscripcion={} archivosCredencial={}",
                     inscripcionId, credenciales.size());
         } catch (Exception e) {
-            log.warn("No se pudieron generar/enviar PDFs por WhatsApp para inscripcion {}: {}",
-                    inscripcionId, e.getMessage());
+            log.error("No se pudieron generar/enviar PDFs por WhatsApp para inscripcion {}",
+                    inscripcionId, e);
         }
     }
 

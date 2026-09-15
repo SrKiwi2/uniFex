@@ -705,10 +705,27 @@ commit, y ya lo usa el circuito de cancelación. Falta convertirlo en módulo co
 
 ### 9.5 — Logs del sistema (pedido 8)
 
-- [ ] Tabla `log_sistema` para WARN/ERROR y eventos importantes, alimentada por un appender
-- [ ] Vista de admin con filtros (nivel, fecha, usuario, módulo) y **cola en vivo** por WebSocket
-- [ ] ⚠️ Nunca registrar contraseñas, tokens ni datos personales de más; poner tope de volumen
-      y purga por antigüedad, o la tabla se come el disco en la feria
+Decisión del 2026-09-15: archivo `.txt` y vista administrativa de **errores solamente**.
+Sustituye la propuesta de tabla y cola por WebSocket; no requiere migración SQL.
+
+- [x] `logs/errores.txt`: texto UTF-8 (JSON por línea), ERROR del servidor y respuestas HTTP
+      4xx/5xx, fecha, usuario/ID, ruta, origen, correlación y traza. Identidad desde JWT o sesión;
+      procesos sin petición figuran como Sistema y peticiones anónimas como Sin autenticar.
+- [x] Errores de Vue, JavaScript, red, WebSocket y alertas de error de la SPA se informan por
+      API autenticada. Repetidos se agrupan durante un minuto, máximo 20 por usuario/minuto;
+      cola de red solo en memoria, descartada si cambia la sesión.
+- [x] Vista `/errores` y API `/api/app/errores`, solo SUPER USUARIO / ADMINISTRADOR: archivos
+      por fecha, búsqueda, usuario, detalle y páginas de hasta 100 resultados / 2 MB leídos.
+      Acceso administrativo fijo, independiente de la matriz de pantallas.
+- [x] Rotación diaria o a 10 MB, conservación de hasta 30 días / 300 MB de archivos históricos;
+      ocultación de contraseñas y tokens con formatos reconocidos, sin cuerpos ni cabeceras HTTP.
+- [x] Pruebas sin BD: escritura/lectura real, permisos 401/403, identidad, aislamiento entre
+      peticiones, paginación UTF-8, rutas inválidas y recuperación del reporte de errores de red.
+
+Alcance: comienza con el nuevo despliegue; no recupera errores anteriores ni los de Apache.
+Si la SPA está cerrada o sin sesión no envía informes. Si se cierra sin recuperar la conexión,
+se pierde la cola pendiente. Las advertencias normales y excepciones silenciadas sin registro
+ni respuesta de error no se incluyen. Despliegue y ubicación: `DEPLOY.md`, «Registro de errores».
 
 ### 9.6 — Auditoría, integridad y trazabilidad (pedido 9 — propuesta)
 

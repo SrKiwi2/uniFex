@@ -34,6 +34,8 @@ UniFex: Spring Boot 3.5.5 / **Java 21** app for the UAP institutional fair (FEXP
 
 ## Structure
 
+- Errores: `logback-spring.xml` guarda ERROR y fallos HTTP en `logs/errores.txt` (UTF-8, JSON por línea), configurable con `UNIFEX_LOGS_DIR`. Rotación diaria/10 MB, hasta 30 días/300 MB de históricos. Vista SPA `/errores` y GET `/api/app/errores` exclusivos de `Roles.ADMINISTRA`, independientes de la matriz de pantallas; POST `/api/app/errores/cliente` admite informes del usuario autenticado. Identidad por MDC desde JWT/sesión; `ContextoRegistro.conservar` la propaga al envío asíncrono de WhatsApp. No requiere SQL. Ver `DEPLOY.md`.
+
 - `src/main/resources/templates/` — legacy Thymeleaf site (still sells booths); `static/assets/` is a huge purchased theme only it uses.
 - `frontend/` — Vue 3 + Vite + Pinia SPA. Key files: `src/api.js` (Bearer token, 401→logout), `src/ws.js` (STOMP), `src/stores/auth.js` (JWT in localStorage), `src/views/Mapa.vue` (pins at normalized 0..1 coords `puesto.mapa_x/y`), `src/views/Editor.vue`, `src/components/PanZoom.vue`. `vite.config.js` sets `host: true` and proxies to explicit `127.0.0.1:7676` — deliberate IPv4/IPv6 fix, don't revert (localhost-only was a ~2 s stall on every new connection).
 - Auth: chain 1 (`/api/auth/**`, `/api/app/**`) = stateless JWT; chain 2 = session formLogin with nearly `permitAll`. REST `/api` uses `X-API-KEY` header, unrelated to `/api/app`.

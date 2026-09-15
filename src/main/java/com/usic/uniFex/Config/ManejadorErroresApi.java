@@ -56,9 +56,11 @@ public class ManejadorErroresApi {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> fallo(Exception e, HttpServletRequest peticion) {
+        if (e instanceof org.springframework.security.access.AccessDeniedException denegado) throw denegado;
         // Se registra con traza completa: es la unica copia del error, porque al cliente
         // solo se le manda el mensaje.
         log.error("Fallo no controlado en {} {}", peticion.getMethod(), peticion.getRequestURI(), e);
+        peticion.setAttribute(RegistroErroresFilter.REGISTRADO, true);
         return cuerpo(HttpStatus.INTERNAL_SERVER_ERROR, "Error interno procesando la peticion", e, peticion);
     }
 

@@ -1,5 +1,6 @@
 import { useAuthStore } from './stores/auth.js';
 import { url as urlApi } from './config.js';
+import { registrarError } from './ui/registroErrores.js';
 
 /**
  * fetch con el JWT en Authorization. Si el backend responde 401, cierra la sesion.
@@ -25,7 +26,13 @@ export async function apiFetch(ruta, options = {}) {
     headers['Content-Type'] = 'application/json';
   }
 
-  const res = await fetch(urlApi(ruta), { ...options, headers });
+  let res;
+  try {
+    res = await fetch(urlApi(ruta), { ...options, headers });
+  } catch (error) {
+    if (error.name !== 'AbortError') registrarError(error, `${options.method || 'GET'} ${ruta.split('?')[0]}`);
+    throw error;
+  }
 
   if (res.status === 401) {
     auth.logout();

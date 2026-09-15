@@ -423,6 +423,10 @@ onMounted(() => {
       <input v-model="modalPass.confirmar" :type="modalPass.ver ? 'text' : 'password'"
              class="control" autocomplete="new-password" />
     </label>
+    <p class="muted pista">
+      Al guardar, la nueva clave se enviará por WhatsApp al celular registrado del usuario,
+      junto con el enlace de la plataforma. Si no tiene celular, deberás dictársela por otro medio.
+    </p>
     <template #pie>
       <button class="btn btn-fantasma" @click="modalPass.abierto = false">Cancelar</button>
       <button class="btn btn-primario" :disabled="ocupado" @click="guardarPassword">
