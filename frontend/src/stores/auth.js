@@ -106,7 +106,11 @@ export const useAuthStore = defineStore('auth', {
         body: JSON.stringify({ usuario, contrasena }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) throw new Error(data.mensaje || 'No se pudo iniciar sesion');
+      if (!res.ok || !data.ok) {
+        const error = new Error(data.mensaje || 'No se pudo iniciar sesion');
+        error.codigo = data.codigo || '';
+        throw error;
+      }
       this.token = data.token;
       this.id = Number(data.id) || Number(delToken(data.token, 'uid')) || null;
       this.usuario = data.usuario;

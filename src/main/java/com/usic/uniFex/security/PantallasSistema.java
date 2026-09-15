@@ -37,6 +37,7 @@ public enum PantallasSistema {
     ESCANER("escaner", "Escanear credencial", "Acreditacion"),
     USUARIOS("usuarios", "Usuarios", "Administracion"),
     ROLES("roles", "Roles", "Administracion"),
+    MANTENIMIENTO("mantenimiento", "Mantenimiento", "Administracion"),
     PERMISOS("permisos", "Permisos por rol", "Administracion"),
     PERSONAS("personas", "Personas", "Administracion"),
     PERSONAL_APOYO("personal-apoyo", "Personal de apoyo", "Administracion"),

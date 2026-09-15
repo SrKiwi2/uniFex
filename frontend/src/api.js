@@ -31,5 +31,15 @@ export async function apiFetch(ruta, options = {}) {
     auth.logout();
     throw new Error('Sesion expirada');
   }
+  if (res.status === 423) {
+    const data = await res.clone().json().catch(() => ({}));
+    if (data.codigo === 'MANTENIMIENTO') {
+      auth.logout();
+      window.dispatchEvent(new CustomEvent('unifex:mantenimiento', {
+        detail: { mensaje: data.mensaje || 'Sistema en mantenimiento' },
+      }));
+      throw new Error(data.mensaje || 'Sistema en mantenimiento');
+    }
+  }
   return res;
 }

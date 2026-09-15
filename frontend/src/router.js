@@ -37,6 +37,7 @@ const router = createRouter({
         { path: 'editor', component: () => import('./views/Editor.vue'), meta: { titulo: 'Editor del plano', inmersivo: true, requiereAuth: true, pantalla: 'editor'} },
         { path: 'usuarios', component: () => import('./views/Usuarios.vue'), meta: { titulo: 'Usuarios', requiereAuth: true, pantalla: 'usuarios'} },
         { path: 'roles', component: () => import('./views/Roles.vue'), meta: { titulo: 'Roles', requiereAuth: true, pantalla: 'roles'} },
+        { path: 'mantenimiento', component: () => import('./views/Mantenimiento.vue'), meta: { titulo: 'Mantenimiento', requiereAuth: true, pantalla: 'mantenimiento'} },
         { path: 'personas', component: () => import('./views/Personas.vue'), meta: { titulo: 'Personas', requiereAuth: true, pantalla: 'personas'} },
         { path: 'personal-apoyo', component: () => import('./views/PersonalApoyo.vue'), meta: { titulo: 'Personal de apoyo', requiereAuth: true, pantalla: 'personal-apoyo' } },
         { path: 'reportes', component: () => import('./views/Reportes.vue'), meta: { titulo: 'Reportes', requiereAuth: true, pantalla: 'reportes'} },

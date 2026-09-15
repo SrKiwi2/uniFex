@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { apiFetch } from '../api';
+import { descargarPdf } from '../ui/descargas';
 import { toast } from '../ui/toast';
 
 const cargando = ref(true);
@@ -35,6 +36,15 @@ async function cargar() {
   }
 }
 
+async function exportarPdf() {
+  try {
+    await descargarPdf('/api/app/catalogo/pdf', 'catalogo-precios.pdf');
+    toast('Catálogo exportado en PDF', 'ok');
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
 onMounted(cargar);
 </script>
 
@@ -55,6 +65,9 @@ onMounted(cargar);
     <div class="barra">
       <input v-model="busqueda" class="control" placeholder="Buscar categoria…" />
       <button class="btn btn-fantasma" :disabled="cargando" @click="cargar">Actualizar</button>
+      <button class="btn btn-primario" :disabled="cargando || !categorias.length" @click="exportarPdf">
+        Exportar PDF
+      </button>
     </div>
 
     <div v-if="cargando" class="vacio">Cargando catalogo…</div>

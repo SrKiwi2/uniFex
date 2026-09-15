@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.usic.uniFex.model.IService.IUsuarioService;
 import com.usic.uniFex.model.entity.Usuario;
+import com.usic.uniFex.model.service.MantenimientoService;
 import com.usic.uniFex.security.JwtService;
 
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ public class AuthController {
     private final IUsuarioService usuarioService;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final MantenimientoService mantenimientoService;
 
     public record LoginRequest(String usuario, String contrasena) {
     }
@@ -45,6 +47,13 @@ public class AuthController {
                     .body(Map.<String, Object>of("ok", false, "mensaje", "Usuario inactivo"));
         }
         String rol = (u.getRol() != null && u.getRol().getNombre() != null) ? u.getRol().getNombre() : "";
+        var mantenimiento = mantenimientoService.estado();
+        if (mantenimiento.activo() && !mantenimientoService.permiteRol(rol)) {
+            return ResponseEntity.status(423).body(Map.<String, Object>of(
+                    "ok", false,
+                    "codigo", "MANTENIMIENTO",
+                    "mensaje", mantenimiento.mensaje()));
+        }
         // Se devuelve el id porque el mapa necesita saber cuales de las casetas en tramite
         // son de este vendedor: las compara con el `reservadoPor` que difunde el WebSocket.
         // Va aparte del token para no obligar al cliente a decodificar el JWT.
