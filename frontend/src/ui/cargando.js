@@ -50,6 +50,21 @@ export function mostrarCarga(texto = 'Un momento…') {
   pendientes.value++;
 }
 
+/**
+ * Cambia el texto del velo que ya esta puesto, para una tarea de varios pasos
+ * ("subiendo la foto…", "enviando la credencial…").
+ *
+ * Existe para no tener que exportar el ref y que cada vista le escriba encima: eso ya costo un
+ * cuelgue en produccion, porque `textoCarga` se usaba en MisVentas SIN importarlo y el
+ * ReferenceError caia en el `catch` que abria un aviso invisible bajo el velo.
+ *
+ * No hace nada si no hay velo: cambiar el texto de algo que no se ve solo dejaria el rotulo
+ * preparado para la proxima vez, que es peor que no hacer nada.
+ */
+export function cambiarTextoCarga(texto) {
+  if (pendientes.value > 0 && texto) textoCarga.value = texto;
+}
+
 export function ocultarCarga() {
   pendientes.value = Math.max(0, pendientes.value - 1);
   if (pendientes.value === 0) esperaMs.value = 0;

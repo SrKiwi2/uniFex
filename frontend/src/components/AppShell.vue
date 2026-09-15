@@ -8,6 +8,8 @@ import { toast } from '../ui/toast';
 import { alerta } from '../ui/alerta';
 import { tema, alternarTema } from '../ui/tema';
 import { iniciarPresencia, marcarPantalla, detenerPresencia } from '../ui/presencia';
+import AvisoAnuncios from './AvisoAnuncios.vue';
+import { useAnunciosStore } from '../stores/anuncios';
 
 const auth = useAuthStore();
 const permisos = usePermisosStore();
@@ -47,6 +49,7 @@ const TODOS = [
   { a: '/noches-fexpo', p: 'noches-fexpo', icono: '🎤', txt: 'Noches de FEXPO' },
   { a: '/editor', p: 'editor', icono: '✏️', txt: 'Editor del plano' },
   { a: '/categorias', p: 'categorias', icono: '🏷️', txt: 'Categorías' },
+  { a: '/anuncios', p: 'anuncios', icono: '📣', txt: 'Anuncios' },
   { a: '/puestos', p: 'puestos', icono: '🔢', txt: 'Puestos' },
   { a: '/seguimiento', p: 'seguimiento', icono: '📡', txt: 'Seguimiento en vivo' },
   { a: '/personas', p: 'personas', icono: '🪪', txt: 'Personas' },
@@ -57,6 +60,8 @@ const TODOS = [
   { a: '/errores', soloAdministracion: true, icono: '⚠️', txt: 'Registro de errores' },
   { a: '/permisos', p: 'permisos', icono: '🔐', txt: 'Permisos por rol' },
 ];
+
+const anuncios = useAnunciosStore();
 
 const enlaces = computed(() => TODOS.filter((e) => e.soloAdministracion
   ? auth.puedeEditarPlano : permisos.puedeVer(e.p)));
@@ -130,6 +135,8 @@ onMounted(() => {
   // El latido que alimenta "Seguimiento en vivo". Va aqui y no en cada vista: se late mientras
   // haya sesion abierta, sea cual sea la pantalla.
   iniciarPresencia();
+  // Los anuncios: se piden los vigentes y se abre su canal. Una vez por sesion.
+  anuncios.asegurar();
   marcarPantalla(route.meta?.pantalla, route.meta?.titulo);
 });
 
@@ -147,6 +154,8 @@ function salir() {
   // Avisar de la salida ANTES de tirar el token: despues, la peticion iria sin credencial y el
   // usuario se quedaria en la lista de conectados hasta que venciera su silencio.
   detenerPresencia();
+  // Los anuncios del turno anterior no pueden sobrevivir al cambio de usuario.
+  anuncios.desconectar();
   // Los permisos se olvidan con la sesion: en un equipo compartido, el siguiente en entrar no
   // puede heredar el menu del anterior aunque sea de otro rol.
   permisos.limpiar();
@@ -157,6 +166,9 @@ function salir() {
 
 <template>
   <div class="shell">
+    <!-- Los anuncios de administracion. Van AQUI, en el armazon, para que salgan en cualquier
+         pantalla: el mapa, el registro de una venta, credenciales. No bloquean nada. -->
+    <AvisoAnuncios />
     <aside class="sidebar" :class="{ abierto }">
       <div class="marca">
         <span class="logo">UF</span>
