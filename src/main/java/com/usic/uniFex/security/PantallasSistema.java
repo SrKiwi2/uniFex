@@ -29,6 +29,7 @@ public enum PantallasSistema {
     TABLERO("tablero", "Tablero", "Venta"),
     EDITOR("editor", "Editor del plano", "Feria"),
     CATEGORIAS("categorias", "Categorías", "Feria"),
+    PUESTOS("puestos", "Puestos", "Feria"),
     SEGUIMIENTO("seguimiento", "Seguimiento en vivo", "Administracion"),
     VENDEDORES("vendedores", "Vendedores", "Feria"),
     INSCRIPCIONES("inscripciones", "Inscripciones", "Feria"),

@@ -200,26 +200,7 @@ public class PuestoMapaService {
             if (catId != null) nombreCategoria.putIfAbsent(catId, p.getCategoria().getNombre());
         }
 
-        // 3. Ninguna caseta vendida. El numero no se copia a la venta —se lee en vivo con un
-        //    JOIN a puesto—, asi que renumerar una vendida cambia lo que dice un recibo ya
-        //    entregado. Se rechaza el lote entero en vez de saltarselas: numerar "1..N
-        //    menos tres" deja huecos justo donde el vendedor esperaba una fila corrida.
-        List<Long> conVentas = puestoDao.idsConVentas(pedidos.keySet());
-        if (!conVentas.isEmpty()) {
-            String cuales = conVentas.stream().limit(6)
-                    .map(id -> {
-                        String c = codigoActual.get(id);
-                        return c != null ? c : String.valueOf(id);
-                    })
-                    .collect(Collectors.joining(", "));
-            String cola = conVentas.size() > 6 ? " y " + (conVentas.size() - 6) + " mas" : "";
-            return new ResultadoRenumeracion(false,
-                    "No se puede renumerar una caseta vendida (N.o " + cuales + cola
-                            + "). Quitala de la seleccion.",
-                    List.of());
-        }
-
-        // 4. Validar el conjunto resultante, categoria por categoria.
+        // 3. Validar el conjunto resultante, categoria por categoria.
         for (Long catId : new LinkedHashSet<>(categoriaDe.values())) {
             List<Long> idsAqui = categoriaDe.entrySet().stream()
                     .filter(e -> Objects.equals(e.getValue(), catId))
@@ -252,7 +233,7 @@ public class PuestoMapaService {
             }
         }
 
-        // 5. Escribir. Solo las que de verdad cambian: renumerar una fila entera suele dejar
+        // 4. Escribir. Solo las que de verdad cambian: renumerar una fila entera suele dejar
         //    la mitad con el numero que ya tenia, y difundirlas seria ruido en todos los mapas.
         List<Long> cambiados = new ArrayList<>();
         for (Map.Entry<Long, String> e : pedidos.entrySet()) {

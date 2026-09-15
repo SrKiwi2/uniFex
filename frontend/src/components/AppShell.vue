@@ -47,6 +47,7 @@ const TODOS = [
   { a: '/noches-fexpo', p: 'noches-fexpo', icono: '🎤', txt: 'Noches de FEXPO' },
   { a: '/editor', p: 'editor', icono: '✏️', txt: 'Editor del plano' },
   { a: '/categorias', p: 'categorias', icono: '🏷️', txt: 'Categorías' },
+  { a: '/puestos', p: 'puestos', icono: '🔢', txt: 'Puestos' },
   { a: '/seguimiento', p: 'seguimiento', icono: '📡', txt: 'Seguimiento en vivo' },
   { a: '/personas', p: 'personas', icono: '🪪', txt: 'Personas' },
   { a: '/personal-apoyo', p: 'personal-apoyo', icono: '👥', txt: 'Personal de apoyo' },
