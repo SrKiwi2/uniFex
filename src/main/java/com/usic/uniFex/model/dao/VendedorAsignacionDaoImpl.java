@@ -241,6 +241,22 @@ public class VendedorAsignacionDaoImpl implements IVendedorAsignacionDao {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
+    public java.util.Set<Long> puestosPermitidosDe(Long usuarioId, List<Long> puestoIds) {
+        if (usuarioId == null || puestoIds == null || puestoIds.isEmpty()) return java.util.Set.of();
+        List<Object> filas = em.createNativeQuery(
+                "SELECT id_puesto FROM vendedor_puesto WHERE id_usuario = :usuarioId AND id_puesto IN (:ids)")
+                .setParameter("usuarioId", usuarioId)
+                .setParameter("ids", puestoIds)
+                .getResultList();
+        java.util.Set<Long> permitidas = new java.util.HashSet<>();
+        for (Object f : filas) {
+            if (f instanceof Number n) permitidas.add(n.longValue());
+        }
+        return permitidas;
+    }
+
+    @Override
     public boolean vendedorTienePuesto(Long usuarioId, Long puestoId) {
         // Dice lo mismo que findPuestosVisiblesParaVendedor. Si difirieran, un vendedor podria
         // vender una caseta que su mapa no le muestra, o al reves.

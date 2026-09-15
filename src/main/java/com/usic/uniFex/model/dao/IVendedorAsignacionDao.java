@@ -47,6 +47,17 @@ public interface IVendedorAsignacionDao {
     boolean vendedorTienePuesto(Long usuarioId, Long puestoId);
 
     /**
+     * De una lista de casetas, cuales tiene habilitadas este vendedor. UNA consulta.
+     *
+     * Existe para no preguntar caseta por caseta. Comprobar un lote de veinte con
+     * {@link #vendedorTienePuesto} eran veinte viajes a la base ANTES de empezar a reservar, y
+     * eso lo paga el mapa de los demas vendedores: la difusion no sale hasta que termina todo.
+     * Con la base al otro lado de una red lenta, ese N+1 es la diferencia entre "al instante" y
+     * "unos segundos".
+     */
+    java.util.Set<Long> puestosPermitidosDe(Long usuarioId, java.util.List<Long> puestoIds);
+
+    /**
      * Catalogo para el modal de habilitacion: cada caseta viva con su categoria y quien la lleva.
      * Columnas: id, codigo, categoriaId, categoriaNombre, estadoPuesto, usuarioId, username.
      *

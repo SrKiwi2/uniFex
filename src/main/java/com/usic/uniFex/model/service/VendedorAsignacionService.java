@@ -307,7 +307,11 @@ public class VendedorAsignacionService {
     @Transactional(readOnly = true)
     public List<Long> casetasNoPermitidas(Long vendedorId, List<Long> puestoIds) {
         if (puestoIds == null || puestoIds.isEmpty()) return List.of();
-        return puestoIds.stream().filter(id -> !dao.vendedorTienePuesto(vendedorId, id)).toList();
+        // UNA consulta para el lote entero. Antes se preguntaba caseta por caseta, y esto corre
+        // en el camino del carrito: esos viajes de mas retrasan la difusion a los demas mapas,
+        // que no se pinta hasta que la peticion termina.
+        java.util.Set<Long> permitidas = dao.puestosPermitidosDe(vendedorId, puestoIds);
+        return puestoIds.stream().filter(id -> !permitidas.contains(id)).toList();
     }
 
     /**

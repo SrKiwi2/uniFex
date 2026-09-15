@@ -1,6 +1,7 @@
 package com.usic.uniFex.model.service;
 
 import java.util.Collection;
+import java.util.List;
 
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
@@ -8,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.usic.uniFex.model.dao.IPuestoDao;
 import com.usic.uniFex.model.dto.PuestoEstadoDTO;
+import com.usic.uniFex.model.entity.Puesto;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,16 +38,18 @@ public class PuestoEventPublisher {
     private final SimpMessagingTemplate messaging;
     private final IPuestoDao puestoDao;
 
-    /** Publica el estado vigente del puesto (se lee dentro de la tx para resolver la categoria lazy). */
+    /**
+     * Publica el estado vigente del puesto.
+     *
+     * Se lee con la categoria YA CARGADA (`findWithCategoriaByIdIn`) y no con `findById`: la
+     * categoria es lazy y el DTO le pide nombre, color, forma, tamaño y precio, asi que un
+     * `findById` son dos viajes a la base en vez de uno. Lo paga el mapa de los demas
+     * vendedores, que no ve el cambio hasta que esto termina.
+     */
     @Transactional(readOnly = true)
     public void publicar(Long puestoId) {
-        try {
-            puestoDao.findById(puestoId)
-                    .map(PuestoEstadoDTO::de)
-                    .ifPresent(dto -> messaging.convertAndSend(TOPIC, dto));
-        } catch (Exception e) {
-            log.error("No se pudo difundir el estado del puesto {}", puestoId, e);
-        }
+        if (puestoId == null) return;
+        publicarVarios(java.util.List.of(puestoId));
     }
 
     /**
@@ -69,16 +73,35 @@ public class PuestoEventPublisher {
     }
 
     /**
-     * Publica varias casetas de una vez. Lo usan el guardado por lotes del editor y los cambios
-     * de categoria (color, forma, tamaño), que alteran la apariencia de todas sus casetas.
+     * Publica varias casetas de una vez. Lo usan el carrito, el guardado por lotes del editor y
+     * los cambios de categoria (color, forma, tamaño), que alteran todas sus casetas.
      *
      * Se emite un mensaje por caseta y no un lote unico para no cambiar el contrato que ya
      * consumen el mapa y la app: cada mensaje sigue siendo un PuestoEstadoDTO.
+     *
+     * Pero se LEE todo de una vez. Antes esto era un bucle de `findById`, y con la categoria
+     * lazy cada caseta costaba dos viajes a la base: veinte casetas eran cuarenta viajes, y
+     * hasta que terminaban no salia ni el primer mensaje. Es el tramo que decide cuanto tarda
+     * el mapa del otro vendedor en enterarse, y el unico que crece con el tamaño del lote.
+     *
+     * Los mensajes se mandan segun se van armando, no al final: el primero sale sin esperar a
+     * que se serialice el ultimo.
      */
     @Transactional(readOnly = true)
     public void publicarVarios(Collection<Long> puestoIds) {
         if (puestoIds == null || puestoIds.isEmpty()) return;
-        puestoIds.forEach(this::publicar);
-        log.info("Difundidas {} casetas", puestoIds.size());
+        try {
+            List<Puesto> casetas = puestoDao.findWithCategoriaByIdIn(puestoIds);
+            for (Puesto p : casetas) {
+                messaging.convertAndSend(TOPIC, PuestoEstadoDTO.de(p));
+            }
+            log.info("Difundidas {} casetas de {} pedidas", casetas.size(), puestoIds.size());
+        } catch (Exception e) {
+            // Un fallo al difundir NUNCA puede tumbar la operacion que ya se guardo: la venta
+            // esta hecha. El cliente se pondra al dia en la siguiente resincronizacion.
+            // La traza entera, no solo el mensaje: si esto falla, el mapa de todos se queda
+            // viejo y `e.getMessage()` a secas no dice en que linea se rompio.
+            log.error("No se pudo difundir el estado de {} caseta(s)", puestoIds.size(), e);
+        }
     }
 }
