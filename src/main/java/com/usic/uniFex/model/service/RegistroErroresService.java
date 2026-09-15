@@ -44,6 +44,40 @@ public class RegistroErroresService {
 
     public record Resultado(List<Map<String, Object>> errores, long anterior, String archivo) {}
 
+    private Object bloqueoArchivo() {
+        var contexto = (ch.qos.logback.classic.LoggerContext) org.slf4j.LoggerFactory.getILoggerFactory();
+        var appender = contexto.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME).getAppender("ERRORES");
+        return appender instanceof com.usic.uniFex.Config.ArchivoErroresAppender ? appender : this;
+    }
+
+    private Path archivoSeguro(String archivo) throws IOException {
+        if (!nombreValido(archivo)) throw new IllegalArgumentException("Archivo invalido");
+        Path ruta = directorio.resolve(archivo).normalize();
+        if (!ruta.getParent().equals(directorio)) throw new IllegalArgumentException("Archivo invalido");
+        if (!Files.isRegularFile(ruta, LinkOption.NOFOLLOW_LINKS)) throw new java.nio.file.NoSuchFileException(archivo);
+        return ruta;
+    }
+
+    public byte[] descargar(String archivo) throws IOException {
+        synchronized (bloqueoArchivo()) {
+            try (var entrada = Files.newInputStream(archivoSeguro(archivo), LinkOption.NOFOLLOW_LINKS)) {
+                byte[] datos = entrada.readNBytes(16 * 1024 * 1024 + 1);
+                if (datos.length > 16 * 1024 * 1024) throw new IOException("Archivo demasiado grande para descargar");
+                return datos;
+            }
+        }
+    }
+
+    /** Trunca el archivo sin eliminarlo: el appender puede seguir escribiendo en el mismo descriptor. */
+    public void vaciar(String archivo) throws IOException {
+        synchronized (bloqueoArchivo()) {
+            try (var canal = Files.newByteChannel(archivoSeguro(archivo), StandardOpenOption.WRITE,
+                    LinkOption.NOFOLLOW_LINKS)) {
+                canal.truncate(0);
+            }
+        }
+    }
+
     public Resultado leer(String archivo, Long antes, String buscar, String usuario) throws IOException {
         if (!nombreValido(archivo) || antes != null && antes < 0) throw new IllegalArgumentException("Consulta invalida");
         Path ruta = directorio.resolve(archivo);

@@ -716,7 +716,10 @@ Sustituye la propuesta de tabla y cola por WebSocket; no requiere migración SQL
       cola de red solo en memoria, descartada si cambia la sesión.
 - [x] Vista `/errores` y API `/api/app/errores`, solo SUPER USUARIO / ADMINISTRADOR: archivos
       por fecha, búsqueda, usuario, detalle y páginas de hasta 100 resultados / 2 MB leídos.
-      Acceso administrativo fijo, independiente de la matriz de pantallas.
+  Acceso administrativo fijo, independiente de la matriz de pantallas.
+- [x] Descarga del TXT completo y vaciado del archivo seleccionado con advertencia y
+      confirmación; ambos exclusivos de administración. Verificado que el archivo activo
+      sigue recibiendo errores tras vaciarse y que los otros históricos se conservan.
 - [x] Rotación diaria o a 10 MB, conservación de hasta 30 días / 300 MB de archivos históricos;
       ocultación de contraseñas y tokens con formatos reconocidos, sin cuerpos ni cabeceras HTTP.
 - [x] Pruebas sin BD: escritura/lectura real, permisos 401/403, identidad, aislamiento entre

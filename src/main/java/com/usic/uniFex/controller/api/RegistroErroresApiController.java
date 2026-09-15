@@ -27,6 +27,39 @@ public class RegistroErroresApiController {
     @PreAuthorize(Roles.ADMINISTRA)
     public Object archivos() throws IOException { return registros.archivos(); }
 
+    @GetMapping("/descargar")
+    @PreAuthorize(Roles.ADMINISTRA)
+    public ResponseEntity<?> descargar(@RequestParam(defaultValue = "errores.txt") String archivo) throws IOException {
+        try {
+            byte[] texto = registros.descargar(archivo);
+            return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore())
+                    .header("Content-Disposition", org.springframework.http.ContentDisposition.attachment()
+                            .filename(archivo).build().toString())
+                    .contentType(new org.springframework.http.MediaType("text", "plain", java.nio.charset.StandardCharsets.UTF_8))
+                    .body(texto);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body("Archivo invalido");
+        } catch (java.nio.file.NoSuchFileException e) {
+            return ResponseEntity.status(404).body("El archivo ya no existe");
+        }
+    }
+
+    @DeleteMapping
+    @PreAuthorize(Roles.ADMINISTRA)
+    public ResponseEntity<?> vaciar(@RequestParam String archivo,
+            @RequestParam(defaultValue = "false") boolean confirmar, @AuthenticationPrincipal JwtUser usuario) throws IOException {
+        if (!confirmar) return ResponseEntity.badRequest().body(Map.of("mensaje", "Debes confirmar el vaciado"));
+        try {
+            registros.vaciar(archivo);
+            log.info("Archivo de errores {} vaciado por el usuario {} (ID {})", archivo, usuario.username(), usuario.id());
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("mensaje", "Archivo invalido"));
+        } catch (java.nio.file.NoSuchFileException e) {
+            return ResponseEntity.status(404).body(Map.of("mensaje", "El archivo ya no existe"));
+        }
+    }
+
     @GetMapping
     @PreAuthorize(Roles.ADMINISTRA)
     public ResponseEntity<?> listar(@RequestParam(defaultValue = "errores.txt") String archivo,

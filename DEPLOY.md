@@ -32,6 +32,10 @@ En desarrollo se usa por defecto `logs/` del proyecto (ignorado por Git).
   históricos, más el archivo activo. Un solo proceso Java por directorio de logs.
 - Menú **Registro de errores**, ruta SPA `/errores`: solo SUPER USUARIO y ADMINISTRADOR,
   también protegida en el backend. Selección de archivo, usuario, búsqueda y detalle.
+- **Descargar texto** descarga el archivo seleccionado completo (también en el APK).
+  **Vaciar archivo** exige confirmación y vacía solo ese archivo, incluidos los registros
+  ocultos por filtros. El appender sigue registrando errores nuevos. Endpoints administrativos:
+  `GET /api/app/errores/descargar` y `DELETE /api/app/errores?archivo=...&confirmar=true`.
 - Cada página lee como máximo 2 MB y muestra hasta 100 coincidencias. «Buscar errores anteriores»
   sigue recorriendo el archivo seleccionado. Durante una rotación, actualizar o elegir el histórico.
 - Errores del servidor y HTTP 4xx/5xx; informes de errores de la SPA autenticada, con límite de

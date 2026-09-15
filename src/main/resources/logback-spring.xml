@@ -3,7 +3,7 @@
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
     <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
     <springProperty scope="context" name="DIRECTORIO_ERRORES" source="unifex.logs.directorio" defaultValue="logs"/>
-    <appender name="ERRORES" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <appender name="ERRORES" class="com.usic.uniFex.Config.ArchivoErroresAppender">
         <file>${DIRECTORIO_ERRORES}/errores.txt</file>
         <filter class="ch.qos.logback.classic.filter.ThresholdFilter"><level>ERROR</level></filter>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
