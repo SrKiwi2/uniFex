@@ -383,6 +383,23 @@ async function subirFotos(inscripcionId) {
   }
 }
 
+async function enviarWhatsAppVenta(inscripcionId, responsables) {
+  if (!responsables.length) return null;
+  try {
+    const res = await apiFetch('/api/app/credenciales/whatsapp', {
+      method: 'POST',
+      body: JSON.stringify({
+        inscripcionId,
+        responsables: responsables.map((r) => r.id),
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    return res.ok && data.ok;
+  } catch {
+    return false;
+  }
+}
+
 
 /*
  * Los nombres van en MAYUSCULAS, como el resto del sistema (las entidades y personas que ya
@@ -508,6 +525,9 @@ async function registrar() {
       await descargarCredencialVirtual(r.id, r.nombre, carpeta);
     }
 
+    textoCarga.value = 'Enviando por WhatsApp…';
+    const whatsappOk = await enviarWhatsAppVenta(d.inscripcionId, conCredencial);
+
     textoCarga.value = 'Preparando el recibo…';
     // El recibo se baja SOLO, que es el momento en que el cliente lo está esperando. Si algo
     // falla no se toca la venta: ya está hecha, y se avisa de dónde volver a pedirlo.
@@ -534,6 +554,8 @@ async function registrar() {
         ? 'la credencial virtual'
         : `${conCredencial.length} credenciales virtuales`}. Ya se puede${conCredencial.length === 1 ? '' : 'n'} mandar al expositor.`
         + `\n\nEstán en Documentos, en la carpeta «${carpeta}», junto con el recibo.`;
+      if (whatsappOk === true) sobreCredenciales += '\n\nTambién se envió por WhatsApp con las fotos.';
+      else if (whatsappOk === false) sobreCredenciales += '\n\nNo se pudo enviar por WhatsApp; puedes reenviarlo desde Credenciales.';
     } else {
       sobreCredenciales = '\n\nLa credencial virtual se descarga desde Credenciales, en cuanto '
         + 'estén el comprobante y la foto del responsable.';

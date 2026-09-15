@@ -263,7 +263,6 @@ public class RegistroVentaService {
                 usuarioId, origen);
 
         difundirTrasCommit(ocupados);
-        enviarWhatsAppTrasCommit(entidad.getCelularRepresentante(), entidad.getNombre(), inscripcion.getId());
         log.info("Venta registrada inscripcion={} casetas={} total={} usuario={}",
                 inscripcion.getId(), ocupados.size(), total, usuarioId);
 
