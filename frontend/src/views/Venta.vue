@@ -11,6 +11,7 @@ import { partirNombre } from '../ui/nombres';
 import CampoCelular from '../components/CampoCelular.vue';
 import { mostrarCarga, ocultarCarga, textoCarga } from '../ui/cargando';
 import { alerta, aviso, alertaConAccion } from '../ui/alerta';
+import { marcarAvance, limpiarAvance } from '../ui/presencia';
 
 /*
  * Registro de una venta. Es la pantalla que convierte un carrito de casetas en una
@@ -76,12 +77,18 @@ function opcionDe(categoriaId) {
 }
 
 /**
- * Lo que cuesta una caseta segun la opcion elegida para su categoria.
+ * Lo que cuesta una caseta.
  *
- * Si la categoria no tiene opciones se usa el precio que trae la caseta, que es de donde salia
- * antes: una base sin la migracion de opciones sigue vendiendo bien.
+ * Orden: el PRECIO PROPIO de la caseta si lo tiene (V37), y si no la opcion elegida para su
+ * categoria. Si la categoria tampoco tiene opciones se usa el precio que trae la caseta, que
+ * es de donde salia antes: una base sin la migracion de opciones sigue vendiendo bien.
+ *
+ * El propio gana a la opcion, y es el mismo orden que aplica el servidor en
+ * `RegistroVentaService.guardarDetalle`. Tiene que ser el mismo: si aqui se cobrara la opcion
+ * y alli el precio propio, el vendedor le canta un total al cliente y el recibo sale con otro.
  */
 function precioDe(p) {
+  if (p.precioPropio) return Number(p.precio || 0);
   const o = opcionDe(p.categoriaId);
   return Number(o ? o.precio : (p.precio || 0));
 }
@@ -118,6 +125,17 @@ const porCategoria = computed(() => {
   // Los numeros, en orden: "6, 7 y 14" se lee; "14, 6 y 7" hace dudar de si falta alguna.
   for (const g of m.values()) {
     g.casetas.sort((a, b) => String(a.codigo).localeCompare(String(b.codigo), 'es', { numeric: true }));
+    /*
+     * Las que llevan precio propio (V37), y si por eso el grupo tiene precios mezclados.
+     *
+     * Hace falta porque el resumen decia "2 × 900 Bs = 1.800" dividiendo el subtotal entre las
+     * casetas. Con una a 800 y otra a 1.000 eso da un promedio que NO es el precio de ninguna
+     * de las dos, y es justo el numero que el vendedor le canta al cliente. Cuando los precios
+     * no son todos iguales hay que desglosar en vez de promediar.
+     */
+    g.propias = g.casetas.filter((c) => c.precioPropio);
+    const precios = new Set(g.casetas.map((c) => precioDe(c)));
+    g.preciosMezclados = precios.size > 1;
   }
   return [...m.values()];
 });
@@ -325,47 +343,99 @@ const intentado = ref(false);
 
 const algoEscrito = (p) => Boolean(p.nombre || p.paterno || p.materno || p.ci || p.celular);
 
-const faltantes = computed(() => {
-  const falta = new Map();
-  const pide = (clave, etiqueta, cumplido) => {
-    if (!cumplido) falta.set(clave, etiqueta);
+/**
+ * Todo lo obligatorio del formulario ENTERO, paso a paso: [{ paso, clave, etiqueta, ok }].
+ *
+ * Una sola lista para las dos preguntas que se hacen sobre ella —"¿puedo pasar de paso?" y
+ * "¿cuanto llevo?"— porque si cada una tuviera la suya, acabarian discrepando: se añadiria un
+ * campo obligatorio a la validacion y el porcentaje seguiria diciendo 100% sin el.
+ */
+const requisitos = computed(() => {
+  const lista = [];
+  const pide = (paso, clave, etiqueta, cumplido) => {
+    lista.push({ paso, clave, etiqueta, ok: Boolean(cumplido) });
   };
 
-  if (paso.value === 0) {
-    pide('entidadNombre', 'Nombre de la entidad', form.entidadNombre.trim());
-    pide('tipoEntidadId', 'Tipo de entidad', form.tipoEntidadId);
-    pide('representanteLegal', 'Nombre del responsable legal', form.representanteLegal.trim());
-    pide('ciRepresentante', 'C.I. del responsable legal', form.ciRepresentante.trim());
-    pide('celularRepresentante', 'Celular del responsable legal', form.celularRepresentante.trim());
-  }
-  if (paso.value === 1) {
-    const r0 = form.responsables[0] || {};
-    pide('r0.nombre', 'Nombre del Responsable 1', (r0.nombre || '').trim());
-    pide('r0.ci', 'C.I. del Responsable 1', (r0.ci || '').trim());
-    /*
-     * Del SEGUNDO en adelante solo se exige el NOMBRE.
-     *
-     * El C.I. era obligatorio y frenaba ventas por un dato que muchas veces no esta a mano: los
-     * acompañantes suelen ser familiares o empleados que ni siquiera estan en el mostrador. Sin
-     * C.I. se registra igual y se completa despues desde Mis ventas; lo que no se puede es
-     * dejarlo sin nombre, porque entonces no hay a quien acreditar.
-     */
-    for (let i = 1; i < form.responsables.length; i++) {
-      const r = form.responsables[i];
-      if (r && algoEscrito(r)) {
-        pide(`r${i}.nombre`, `Nombre del Responsable ${i + 1}`, (r.nombre || '').trim());
-      }
+  pide(0, 'entidadNombre', 'Nombre de la entidad', form.entidadNombre.trim());
+  pide(0, 'tipoEntidadId', 'Tipo de entidad', form.tipoEntidadId);
+  pide(0, 'representanteLegal', 'Nombre del responsable legal', form.representanteLegal.trim());
+  pide(0, 'ciRepresentante', 'C.I. del responsable legal', form.ciRepresentante.trim());
+  pide(0, 'celularRepresentante', 'Celular del responsable legal', form.celularRepresentante.trim());
+
+  const r0 = form.responsables[0] || {};
+  pide(1, 'r0.nombre', 'Nombre del Responsable 1', (r0.nombre || '').trim());
+  pide(1, 'r0.ci', 'C.I. del Responsable 1', (r0.ci || '').trim());
+  /*
+   * Del SEGUNDO en adelante solo se exige el NOMBRE.
+   *
+   * El C.I. era obligatorio y frenaba ventas por un dato que muchas veces no esta a mano: los
+   * acompañantes suelen ser familiares o empleados que ni siquiera estan en el mostrador. Sin
+   * C.I. se registra igual y se completa despues desde Mis ventas; lo que no se puede es
+   * dejarlo sin nombre, porque entonces no hay a quien acreditar.
+   */
+  for (let i = 1; i < form.responsables.length; i++) {
+    const r = form.responsables[i];
+    if (r && algoEscrito(r)) {
+      pide(1, `r${i}.nombre`, `Nombre del Responsable ${i + 1}`, (r.nombre || '').trim());
     }
   }
-  if (paso.value === 2) {
-    // Sin forma de pago la venta queda sin decir como se cobro, y eso no se deduce despues:
-    // o fue efectivo o fue un deposito, y son cobros que se cuadran distinto.
-    pide('formaPago', 'Cómo pagó (contado o depósito)', form.formaPago);
-  }
-  return falta;
+
+  // Sin forma de pago la venta queda sin decir como se cobro, y eso no se deduce despues:
+  // o fue efectivo o fue un deposito, y son cobros que se cuadran distinto.
+  pide(2, 'formaPago', 'Cómo pagó (contado o depósito)', form.formaPago);
+  return lista;
 });
 
+const faltantes = computed(() => new Map(
+  requisitos.value
+    .filter((r) => r.paso === paso.value && !r.ok)
+    .map((r) => [r.clave, r.etiqueta]),
+));
+
 const falta = (clave) => intentado.value && faltantes.value.has(clave);
+
+/**
+ * Cuanto lleva del registro, de 0 a 100, contando el formulario ENTERO.
+ *
+ * Se cuentan campos obligatorios cumplidos, no pasos: "va por el paso 2 de 3" dice 66% de un
+ * vendedor que solo escribio el nombre de la entidad. Lo que administracion mira en la
+ * pantalla de seguimiento es si alguien se quedo trabado, y para eso hace falta el detalle.
+ *
+ * Los opcionales (NIT, rubro, C.I. del segundo responsable) no cuentan: si contaran, una venta
+ * lista para registrar se quedaria en el 70% y el numero dejaria de significar "le falta algo".
+ */
+const avanceRegistro = computed(() => {
+  const total = requisitos.value.length;
+  if (!total) return 0;
+  return Math.round((requisitos.value.filter((r) => r.ok).length / total) * 100);
+});
+
+/** Lo que le falta, en las mismas palabras que lee el vendedor en su pantalla. */
+const faltanTodos = computed(() => requisitos.value.filter((r) => !r.ok).map((r) => r.etiqueta));
+
+/*
+ * Informar el avance al seguimiento en vivo.
+ *
+ * Solo mientras haya casetas en el carrito: sin ellas no hay ninguna venta empezada que
+ * seguir, y un formulario vacio abierto por curiosidad no es trabajo a medias.
+ *
+ * No late en cada tecla —`marcarAvance` solo anota— asi que esto puede correr con cada
+ * pulsacion sin costar una peticion. El latido del intervalo se lleva lo ultimo anotado.
+ */
+watch([avanceRegistro, paso, faltanTodos, carrito], () => {
+  if (!carrito.value.length) { marcarAvance(); return; }
+  marcarAvance({
+    porcentaje: avanceRegistro.value,
+    paso: PASOS[paso.value],
+    // Tres bastan para saber que falta; la lista entera no cabe en una linea de la tabla.
+    faltan: faltanTodos.value.slice(0, 3).join(', '),
+  });
+}, { immediate: true });
+
+// Salir de la pantalla deja de informar: el numero congelado de una venta abandonada parece
+// un vendedor trabado. `marcarPantalla` ya lo limpia al navegar, pero esta vista vive dentro
+// de <KeepAlive> en algunas rutas y conviene no depender solo de eso.
+onUnmounted(() => limpiarAvance());
 
 function siguiente() {
   intentado.value = true;
@@ -757,7 +827,11 @@ onUnmounted(() => {
           Solo aparece si hay algo que elegir: con una sola opcion no hay decision, y una fila
           de radios con un unico boton solo estorba.
         -->
-        <div v-if="porCategoria.some((g) => g.opciones.length > 1)" class="opciones-precio">
+        <!-- También cuando hay precios propios, aunque la categoría tenga una sola opción: ese
+             es el caso corriente (una categoría con su precio y unas pocas casetas distintas),
+             y sin esto el desglose no se vería nunca justo cuando más falta hace. -->
+        <div v-if="porCategoria.some((g) => g.opciones.length > 1 || g.preciosMezclados || g.propias.length)"
+             class="opciones-precio">
           <h3 class="titulo-bloque">Qué se está vendiendo</h3>
           <div v-for="g in porCategoria" :key="'op-' + g.categoria" class="grupo-opcion">
             <div class="cab-grupo-op">
@@ -782,8 +856,30 @@ onUnmounted(() => {
               {{ bs(opcionDe(g.categoriaId)?.precio ?? g.casetas[0]?.precio) }} Bs por caseta
             </p>
 
+            <!-- Con precio propio, elegir otra opción NO mueve esa caseta. Sin decirlo, el
+                 vendedor toca "con tarima", ve que el total no sube lo que esperaba y no
+                 tiene forma de saber por qué. -->
+            <p v-if="g.propias.length" class="aviso-propio">
+              Caseta{{ g.propias.length === 1 ? '' : 's' }}
+              {{ listar(g.propias.map((c) => c.codigo)) }}
+              {{ g.propias.length === 1 ? 'tiene' : 'tienen' }} precio propio y no
+              {{ g.propias.length === 1 ? 'cambia' : 'cambian' }} con la opción.
+            </p>
+
+            <!-- Precios mezclados: se desglosa. Un "2 × 900 Bs" sacado de promediar 800 y
+                 1.000 es un número que no le corresponde a ninguna de las dos casetas. -->
+            <ul v-if="g.preciosMezclados" class="desglose-op">
+              <li v-for="c in g.casetas" :key="c.id">
+                <span>Caseta {{ c.codigo }}<span v-if="c.precioPropio" class="marca-propio">precio propio</span></span>
+                <strong>{{ bs(precioDe(c)) }} Bs</strong>
+              </li>
+            </ul>
+
             <p class="subtotal-op">
-              {{ g.casetas.length }} × {{ bs(g.subtotal / (g.casetas.length || 1)) }} Bs =
+              <template v-if="!g.preciosMezclados">
+                {{ g.casetas.length }} × {{ bs(g.subtotal / (g.casetas.length || 1)) }} Bs =
+              </template>
+              <template v-else>Subtotal: </template>
               <strong>{{ bs(g.subtotal) }} Bs</strong>
             </p>
           </div>
@@ -1073,6 +1169,25 @@ onUnmounted(() => {
 .grupo-opcion { display: flex; flex-direction: column; gap: 0.45rem; }
 .cab-grupo-op { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
 .elecciones { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+/* Precio propio: ámbar, el mismo color con el que el resto de la aplicación dice "ojo con
+   esto". No es un error —el precio especial es intencional— pero sí algo que hay que leer
+   antes de cantar el total. */
+.aviso-propio {
+  margin: 0; font-size: 0.88rem; line-height: 1.4;
+  color: var(--tramite, #d97706);
+}
+.desglose-op { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+.desglose-op li {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem;
+  font-size: 0.92rem;
+}
+.marca-propio {
+  margin-left: 0.4rem; padding: 0.05rem 0.4rem; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 700;
+  color: var(--tramite, #d97706);
+  border: 1px solid color-mix(in srgb, var(--tramite, #d97706) 45%, transparent);
+}
 .opcion {
   flex: 1 1 160px; min-height: 56px; display: flex; flex-direction: column; justify-content: center;
   gap: 0.15rem; padding: 0.5rem 0.75rem; border-radius: 10px; cursor: pointer;

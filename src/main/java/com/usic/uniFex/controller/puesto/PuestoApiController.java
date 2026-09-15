@@ -24,12 +24,14 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.usic.uniFex.model.dao.IPuestoDao;
 import com.usic.uniFex.model.dto.AsignacionPuestoDTO;
+import com.usic.uniFex.model.dto.OcupacionPuestoDTO;
 import com.usic.uniFex.model.dto.PuestoEstadoDTO;
 import com.usic.uniFex.model.dto.PuestoFotoDTO;
 import com.usic.uniFex.model.entity.Puesto;
 import com.usic.uniFex.model.service.PuestoEventPublisher;
 import com.usic.uniFex.model.service.PuestoFotoService;
 import com.usic.uniFex.model.service.PuestoMapaService;
+import com.usic.uniFex.model.service.PuestoOcupacionService;
 import com.usic.uniFex.model.service.PuestoReservaService;
 import com.usic.uniFex.model.service.VendedorAsignacionService;
 import com.usic.uniFex.security.JwtUser;
@@ -57,6 +59,7 @@ public class PuestoApiController {
     private final PuestoFotoService fotoService;
     private final IPuestoDao puestoDao;
     private final VendedorAsignacionService vendedorAsignacionService;
+    private final PuestoOcupacionService ocupacionService;
 
     /**
      * Estado de TODAS las casetas no anuladas (opcionalmente filtrado por categoria).
@@ -92,6 +95,27 @@ public class PuestoApiController {
     @GetMapping("/asignaciones")
     public List<AsignacionPuestoDTO> asignaciones() {
         return usuarioActual() == null ? List.of() : vendedorAsignacionService.asignacionesConVendedor();
+    }
+
+    /**
+     * Quien TIENE cada caseta no libre: el que la esta registrando y el que ya la vendio.
+     *
+     * No es lo mismo que {@link #asignaciones()} y conviene no confundirlos: habilitado es
+     * quien PUEDE venderla, y pueden ser varios; esto es quien se la LLEVO, que es uno solo.
+     * Una caseta puede estar habilitada a tres vendedores y vendida por el que la reservo
+     * primero.
+     *
+     * Va aparte de {@code PuestoEstadoDTO} por lo mismo que las asignaciones —el nombre y el
+     * telefono de una persona no caben en un mensaje que se difunde en cada movimiento del
+     * plano— y ademas porque la mitad "vendida" ni siquiera esta en la caseta: hay que ir a
+     * buscarla a la inscripcion (ver {@code findOcupacionConVendedor}).
+     *
+     * Lo ve cualquier autenticado, igual que el contacto del companiero: el vendedor esta
+     * delante del cliente y "ya esta vendida" a secas no le sirve para responder nada.
+     */
+    @GetMapping("/ocupacion")
+    public List<OcupacionPuestoDTO> ocupacion() {
+        return usuarioActual() == null ? List.of() : ocupacionService.ocupacionConVendedor();
     }
 
     // ===== Venta: cualquier usuario autenticado =====
@@ -383,6 +407,35 @@ public class PuestoApiController {
         PuestoMapaService.ResultadoRenumeracion r = mapaService.renumerar(cambios, usuarioId);
         // El numero rotula la caseta en TODOS los mapas abiertos, asi que se difunde igual
         // que un cambio de estado: el cliente no vuelve a pedir la lista.
+        if (r.ok()) publisher.publicarVarios(r.cambiados());
+        return ResponseEntity.status(r.ok() ? 200 : 409).body(Map.<String, Object>of(
+                "ok", r.ok(), "mensaje", r.mensaje(), "cambiados", r.cambiados().size()));
+    }
+
+    /**
+     * Pone el precio propio de un grupo de casetas (V37).
+     *
+     * El caso: se crea la categoria con su precio, se colocan todas sus casetas, y despues
+     * algunas valen distinto. Sin esto, la unica forma de cambiarle el precio a una era
+     * cambiarselo a la categoria entera, es decir, a todas.
+     *
+     * Va en lote porque asi se usa —se repasan las casetas de una categoria de una sentada— y
+     * porque la pantalla de Puestos ya guarda la numeracion del mismo modo.
+     *
+     * Un {@code precio} nulo devuelve la caseta al precio de su categoria. Es una orden, no un
+     * campo que falte: quien quita un precio especial quiere exactamente eso.
+     *
+     * Difunde, igual que el numero: el precio se lee en el mapa y en el carrito de todos los
+     * vendedores, y sin difundirlo seguirian vendiendo al importe viejo hasta recargar.
+     */
+    @PatchMapping("/precios")
+    @PreAuthorize(Roles.EDITA_PLANO)
+    public ResponseEntity<Map<String, Object>> actualizarPrecios(
+            @RequestBody List<PuestoMapaService.PrecioCaseta> cambios) {
+        Long usuarioId = usuarioActual();
+        if (usuarioId == null) return noAutenticado();
+
+        PuestoMapaService.ResultadoRenumeracion r = mapaService.actualizarPrecios(cambios, usuarioId);
         if (r.ok()) publisher.publicarVarios(r.cambiados());
         return ResponseEntity.status(r.ok() ? 200 : 409).body(Map.<String, Object>of(
                 "ok", r.ok(), "mensaje", r.mensaje(), "cambiados", r.cambiados().size()));

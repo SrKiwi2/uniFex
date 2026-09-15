@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { apiFetch } from '../api';
 import { ETIQUETA_ESTADO, CLASE_ESTADO } from '../mapa';
 import { url } from '../config';
@@ -25,6 +25,14 @@ const props = defineProps({
    * de un vendedor; la vende quien la reserve primero.
    */
   asignaciones: { type: Array, default: () => [] },
+  /**
+   * Quien TIENE esta caseta: { vendedorId, vendedor, celular, estado } o null.
+   *
+   * Distinto de `asignaciones`, y conviene no mezclarlos: aquellas son quienes PUEDEN
+   * venderla —pueden ser varios— y esto es quien se la llevo, que es uno. Nulo significa
+   * "no la tiene nadie" (libre o bloqueada), o que el servidor todavia no lo ha dicho.
+   */
+  ocupante: { type: Object, default: null },
 });
 const emit = defineEmits(['cerrar', 'agregar', 'quitar']);
 
@@ -47,11 +55,65 @@ const motivoSinAccion = computed(() => {
   // Sin motivo: cuando no es vendible, lo que se muestra es el contacto del companiero,
   // que dice mucho mas que un "no puedes".
   if (!props.vendible) return '';
+  // Con nombre, el motivo lo da el bloque `ocupada` de abajo, que ademas trae el telefono.
+  // Repetirlo aqui diria dos veces lo mismo y la segunda, peor.
+  if (quienLaTiene.value) return '';
   if (props.puesto.estado === 'T') return 'La tiene reservada otro vendedor.';
   if (props.puesto.estado === 'O') return 'Ya está vendida.';
   if (props.puesto.estado === 'X') return 'Está bloqueada por reparación.';
   return '';
 });
+
+/**
+ * El vendedor que tiene esta caseta, solo cuando hay algo que decir.
+ *
+ * Se exige el NOMBRE, no solo el id: "la vendió alguien" no le sirve a nadie delante de un
+ * cliente, y el hueco donde deberia ir un nombre parece un fallo de la aplicacion. Mientras
+ * el servidor no lo confirme, la ficha se queda con el texto de siempre.
+ */
+const quienLaTiene = computed(() => {
+  const o = props.ocupante;
+  if (!o || !o.vendedor) return null;
+  if (props.puesto?.estado !== 'T' && props.puesto?.estado !== 'O') return null;
+  // Es el propio vendedor: ya se lo dice el chip "En mi venta" de la cabecera.
+  if (props.esMia) return null;
+  return o;
+});
+
+const vendida = computed(() => props.puesto?.estado === 'O');
+
+/**
+ * "vence en 8 min". Es lo unico honesto que se puede decir del tiempo de una reserva: no hay
+ * ninguna columna que guarde CUANDO se tomo, y el vencimiento se renueva cada vez que el
+ * vendedor vuelve a tocar una caseta de su carrito.
+ */
+const venceEn = computed(() => {
+  if (props.puesto?.estado !== 'T' || !props.puesto?.reservaExpira) return '';
+  const ms = new Date(props.puesto.reservaExpira).getTime() - ahora.value;
+  if (!Number.isFinite(ms) || ms <= 0) return '';
+  const min = Math.round(ms / 60000);
+  if (min < 1) return 'vence en menos de un minuto';
+  if (min < 60) return `vence en ${min} min`;
+  return `vence en ${Math.round(min / 60)} h`;
+});
+
+/**
+ * Un reloj propio, y solo mientras la ficha esta abierta.
+ *
+ * `reservaExpira` es una fecha fija: sin algo que cambie, el texto "vence en 8 min" se
+ * quedaria congelado los ocho minutos. Se para al cerrar porque un intervalo por ficha
+ * abierta y nunca detenido es como se acumulan los temporizadores huerfanos.
+ */
+const ahora = ref(Date.now());
+let reloj = null;
+watch(() => props.puesto?.id, (id) => {
+  clearInterval(reloj);
+  reloj = null;
+  if (!id) return;
+  ahora.value = Date.now();
+  reloj = setInterval(() => { ahora.value = Date.now(); }, 30000);
+}, { immediate: true });
+onBeforeUnmount(() => clearInterval(reloj));
 
 // Las fotos se piden al abrir la ficha, no con el mapa: son ~500 casetas y traerlas todas
 // de golpe cargaria megas que casi nunca se miran.
@@ -131,12 +193,37 @@ async function copiarContacto(a) {
             <div v-if="puesto.referencia" class="ancho"><dt>Ubicación</dt><dd>{{ puesto.referencia }}</dd></div>
           </dl>
 
+          <!-- Quien se llevo esta caseta. Va ANTES del bloque de habilitados a proposito: si
+               la caseta ya esta vendida o reservada, lo que el cliente pregunta es "¿y esta?",
+               y la respuesta util es quien la tiene, no quien podria haberla vendido. -->
+          <div v-if="quienLaTiene" class="ocupada" :class="{ vendida }">
+            <p class="quien">
+              <span class="etiqueta">{{ vendida ? 'La vendió' : 'La está registrando' }}</span>
+              <strong>{{ quienLaTiene.vendedor }}</strong>
+            </p>
+            <!-- Solo en trámite: en una vendida, el tiempo ya no significa nada. -->
+            <p v-if="venceEn" class="cuando">La reserva {{ venceEn }}.</p>
+            <div class="contacto">
+              <a v-if="quienLaTiene.celular" class="btn btn-primario grande"
+                 :href="`tel:${telefono(quienLaTiene.celular)}`">
+                📞 {{ quienLaTiene.celular }}
+              </a>
+              <button v-if="quienLaTiene.celular" class="btn" @click="copiarContacto(quienLaTiene)">
+                {{ copiado === quienLaTiene.vendedorId ? '✓ Copiado' : 'Copiar contacto' }}
+              </button>
+              <p v-else class="motivo">No tiene celular registrado.</p>
+            </div>
+          </div>
+
           <!-- Caseta de otro vendedor: en vez de un "no puedes", el contacto de quien si la
                lleva. Es el motivo de que estas casetas hayan vuelto al mapa: el cliente esta
                parado delante de una y el vendedor tiene que poder decirle a quien llamar.
                Pueden ser VARIOS: la caseta se habilita a quien haga falta y la vende el que
                la reserve primero, asi que se listan todos con su telefono. -->
-          <div v-if="!vendible" class="ajena">
+          <!-- `!quienLaTiene`: si la caseta ya tiene dueño, arriba sale el que se la llevo.
+               Listar ademas a los tres habilitados diria "la vende Ana, Luis y Rosa" justo
+               debajo de "la vendió Ana", y de las dos frases la de arriba es la que importa. -->
+          <div v-if="!vendible && !quienLaTiene" class="ajena">
             <template v-if="asignaciones.length">
               <p class="quien">
                 {{ asignaciones.length > 1 ? 'La venden' : 'La vende' }}
@@ -225,6 +312,24 @@ header h2 { margin: 0 0 0.35rem; font-size: 1.35rem; }
 .ajena .contacto { display: flex; flex-direction: column; gap: 0.5rem; }
 /* El botón de llamar es el que se pulsa delante del cliente: mismo tamaño que el de vender. */
 .ajena .contacto .btn { min-height: 52px; font-size: 1.05rem; }
+
+/* Quien se llevó la caseta. Toma prestado el color del estado —ámbar en trámite, rojo
+   vendida— para que el bloque diga lo mismo que el pin del plano sin tener que leerlo. */
+.ocupada {
+  display: flex; flex-direction: column; gap: 0.6rem;
+  padding: 0.9rem 1rem; border-radius: var(--radio-sm);
+  border: 1px solid color-mix(in srgb, var(--tramite) 45%, transparent);
+  background: color-mix(in srgb, var(--tramite) 12%, var(--panel));
+}
+.ocupada.vendida {
+  border-color: color-mix(in srgb, var(--ocupado) 45%, transparent);
+  background: color-mix(in srgb, var(--ocupado) 12%, var(--panel));
+}
+.ocupada .quien { margin: 0; font-size: 1.05rem; display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.ocupada .etiqueta { color: var(--muted); }
+.ocupada .cuando { margin: 0; font-size: 0.9rem; color: var(--muted); }
+.ocupada .contacto { display: flex; flex-direction: column; gap: 0.5rem; }
+.ocupada .contacto .btn { min-height: 52px; font-size: 1.05rem; }
 
 footer { display: flex; flex-direction: column; gap: 0.5rem; }
 .motivo { margin: 0; font-size: 0.92rem; color: var(--muted); text-align: center; }

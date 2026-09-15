@@ -21,6 +21,7 @@ import com.usic.uniFex.model.entity.Persona;
 import com.usic.uniFex.model.entity.Puesto;
 import com.usic.uniFex.model.entity.Usuario;
 import com.usic.uniFex.model.service.PresenciaService;
+import com.usic.uniFex.model.service.PuestoOcupacionService;
 import com.usic.uniFex.security.JwtUser;
 import com.usic.uniFex.security.Roles;
 
@@ -44,9 +45,19 @@ public class PresenciaApiController {
     private final PresenciaService presencia;
     private final IUsuarioDao usuarioDao;
     private final IPuestoDao puestoDao;
+    private final PuestoOcupacionService ocupacionService;
 
-    /** Lo que el cliente informa de si mismo en cada latido. */
-    public record Latido(String pantalla, String titulo, String origen) {
+    /**
+     * Lo que el cliente informa de si mismo en cada latido.
+     *
+     * Los tres campos de avance describen el formulario de venta que tenga abierto. Van aqui,
+     * en el latido que ya existia, y no en un endpoint propio: es exactamente el mismo dato
+     * —"que estoy haciendo ahora mismo"— con la misma vida corta y el mismo destinatario. Un
+     * POST aparte duplicaria el trafico de los treinta y cinco vendedores para contar dos
+     * numeros que solo mira administracion.
+     */
+    public record Latido(String pantalla, String titulo, String origen,
+                         Integer avance, String avancePaso, String avanceFaltan) {
     }
 
     @PostMapping
@@ -58,7 +69,10 @@ public class PresenciaApiController {
         presencia.latir(u.id(), u.username(), nombreDe(fila), u.rol(),
                 req == null ? null : req.pantalla(),
                 req == null ? null : req.titulo(),
-                req == null ? null : req.origen());
+                req == null ? null : req.origen(),
+                req == null ? null : req.avance(),
+                req == null ? null : req.avancePaso(),
+                req == null ? null : req.avanceFaltan());
         return ResponseEntity.ok(Map.of("ok", true));
     }
 
@@ -82,6 +96,9 @@ public class PresenciaApiController {
     @PreAuthorize(Roles.ADMINISTRA)
     public List<Map<String, Object>> listar() {
         Instant ahora = Instant.now();
+        // UNA consulta para los treinta y cinco, fuera del bucle. Esta pantalla se refresca
+        // cada 5 s: contar dentro del map seria una consulta por persona en cada refresco.
+        Map<Long, Long> vendidas = ocupacionService.vendidasPorVendedor();
         return presencia.listar().stream().map(p -> {
             List<Puesto> carrito = puestoDao.reservadasPor(p.usuarioId());
             Map<String, Object> m = new LinkedHashMap<>();
@@ -99,6 +116,15 @@ public class PresenciaApiController {
             // "Registrando" es tener casetas tomadas, este o no en esa pantalla: si dejo el
             // formulario a medias y se fue al mapa, la venta sigue abierta y las casetas, bloqueadas.
             m.put("registrando", !carrito.isEmpty());
+            // Cuanto lleva del formulario. Lo cuenta el cliente —el formulario solo existe en su
+            // navegador— asi que puede ir hasta un latido atrasado y faltar del todo si esta en
+            // otra pantalla. Nulo significa "no lo se", que no es lo mismo que 0.
+            m.put("avance", p.avance());
+            m.put("avancePaso", p.avancePaso());
+            m.put("avanceFaltan", p.avanceFaltan());
+            // Vendidas de la edicion activa, de la base. A diferencia del avance, esto no
+            // depende de que el vendedor tenga la aplicacion abierta ni de lo que informe.
+            m.put("vendidas", vendidas.getOrDefault(p.usuarioId(), 0L));
             return m;
         }).toList();
     }

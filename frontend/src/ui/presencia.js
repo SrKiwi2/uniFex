@@ -17,6 +17,15 @@ const INTERVALO_MS = 25000;
 
 let temporizador = null;
 let ultima = { pantalla: null, titulo: null };
+/**
+ * El avance del formulario de venta abierto: { avance, avancePaso, avanceFaltan }.
+ *
+ * Viaja pegado al latido y no en una peticion propia: es el mismo dato —"que estoy haciendo
+ * ahora"—, con la misma vida corta y el mismo destinatario. Un POST por cada tecla en un
+ * formulario de doce campos seria mucho trafico para algo que solo se mira desde
+ * administracion.
+ */
+let avance = { avance: null, avancePaso: null, avanceFaltan: null };
 
 /** De donde late: sirve para distinguir el APK del navegador en la pantalla de seguimiento. */
 const origen = () => (window.Capacitor?.isNativePlatform?.() ? 'APK' : 'WEB');
@@ -26,7 +35,7 @@ async function latir() {
   try {
     await apiFetch('/api/app/presencia', {
       method: 'POST',
-      body: JSON.stringify({ ...ultima, origen: origen() }),
+      body: JSON.stringify({ ...ultima, ...avance, origen: origen() }),
     });
   } catch {
     // Sin señal no hay latido, y no hay nada que hacer al respecto: el silencio ya significa
@@ -51,6 +60,33 @@ function alVolver() {
 /** Anota en que pantalla esta y late ya: el cambio de pantalla es la informacion mas util. */
 export function marcarPantalla(pantalla, titulo) {
   ultima = { pantalla: pantalla || null, titulo: titulo || null };
+  // Salir del formulario de venta deja de decir nada de su avance. Sin esto, quien empezo una
+  // venta y se fue al mapa seguiria apareciendo eternamente "al 60%", y ese numero congelado
+  // parece un vendedor trabado cuando en realidad se fue a otra cosa.
+  if (pantalla !== 'venta') avance = { avance: null, avancePaso: null, avanceFaltan: null };
+  if (temporizador) latir();
+}
+
+/**
+ * Anota cuanto lleva del formulario de venta.
+ *
+ * NO late al llamarla: se rellena campo a campo y latir en cada tecla serian decenas de
+ * peticiones por venta. El siguiente latido del intervalo lo lleva, asi que el numero puede ir
+ * hasta {@link INTERVALO_MS} atrasado —suficiente para una pantalla que se mira para saber si
+ * alguien se quedo trabado, no para cronometrar a nadie—. La excepcion es cambiar de paso, que
+ * si late (ver `marcarPantalla`) porque es el salto que de verdad se nota.
+ */
+export function marcarAvance({ porcentaje = null, paso = null, faltan = null } = {}) {
+  avance = {
+    avance: porcentaje == null ? null : Math.max(0, Math.min(100, Math.round(porcentaje))),
+    avancePaso: paso || null,
+    avanceFaltan: faltan || null,
+  };
+}
+
+/** Deja de informar avance: la venta se registro, se cancelo, o se salio del formulario. */
+export function limpiarAvance() {
+  avance = { avance: null, avancePaso: null, avanceFaltan: null };
   if (temporizador) latir();
 }
 

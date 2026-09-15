@@ -165,9 +165,20 @@ titulo('Almacen de casetas: copia en disco y resincronizacion');
 
   let servidor = [];
   let asignado = [];
+  let ocupado = [];
   let peticiones = 0;
-  // Cada carga son DOS peticiones: el listado de casetas y quien responde por cada una.
-  const responder = (ruta) => (String(ruta).includes('asignaciones') ? asignado : servidor);
+  /*
+   * Cada carga son TRES peticiones, y las tres contestan cosas distintas:
+   *   - el listado de casetas,
+   *   - quien PUEDE vender cada una (asignaciones, pueden ser varios),
+   *   - quien la TIENE (ocupacion: el que la reservo o el que la vendio, uno solo).
+   */
+  const responder = (ruta) => {
+    const r = String(ruta);
+    if (r.includes('asignaciones')) return asignado;
+    if (r.includes('ocupacion')) return ocupado;
+    return servidor;
+  };
   // La respuesta simulada lleva cabeceras porque el store lee el ETag de cada una.
   let etagServidor = '"v1"';
   let sinCambios = false;   // cuando el servidor decide contestar 304
@@ -223,6 +234,33 @@ titulo('Almacen de casetas: copia en disco y resincronizacion');
   paso('el store guarda quien responde por cada caseta',
        t.asignaciones.get(3)?.[0]?.vendedor === 'ANA PEREZ', JSON.stringify([...t.asignaciones]));
 
+  /*
+   * ---- quien TIENE cada caseta ----
+   *
+   * Lo que se prueba aqui es que el mapa NO tenga que preguntar quien reservo una caseta:
+   * el id ya viaja en cada difusion, y el nombre sale del directorio. Si esto se rompiera,
+   * cada reserva ajena costaria una peticion y en la feria eso son cientos.
+   */
+  servidor = [caseta(3, 0.7, 0.7)];
+  ocupado = [{ puestoId: 3, vendedorId: 9, vendedor: 'ANA PEREZ', celular: '70000000', estado: 'O', desde: null }];
+  await t.recargar();
+  paso('el store guarda quien se llevo la caseta', t.ocupacion.get(3)?.vendedor === 'ANA PEREZ',
+       JSON.stringify([...t.ocupacion]));
+  paso('y distingue vendida de en tramite', t.ocupacion.get(3)?.estado === 'O');
+  paso('el directorio aprende quien es quien', t.directorio.get(9)?.vendedor === 'ANA PEREZ');
+
+  const antesDirectorio = peticiones;
+  // Una caseta que pasa a 'T' a nombre de alguien YA conocido: se resuelve sin salir a la red.
+  t.aplicar({ ...caseta(3, 0.7, 0.7, 'T'), reservadoPor: 9 });
+  paso('una reserva de alguien conocido se resuelve sin pedir nada',
+       peticiones === antesDirectorio, `${peticiones - antesDirectorio} peticion(es)`);
+  paso('y queda anotada con su nombre',
+       t.ocupacion.get(3)?.vendedor === 'ANA PEREZ' && t.ocupacion.get(3)?.estado === 'T');
+
+  // Liberarla la borra: si se quedara, la ficha diria que la tiene alguien que ya la solto.
+  t.aplicar({ ...caseta(3, 0.7, 0.7, 'L'), reservadoPor: null });
+  paso('al quedar libre, deja de tener dueño', !t.ocupacion.has(3));
+
 
   t.desconectar();
   paso('cerrar sesion vacia la lista', t.puestos.length === 0);
@@ -240,7 +278,7 @@ titulo('Almacen de casetas: copia en disco y resincronizacion');
   paso('arranque en frio: hay mapa ANTES de que conteste el servidor',
        t.puestos.length > 0, `${t.puestos.length} casetas`);
   paso('y se marca como no confirmado', t.desdeCache === true);
-  paso('las peticiones salen igual (listado + asignaciones)', peticiones === antes + 2,
+  paso('las peticiones salen igual (listado + asignaciones + ocupacion)', peticiones === antes + 3,
        `${peticiones - antes}`);
   retenidas.forEach((soltar) => soltar());
   await enCurso;

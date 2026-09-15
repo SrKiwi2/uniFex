@@ -32,9 +32,22 @@ public class PresenciaService {
     /** Pasado esto, la entrada se olvida del todo para no acumular usuarios de ayer. */
     private static final long VENTANA_OLVIDO_S = 15 * 60;
 
-    /** Lo que se sabe de un usuario conectado. */
+    /**
+     * Lo que se sabe de un usuario conectado.
+     *
+     * Los tres ultimos campos son el avance del formulario de venta que tenga abierto:
+     * {@code avance} de 0 a 100, {@code avancePaso} en que paso va ("Responsables") y
+     * {@code avanceFaltan} que campos le faltan, ya en palabras.
+     *
+     * Vienen del CLIENTE, como la pantalla, y por el mismo motivo se aceptan tal cual: es
+     * informacion para mirar, no autoriza nada. El formulario se rellena en el navegador del
+     * vendedor y en ningun otro sitio existe —no hay borrador en la base—, asi que o lo cuenta
+     * el, o no se sabe. Lo que si se comprueba contra la base es si tiene una venta abierta:
+     * eso son las casetas reservadas a su nombre, y esas no mienten.
+     */
     public record Presencia(Long usuarioId, String usuario, String nombre, String rol,
-                            String pantalla, String titulo, Instant visto, String origen) {
+                            String pantalla, String titulo, Instant visto, String origen,
+                            Integer avance, String avancePaso, String avanceFaltan) {
     }
 
     private final Map<Long, Presencia> vistos = new ConcurrentHashMap<>();
@@ -47,10 +60,25 @@ public class PresenciaService {
      * mira en la base, que es donde estan las casetas reservadas de verdad.
      */
     public void latir(Long usuarioId, String usuario, String nombre, String rol,
-                      String pantalla, String titulo, String origen) {
+                      String pantalla, String titulo, String origen,
+                      Integer avance, String avancePaso, String avanceFaltan) {
         if (usuarioId == null) return;
         vistos.put(usuarioId, new Presencia(usuarioId, usuario, nombre, rol,
-                pantalla, titulo, Instant.now(), origen));
+                pantalla, titulo, Instant.now(), origen,
+                acotado(avance), avancePaso, avanceFaltan));
+    }
+
+    /**
+     * El porcentaje, encajado en 0..100.
+     *
+     * Lo manda el cliente, asi que puede llegar cualquier cosa —un 320 por un calculo mal
+     * hecho tras un cambio en el formulario, o un negativo—. Un numero fuera de rango no
+     * rompe nada aqui, pero pinta una barra de progreso que se sale de su caja y deja la
+     * pantalla de seguimiento con aspecto de averiada.
+     */
+    private static Integer acotado(Integer v) {
+        if (v == null) return null;
+        return Math.max(0, Math.min(100, v));
     }
 
     /** Se fue por la puerta: cerro sesion. Distinto de quedarse callado. */

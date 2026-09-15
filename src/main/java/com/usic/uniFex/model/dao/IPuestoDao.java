@@ -220,6 +220,27 @@ List<Puesto> findLibresPorCategoriaOrdenados(@Param("estadoPuesto") String estad
                          @Param("usuarioId") Long usuarioId);
 
     /**
+     * Pone (o quita) el precio propio de una caseta (V37).
+     *
+     * Un {@code null} en {@code precio} NO es un vacio que haya que ignorar: es la orden de
+     * devolver la caseta al precio de su categoria. Por eso este UPDATE escribe el valor tal
+     * cual y no lleva COALESCE — con COALESCE, "quitarle el precio especial" no haria nada y
+     * la caseta se quedaria con el importe viejo para siempre.
+     *
+     * El {@code CAST} es necesario: sin el, PostgreSQL no sabe de que tipo es el parametro
+     * cuando llega nulo y falla con "could not determine data type".
+     *
+     * No se toca una caseta anulada, igual que en el resto de escrituras del plano.
+     */
+    @Modifying(clearAutomatically = true)
+    @Query(value = "UPDATE puesto SET precio = CAST(:precio AS numeric), "
+           + "\"_fecha_modificacion\" = now(), \"_modificacion_id_usuario\" = :usuarioId "
+           + "WHERE id = :id AND (\"_estado\" IS NULL OR \"_estado\" <> 'X')", nativeQuery = true)
+    int actualizarPrecio(@Param("id") Long id,
+                         @Param("precio") java.math.BigDecimal precio,
+                         @Param("usuarioId") Long usuarioId);
+
+    /**
      * De un grupo de casetas, cuales NO se pueden renumerar porque arrastran una venta.
      *
      * El numero de la caseta no se copia a la venta: se lee en vivo con un JOIN a puesto
@@ -266,4 +287,92 @@ List<Puesto> findLibresPorCategoriaOrdenados(@Param("estadoPuesto") String estad
            "WHERE id_categoria = :categoriaId AND (\"_estado\" IS NULL OR \"_estado\" <> 'X')",
            nativeQuery = true)
     int anularCasetasDeCategoria(@Param("categoriaId") Long categoriaId, @Param("usuarioId") Long usuarioId);
+
+    /**
+     * Quien tiene cada caseta que NO esta libre: el que la reservo y el que la vendio.
+     *
+     * Es una sola consulta para las ~530 casetas, igual que
+     * {@code findAsignacionesConVendedor}: el mapa la pide una vez, no una por caseta.
+     *
+     * Son dos mitades porque el dato vive en dos sitios distintos, y esa es justamente la
+     * razon de que esta consulta exista:
+     *
+     * <ul>
+     *   <li>La mitad {@code 'T'} lee {@code reservado_por_id_usuario}, que la caseta conserva
+     *       mientras dura la reserva.</li>
+     *   <li>La mitad {@code 'O'} tiene que ir a la inscripcion, porque al vender ese campo se
+     *       pone a NULL. Se toma {@code _registro_id_usuario} de la inscripcion —quien
+     *       registro la venta— y no {@code _modificacion_id_usuario} de la caseta: este ultimo
+     *       lo pisa cualquier cambio posterior, asi que mover la caseta en el Editor cambiaria
+     *       "quien la vendio", que es exactamente la clase de dato que no puede mentir.</li>
+     * </ul>
+     *
+     * Se filtra por la edicion activa y se descartan las inscripciones anuladas
+     * ({@code _estado = 'X'}): una caseta vendida y luego cancelada ya no la vendio nadie. El
+     * {@code DISTINCT ON} deja la venta viva mas reciente si una caseta tuviera varias.
+     *
+     * <b>{@code desde} va NULO en la mitad {@code 'T'}, y es a proposito.</b> No existe ninguna
+     * columna que diga cuando se tomo la reserva: {@code reservarSiLibre} solo escribe
+     * {@code reserva_expira}, y {@code reservarSiLibreOMia} lo <i>reescribe</i> cada vez que el
+     * vendedor vuelve a tocar una caseta que ya es suya. Restar el TTL al vencimiento daria un
+     * "reservada hace 2 min" que se rejuvenece solo cada vez que toca otra caseta del carrito,
+     * que es peor que no decir nada. Para el tiempo, el cliente ya tiene {@code reservaExpira}
+     * en la difusion: lo honesto ahi es "vence en X", no "la tomo hace X".
+     *
+     * OJO con el nombre de la columna: la entidad la declara {@code _registro_idUsuario}, pero
+     * la estrategia de nombres de Hibernate la convierte y en PostgreSQL se llama
+     * {@code _registro_id_usuario}. En una consulta nativa no hay traduccion, y escribir el
+     * nombre de la entidad falla en ejecucion, no al compilar.
+     *
+     * Columnas: id_puesto, id_usuario, nombre, paterno, materno, celular, username, estado, desde.
+     */
+    @Query(value = """
+            SELECT p.id, u.id, pe.nombre, pe.paterno, pe.materno, pe.celular, u.username,
+                   'T', NULL::timestamp
+              FROM puesto p
+              INNER JOIN usuario u ON u.id = p.reservado_por_id_usuario
+              LEFT JOIN persona pe ON pe.id = u.persona_id
+             WHERE p.estado_puesto = 'T'
+            UNION ALL
+            SELECT v.id_puesto, u.id, pe.nombre, pe.paterno, pe.materno, pe.celular, u.username,
+                   'O', v.fecha_compra
+              FROM (
+                    SELECT DISTINCT ON (ip.id_puesto)
+                           ip.id_puesto, i."_registro_id_usuario" AS id_usuario, i.fecha_compra
+                      FROM inscripcion_puesto ip
+                      INNER JOIN inscripcion i ON i.id = ip.id_inscripcion
+                      INNER JOIN puesto pu ON pu.id = ip.id_puesto AND pu.estado_puesto = 'O'
+                     WHERE ip.id_puesto IS NOT NULL
+                       AND (i."_estado" IS NULL OR i."_estado" <> 'X')
+                       AND (ip."_estado" IS NULL OR ip."_estado" <> 'X')
+                       AND i.id_edicion = (SELECT ed.id FROM edicion ed WHERE ed.activa LIMIT 1)
+                     ORDER BY ip.id_puesto, i.fecha_compra DESC NULLS LAST
+                   ) v
+              INNER JOIN usuario u ON u.id = v.id_usuario
+              LEFT JOIN persona pe ON pe.id = u.persona_id
+            """, nativeQuery = true)
+    List<Object[]> findOcupacionConVendedor();
+
+    /**
+     * Cuantas casetas lleva vendidas cada vendedor en la edicion activa.
+     *
+     * Cuenta CASETAS y no inscripciones: una venta de tres casetas son tres, que es lo que se
+     * mira contra el plano. Misma fuente que la mitad {@code 'O'} de
+     * {@link #findOcupacionConVendedor}, para que los dos numeros no se puedan contradecir.
+     *
+     * Columnas: id_usuario, casetas.
+     */
+    @Query(value = """
+            SELECT i."_registro_id_usuario", COUNT(*)
+              FROM inscripcion_puesto ip
+              INNER JOIN inscripcion i ON i.id = ip.id_inscripcion
+              INNER JOIN puesto pu ON pu.id = ip.id_puesto AND pu.estado_puesto = 'O'
+             WHERE ip.id_puesto IS NOT NULL
+               AND i."_registro_id_usuario" IS NOT NULL
+               AND (i."_estado" IS NULL OR i."_estado" <> 'X')
+               AND (ip."_estado" IS NULL OR ip."_estado" <> 'X')
+               AND i.id_edicion = (SELECT ed.id FROM edicion ed WHERE ed.activa LIMIT 1)
+             GROUP BY i."_registro_id_usuario"
+            """, nativeQuery = true)
+    List<Object[]> contarVendidasPorVendedor();
 }

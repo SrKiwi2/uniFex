@@ -95,6 +95,16 @@ function sesionCaducada() {
 const asignacionDe = (p) => tienda.asignaciones.get(p.id) || [];
 
 /**
+ * Quien SE LLEVO la caseta: el que la esta registrando ahora o el que ya la vendio.
+ *
+ * No es `asignacionDe`, aunque se parezcan. Habilitado es quien PUEDE venderla, y pueden ser
+ * tres; esto es quien se la quedo, que es uno. La distincion es la que permite responderle a
+ * un cliente parado delante de una caseta roja: no "estos tres la venden", sino "esta ya la
+ * vendio Ana, este es su telefono".
+ */
+const ocupanteDe = (p) => tienda.ocupacion.get(p.id) || null;
+
+/**
  * ¿Puede quien mira vender esta caseta?
  *
  * Antes esta pregunta no existia en el mapa porque el servidor le mandaba al vendedor SOLO
@@ -137,6 +147,14 @@ const esMia = (p) => p.estado === 'T' && p.reservadoPor != null && auth.id != nu
  * lo necesita en la mano para decirselo al cliente sin cambiar de pantalla.
  */
 function rotulo(p) {
+  // Quien la tiene manda sobre quien podria venderla: una caseta vendida ya no admite la
+  // pregunta "¿quien la vende?", y responderla con los habilitados manda al cliente a llamar
+  // a alguien que no puede hacer nada por el.
+  const o = ocupanteDe(p);
+  if (o?.vendedor && !esMia(p)) {
+    const verbo = p.estado === 'O' ? 'la vendio' : 'la esta registrando';
+    return `${p.categoria} ${p.codigo} · ${verbo} ${o.vendedor}`;
+  }
   if (!puedoVender(p)) {
     const quienes = asignacionDe(p).map((a) => a.vendedor).filter(Boolean);
     return `${p.categoria} ${p.codigo} · ${quienes.length
@@ -359,6 +377,7 @@ onUnmounted(() => {
       :es-mia="casetaEnFicha ? esMia(casetaEnFicha) : false"
       :vendible="casetaEnFicha ? puedoVender(casetaEnFicha) : true"
       :asignaciones="casetaEnFicha ? asignacionDe(casetaEnFicha) : []"
+      :ocupante="casetaEnFicha ? ocupanteDe(casetaEnFicha) : null"
       :ocupado="casetaEnFicha ? enPeticion.has(casetaEnFicha.id) : false"
       @cerrar="seleccionada = null"
       @agregar="(p) => click(p)"
@@ -411,7 +430,7 @@ onUnmounted(() => {
         <button
           v-for="p in ubicados"
           :key="p.id"
-          v-memo="[p.estado, esMia(p), conFoto.has(p.id), p.mapaX, p.mapaY, p.mapaEscala, p.mapaRotacion, p.tamanoMapa, p.color, p.forma, p.codigo, puedoVender(p)]"
+          v-memo="[p.estado, esMia(p), conFoto.has(p.id), p.mapaX, p.mapaY, p.mapaEscala, p.mapaRotacion, p.tamanoMapa, p.color, p.forma, p.codigo, puedoVender(p), ocupanteDe(p)?.vendedor]"
           class="pin"
           :class="[CLASE_ESTADO[p.estado], `forma-${p.forma || 'cuadrado'}`,
                    { mia: esMia(p), 'con-foto': conFoto.has(p.id), ajena: !puedoVender(p) }]"

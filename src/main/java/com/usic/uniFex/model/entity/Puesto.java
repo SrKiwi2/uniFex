@@ -76,6 +76,25 @@ public class Puesto extends AuditoriaConfig{
     @Column(length = 200)
     private String referencia;
 
+    /**
+     * Precio propio de ESTA caseta, en Bs. {@code null} = usa el de su categoria (V37).
+     *
+     * El caso que lo pide: se crea la categoria con su precio, se colocan sus casetas, y
+     * despues resulta que algunas valen distinto —la esquina, la que da a la puerta—. Sin
+     * esto, la unica forma de cambiarle el precio a una era cambiarselo a todas.
+     *
+     * <b>{@code null} no es 0.</b> Nulo significa "sigue a tu categoria", y si mañana esa
+     * categoria sube de precio, la caseta sube con ella; un 0 significa "esta es gratis", y lo
+     * dijo alguien a proposito. Por eso la columna es nullable y sin DEFAULT.
+     *
+     * Cuando esta puesto, <b>manda sobre la opcion de precio de la categoria</b>: la caseta
+     * cuesta esto, se elija la opcion que se elija. Es la regla mas predecible —el precio de
+     * la caseta ES el precio— y la unica que cumple lo que se pidio: tocar unas casetas sin
+     * alterar las demas.
+     */
+    @Column(precision = 10, scale = 2)
+    private java.math.BigDecimal precio;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_categoria")
     private Categoria categoria;
