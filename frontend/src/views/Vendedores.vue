@@ -10,6 +10,7 @@ const auth = useAuthStore();
 const academico = useAcademicoStore();
 const vendedores = ref([]);
 const cargando = ref(false);
+const seccion = ref('vendedores'); // vendedores | facultad
 
 // Filtros de la tabla. El área es el que se pidió ("¿quiénes son los de ACYT?"); el texto
 // acompaña porque una vez recortado a un área siguen siendo doce nombres.
@@ -60,6 +61,15 @@ const rangos = ref({});             // texto del cuadro de rango, por categoria
 const soloLibres = ref(false);      // ocultar las que ya lleva algun otro vendedor
 const cargandoCatalogo = ref(false);
 const guardando = ref(false);
+
+// Asignación masiva por facultad/área: suma casetas a todos los vendedores del área.
+const areaMasiva = ref('');
+const busquedaMasiva = ref('');
+const seleccionMasiva = ref(new Set());
+const colapsadasMasiva = ref(new Set());
+const rangosMasivos = ref({});
+const soloLibresMasivo = ref(false);
+const guardandoMasivo = ref(false);
 
 async function cargarVendedores() {
   cargando.value = true;
@@ -166,6 +176,34 @@ const grupos = computed(() => {
   }));
 });
 
+const vendedoresDelAreaMasiva = computed(() => {
+  if (!areaMasiva.value) return [];
+  return vendedores.value.filter((v) => String(v.areaId) === areaMasiva.value);
+});
+
+const sinOtroVendedorMasivo = computed(() => catalogo.value.filter((p) => !(p.habilitados || []).length));
+
+const gruposMasivos = computed(() => {
+  const q = busquedaMasiva.value.trim().toLowerCase();
+  const fuente = soloLibresMasivo.value ? sinOtroVendedorMasivo.value : catalogo.value;
+  const porCategoria = new Map();
+
+  for (const p of fuente) {
+    if (q && !(`${p.categoria} ${p.codigo}`.toLowerCase().includes(q))) continue;
+    if (!porCategoria.has(p.categoriaId)) {
+      porCategoria.set(p.categoriaId, { id: p.categoriaId, nombre: p.categoria, casetas: [] });
+    }
+    porCategoria.get(p.categoriaId).casetas.push(p);
+  }
+
+  return [...porCategoria.values()].map((g) => ({
+    ...g,
+    elegidas: g.casetas.filter((p) => seleccionMasiva.value.has(p.id)).length,
+    compartidas: g.casetas.filter((p) => (p.habilitados || []).length).length,
+    vendidas: g.casetas.filter((p) => p.estado === 'O').length,
+  }));
+});
+
 const hayCambios = computed(() =>
   seleccion.value.size !== originales.value.size ||
   [...seleccion.value].some((id) => !originales.value.has(id)));
@@ -199,6 +237,12 @@ function alternarColapso(id) {
   const s = new Set(colapsadas.value);
   s.has(id) ? s.delete(id) : s.add(id);
   colapsadas.value = s;
+}
+
+function alternarColapsoMasivo(id) {
+  const s = new Set(colapsadasMasiva.value);
+  s.has(id) ? s.delete(id) : s.add(id);
+  colapsadasMasiva.value = s;
 }
 
 /**
@@ -251,6 +295,77 @@ function aplicarRango(grupo, marcar) {
   toast(`${marcar ? 'Marcadas' : 'Desmarcadas'} ${tocadas} en ${grupo.nombre}${cola}`, 'ok');
 }
 
+async function prepararMasivo(forzar = false) {
+  seccion.value = 'facultad';
+  if (catalogo.value.length && !forzar) return;
+  cargandoCatalogo.value = true;
+  colapsadasMasiva.value = new Set();
+  rangosMasivos.value = {};
+  try {
+    const r = await apiFetch('/api/app/vendedores/puestos-asignables');
+    if (!r.ok) { toast('No se pudo cargar el catálogo de casetas', 'error'); return; }
+    catalogo.value = await r.json();
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    cargandoCatalogo.value = false;
+  }
+}
+
+function alternarMasivo(p) {
+  seleccionMasiva.value.has(p.id) ? seleccionMasiva.value.delete(p.id) : seleccionMasiva.value.add(p.id);
+  seleccionMasiva.value = new Set(seleccionMasiva.value);
+}
+
+function marcarGrupoMasivo(grupo, marcar) {
+  for (const p of grupo.casetas) {
+    if (marcar) seleccionMasiva.value.add(p.id);
+    else seleccionMasiva.value.delete(p.id);
+  }
+  seleccionMasiva.value = new Set(seleccionMasiva.value);
+}
+
+function aplicarRangoMasivo(grupo, marcar) {
+  const texto = rangosMasivos.value[grupo.id];
+  const pedidos = codigosDelRango(texto);
+  if (!pedidos.size) { toast('Escribe un rango, por ejemplo 1-20', 'error'); return; }
+
+  let tocadas = 0;
+  for (const p of grupo.casetas) {
+    if (!pedidos.has(String(p.codigo).trim())) continue;
+    if (marcar) seleccionMasiva.value.add(p.id);
+    else seleccionMasiva.value.delete(p.id);
+    tocadas++;
+  }
+  seleccionMasiva.value = new Set(seleccionMasiva.value);
+  rangosMasivos.value = { ...rangosMasivos.value, [grupo.id]: '' };
+  toast(tocadas ? `${marcar ? 'Marcadas' : 'Desmarcadas'} ${tocadas} en ${grupo.nombre}` : 'Ninguna caseta con esos números', tocadas ? 'ok' : 'error');
+}
+
+async function guardarMasivo() {
+  if (guardandoMasivo.value) return;
+  if (!areaMasiva.value) { toast('Selecciona una facultad', 'error'); return; }
+  if (!seleccionMasiva.value.size) { toast('Selecciona al menos una caseta', 'error'); return; }
+  if (!confirm(`Se asignarán ${seleccionMasiva.value.size} caseta(s) a ${vendedoresDelAreaMasiva.value.length} vendedor(es) de esta facultad. ¿Continuar?`)) return;
+
+  guardandoMasivo.value = true;
+  try {
+    const r = await apiFetch(`/api/app/vendedores/areas/${areaMasiva.value}/puestos`, {
+      method: 'POST',
+      body: JSON.stringify({ puestoIds: [...seleccionMasiva.value] }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ok) { toast(d.mensaje || 'No se pudo guardar la asignación masiva', 'error'); return; }
+    toast(`${d.mensaje}. Nuevas: ${d.asignacionesNuevas}`, 'ok');
+    seleccionMasiva.value = new Set();
+    await Promise.all([prepararMasivo(true), cargarVendedores()]);
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    guardandoMasivo.value = false;
+  }
+}
+
 /** Guarda la seleccion entera de una vez: dos consultas en el servidor, no una por casilla. */
 async function guardarPuestos() {
   if (guardando.value) return;
@@ -295,73 +410,153 @@ const esAdmin = computed(() => auth.puedeEditarPlano);
       </span>
     </header>
 
-    <div class="barra-filtros">
-      <select v-model="filtroArea" class="control select-area">
-        <option value="">Todas las áreas</option>
-        <option v-for="a in academico.areas" :key="a.id" :value="String(a.id)">
-          {{ a.sigla }} ({{ conteoPorArea.get(String(a.id)) || 0 }})
-        </option>
-        <option value="sin">Sin carrera ({{ conteoPorArea.get('sin') || 0 }})</option>
-      </select>
-      <input v-model="filtroTexto" class="control busca" placeholder="Buscar por usuario, nombre o carrera…" />
+    <div class="tabs-vendedores">
+      <button class="tab-vendedor" :class="{ activo: seccion === 'vendedores' }" @click="seccion = 'vendedores'">
+        <span>Por vendedor</span>
+        <small>Asignación individual</small>
+      </button>
+      <button class="tab-vendedor" :class="{ activo: seccion === 'facultad' }" @click="prepararMasivo()">
+        <span>Por facultad</span>
+        <small>Asignar a todos</small>
+      </button>
     </div>
 
-    <div v-if="cargando" class="cargando">Cargando…</div>
-    <div v-else-if="vendedores.length === 0" class="vacio">
-      No hay vendedores registrados. Crea usuarios con rol <strong>ADMINISTRATIVO</strong> desde <router-link to="/usuarios">Usuarios</router-link>.
-    </div>
-    <div v-else-if="vendedoresFiltrados.length === 0" class="vacio">
-      Ningún vendedor con ese filtro. La carrera se asigna en la ficha de la persona, desde
-      <router-link to="/personas">Personas</router-link>.
-    </div>
-    <div v-else class="tabla-scroll">
-      <table class="tabla">
-        <thead>
-          <tr>
-            <th>Usuario</th>
-            <th>Nombre</th>
-            <th>Carrera</th>
-            <th>Estado</th>
-            <th>Categorías</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="v in vendedoresFiltrados" :key="v.id">
-            <td>{{ v.username }}</td>
-            <td>{{ v.persona || '—' }}</td>
-            <td>
-              <template v-if="v.carrera">
-                <span class="badge badge-info" :title="academico.etiquetaArea({ sigla: v.areaSigla, nombre: v.areaNombre })">{{ v.areaSigla }}</span>
-                <span class="carrera-nombre">{{ v.carrera }}</span>
-              </template>
-              <span v-else class="muted">Sin carrera</span>
-            </td>
-            <td>
-              <span class="badge" :class="v.estado === 'ACTIVO' ? 'badge-ok' : v.estado === 'INACTIVO' ? 'badge-muted' : 'badge-danger'">
-                {{ v.estado }}
-              </span>
-            </td>
-            <!-- Una pastilla por categoría con su recuento. Antes era un guion fijo, así que
-                 desde aquí no había forma de ver qué lleva cada vendedor sin abrir el modal. -->
-            <td>
-              <div v-if="v.categorias?.length" class="lista-cats">
-                <span v-for="c in v.categorias" :key="c.categoriaId" class="chip-cat">
-                  {{ c.categoria }} <strong>{{ c.cantidad }}</strong>
+    <template v-if="seccion === 'vendedores'">
+      <div class="barra-filtros">
+        <select v-model="filtroArea" class="control select-area">
+          <option value="">Todas las áreas</option>
+          <option v-for="a in academico.areas" :key="a.id" :value="String(a.id)">
+            {{ a.sigla }} ({{ conteoPorArea.get(String(a.id)) || 0 }})
+          </option>
+          <option value="sin">Sin carrera ({{ conteoPorArea.get('sin') || 0 }})</option>
+        </select>
+        <input v-model="filtroTexto" class="control busca" placeholder="Buscar por usuario, nombre o carrera…" />
+      </div>
+
+      <div v-if="cargando" class="cargando">Cargando…</div>
+      <div v-else-if="vendedores.length === 0" class="vacio">
+        No hay vendedores registrados. Crea usuarios con rol <strong>ADMINISTRATIVO</strong> desde <router-link to="/usuarios">Usuarios</router-link>.
+      </div>
+      <div v-else-if="vendedoresFiltrados.length === 0" class="vacio">
+        Ningún vendedor con ese filtro. La carrera se asigna en la ficha de la persona, desde
+        <router-link to="/personas">Personas</router-link>.
+      </div>
+      <div v-else class="tabla-scroll">
+        <table class="tabla">
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Nombre</th>
+              <th>Carrera</th>
+              <th>Estado</th>
+              <th>Categorías</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="v in vendedoresFiltrados" :key="v.id">
+              <td>{{ v.username }}</td>
+              <td>{{ v.persona || '—' }}</td>
+              <td>
+                <template v-if="v.carrera">
+                  <span class="badge badge-info" :title="academico.etiquetaArea({ sigla: v.areaSigla, nombre: v.areaNombre })">{{ v.areaSigla }}</span>
+                  <span class="carrera-nombre">{{ v.carrera }}</span>
+                </template>
+                <span v-else class="muted">Sin carrera</span>
+              </td>
+              <td>
+                <span class="badge" :class="v.estado === 'ACTIVO' ? 'badge-ok' : v.estado === 'INACTIVO' ? 'badge-muted' : 'badge-danger'">
+                  {{ v.estado }}
                 </span>
-                <span class="muted total-casetas">{{ v.totalPuestos }} en total</span>
-              </div>
-              <span v-else class="muted">Sin casetas habilitadas</span>
-            </td>
-            <td class="acciones">
-              <button v-if="esAdmin" class="btn btn-fantasma btn-sm" @click="abrirPuestos(v)" title="Asignar puestos">
-                🏪 Puestos
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+              </td>
+              <td>
+                <div v-if="v.categorias?.length" class="lista-cats">
+                  <span v-for="c in v.categorias" :key="c.categoriaId" class="chip-cat">
+                    {{ c.categoria }} <strong>{{ c.cantidad }}</strong>
+                  </span>
+                  <span class="muted total-casetas">{{ v.totalPuestos }} en total</span>
+                </div>
+                <span v-else class="muted">Sin casetas habilitadas</span>
+              </td>
+              <td class="acciones">
+                <button v-if="esAdmin" class="btn btn-fantasma btn-sm" @click="abrirPuestos(v)" title="Asignar puestos">
+                  🏪 Puestos
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
+
+    <section v-else class="card masivo">
+      <div class="masivo-head">
+        <div>
+          <p class="eyebrow">Asignación masiva</p>
+          <h2>Asignar casetas a una facultad</h2>
+          <p class="muted">Las casetas seleccionadas se agregan a todos los vendedores de la facultad. No se quita nada de lo que ya tienen.</p>
+        </div>
+        <button class="btn btn-primario" :disabled="guardandoMasivo || !areaMasiva || !seleccionMasiva.size" @click="guardarMasivo">
+          {{ guardandoMasivo ? 'Guardando…' : 'Asignar a todos' }}
+        </button>
+      </div>
+
+      <div class="barra-filtros masivo-filtros">
+        <select v-model="areaMasiva" class="control select-area">
+          <option value="">Seleccionar facultad</option>
+          <option v-for="a in academico.areas" :key="a.id" :value="String(a.id)">
+            {{ a.sigla }} - {{ a.nombre }} ({{ conteoPorArea.get(String(a.id)) || 0 }} vendedores)
+          </option>
+        </select>
+        <input v-model="busquedaMasiva" class="control busca" placeholder="Buscar por categoría o número…" />
+        <label class="check-otros">
+          <input type="checkbox" v-model="soloLibresMasivo" />
+          Solo sin vendedor
+        </label>
+      </div>
+
+      <div class="resumen-masivo">
+        <div><span>Facultad</span><strong>{{ areaMasiva ? vendedoresDelAreaMasiva.length : 0 }} vendedores</strong></div>
+        <div><span>Casetas seleccionadas</span><strong>{{ seleccionMasiva.size }}</strong></div>
+        <div><span>Asignaciones posibles</span><strong>{{ seleccionMasiva.size * vendedoresDelAreaMasiva.length }}</strong></div>
+      </div>
+
+      <div v-if="cargandoCatalogo" class="vacio">Cargando casetas…</div>
+      <div v-else-if="!gruposMasivos.length" class="vacio">No hay casetas que mostrar.</div>
+      <div v-else class="grupos">
+        <section v-for="g in gruposMasivos" :key="g.id" class="grupo">
+          <header class="cab-grupo" @click="alternarColapsoMasivo(g.id)">
+            <span class="flecha">{{ colapsadasMasiva.has(g.id) ? '▸' : '▾' }}</span>
+            <strong>{{ g.nombre }}</strong>
+            <span class="badge" :class="g.elegidas ? 'badge-ok' : 'badge-muted'">{{ g.elegidas }} / {{ g.casetas.length }}</span>
+            <span v-if="g.vendidas" class="badge badge-vendida">{{ g.vendidas }} vendida{{ g.vendidas > 1 ? 's' : '' }}</span>
+            <span v-if="g.compartidas" class="muted de-otros">{{ g.compartidas }} ya asignada{{ g.compartidas > 1 ? 's' : '' }}</span>
+            <span class="crecer"></span>
+            <span class="acciones-grupo" @click.stop>
+              <input v-model="rangosMasivos[g.id]" class="control control-rango" placeholder="1-20" @keyup.enter="aplicarRangoMasivo(g, true)" />
+              <button class="btn btn-sm btn-primario" title="Asignar ese rango" @click="aplicarRangoMasivo(g, true)">＋</button>
+              <button class="btn btn-sm btn-fantasma" title="Quitar ese rango" @click="aplicarRangoMasivo(g, false)">−</button>
+              <button class="btn btn-sm btn-fantasma" title="Todas" @click="marcarGrupoMasivo(g, true)">Todas</button>
+              <button class="btn btn-sm btn-fantasma" title="Ninguna" @click="marcarGrupoMasivo(g, false)">Ninguna</button>
+            </span>
+          </header>
+
+          <div v-if="!colapsadasMasiva.has(g.id)" class="rejilla">
+            <button
+              v-for="p in g.casetas"
+              :key="p.id"
+              type="button"
+              class="caseta"
+              :class="{ elegida: seleccionMasiva.has(p.id), compartida: (p.habilitados || []).length, vendida: p.estado === 'O' }"
+              :title="(p.habilitados || []).length ? 'Ya la llevan: ' + p.habilitados.map((h) => h.username).join(', ') : (p.estado === 'O' ? 'Vendida' : 'Libre')"
+              @click="alternarMasivo(p)">
+              {{ p.codigo }}
+              <span v-if="(p.habilitados || []).length" class="punto-compartida">•</span>
+            </button>
+          </div>
+        </section>
+      </div>
+    </section>
   </div>
 
 
@@ -459,6 +654,13 @@ const esAdmin = computed(() => auth.puedeEditarPlano);
 
 .vendedores-vista { display: flex; flex-direction: column; gap: 1rem; }
 .cabecera-vista { display: flex; align-items: center; justify-content: space-between; }
+.tabs-vendedores { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; padding: 0.35rem; border: 1px solid var(--border); border-radius: var(--radio); background: linear-gradient(135deg, var(--panel-2), var(--panel)); box-shadow: var(--sombra); }
+.tab-vendedor { border: 0; border-radius: calc(var(--radio) - 0.25rem); padding: 0.9rem 1rem; background: transparent; color: var(--texto); text-align: left; cursor: pointer; transition: 0.18s ease; }
+.tab-vendedor span { display: block; font-weight: 900; }
+.tab-vendedor small { display: block; margin-top: 0.2rem; color: var(--muted); font-weight: 700; }
+.tab-vendedor:hover { background: color-mix(in srgb, var(--acento) 10%, transparent); }
+.tab-vendedor.activo { background: linear-gradient(135deg, var(--acento), var(--acento-2)); color: #1d4ed8; box-shadow: 0 12px 28px color-mix(in srgb, var(--acento) 30%, transparent); }
+.tab-vendedor.activo small { color: #1d4ed8; }
 .barra-filtros { display: flex; gap: 0.6rem; flex-wrap: wrap; }
 .select-area { min-width: 200px; }
 .busca { flex: 1; min-width: 220px; }
@@ -556,4 +758,18 @@ const esAdmin = computed(() => auth.puedeEditarPlano);
 .badge-vendida { background: color-mix(in srgb, var(--ocupado) 18%, transparent); color: var(--ocupado); }
 .caseta.vendida:not(.elegida) { border-color: var(--ocupado); color: var(--ocupado); border-style: dashed; }
 .caseta.vendida.elegida { background: var(--ocupado); border-color: var(--ocupado); color: #fff; }
+.masivo { padding: 1.1rem; overflow: visible; }
+.masivo-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1rem; }
+.masivo-head h2 { margin: 0.15rem 0 0; }
+.eyebrow { margin: 0; color: var(--acento); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.72rem; font-weight: 800; }
+.masivo-filtros { align-items: center; margin-bottom: 0.9rem; }
+.resumen-masivo { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.7rem; margin-bottom: 1rem; }
+.resumen-masivo > div { padding: 0.85rem 1rem; border: 1px solid var(--border); border-radius: var(--radio-sm); background: linear-gradient(135deg, var(--panel), var(--panel-2)); }
+.resumen-masivo span { display: block; color: var(--muted); font-size: 0.76rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
+.resumen-masivo strong { display: block; margin-top: 0.25rem; color: var(--acento); font-size: 1.1rem; }
+@media (max-width: 720px) {
+  .tabs-vendedores, .resumen-masivo { grid-template-columns: 1fr; }
+  .masivo-head { flex-direction: column; }
+  .masivo-head .btn { width: 100%; }
+}
 </style>

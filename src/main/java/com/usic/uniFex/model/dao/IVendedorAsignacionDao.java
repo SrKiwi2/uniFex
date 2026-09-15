@@ -28,6 +28,9 @@ public interface IVendedorAsignacionDao {
     /** Deja las casetas del vendedor exactamente en esa lista, en dos consultas. */
     void reemplazarPuestos(Long usuarioId, List<Long> puestoIds, Long adminId);
 
+    /** Agrega las mismas casetas a varios vendedores, sin quitar lo que ya tenian. */
+    int agregarPuestosAVendedores(List<Long> usuarioIds, List<Long> puestoIds, Long adminId);
+
     /** Ids de las casetas habilitadas a este vendedor. */
     List<Long> findPuestoIdsByVendedor(Long usuarioId);
 

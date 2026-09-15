@@ -182,6 +182,27 @@ public class VendedorAsignacionDaoImpl implements IVendedorAsignacionDao {
     }
 
     @Override
+    public int agregarPuestosAVendedores(List<Long> usuarioIds, List<Long> puestoIds, Long adminId) {
+        if (usuarioIds == null || usuarioIds.isEmpty() || puestoIds == null || puestoIds.isEmpty()) return 0;
+        return em.createNativeQuery("""
+                INSERT INTO vendedor_puesto (id_usuario, id_puesto, _registro_id_usuario)
+                SELECT u.id, p.id, :adminId
+                  FROM usuario u
+                  CROSS JOIN puesto p
+                  INNER JOIN categoria c ON c.id = p.id_categoria AND c._estado <> 'X'
+                 WHERE u.id IN (:usuarioIds)
+                   AND p.id IN (:puestoIds)
+                   AND p._estado <> 'X'
+                   AND p.estado_puesto <> 'X'
+                 ON CONFLICT DO NOTHING
+                """)
+                .setParameter("usuarioIds", usuarioIds)
+                .setParameter("puestoIds", puestoIds)
+                .setParameter("adminId", adminId)
+                .executeUpdate();
+    }
+
+    @Override
     @SuppressWarnings("unchecked")
     public List<Puesto> findPuestosAsignadosByVendedor(Long usuarioId) {
         return em.createNativeQuery("""

@@ -108,7 +108,11 @@ public class VendedorAsignacionService {
      * significa algo, "2 casetas" no.
      */
     public record ResultadoAsignacion(int asignadas, int quitadas, List<Long> noDisponibles,
-                                      List<CambioPorCategoria> porCategoria) {
+                                       List<CambioPorCategoria> porCategoria) {
+    }
+
+    public record ResultadoAsignacionMasiva(int vendedores, int casetas, int asignacionesNuevas,
+                                            List<Long> noDisponibles) {
     }
 
     /**
@@ -168,6 +172,47 @@ public class VendedorAsignacionService {
         // Que los mapas abiertos —web y APK— se enteren sin recargar nada.
         difundirCambios(Stream.concat(sumadas.stream(), quitadas.stream()).distinct().toList());
         return new ResultadoAsignacion(sumadas.size(), quitadas.size(), noDisponibles, porCategoria);
+    }
+
+    /**
+     * Agrega las casetas seleccionadas a TODOS los vendedores de un area/facultad.
+     * No reemplaza: conserva lo que cada vendedor ya tenia y solo suma permisos nuevos.
+     */
+    @Transactional
+    public ResultadoAsignacionMasiva agregarPuestosAArea(Long areaId, List<Long> puestoIds, Long adminId) {
+        if (areaId == null) throw new IllegalArgumentException("Selecciona una facultad");
+        List<Long> pedidos = puestoIds == null ? List.of() : puestoIds.stream()
+                .filter(java.util.Objects::nonNull).distinct().toList();
+        if (pedidos.isEmpty()) throw new IllegalArgumentException("Selecciona al menos una caseta");
+
+        List<Long> vendedores = usuarioDao.findByRolNombre("ADMINISTRATIVO").stream()
+                .filter(u -> u.getPersona() != null
+                        && u.getPersona().getCarrera() != null
+                        && u.getPersona().getCarrera().getArea() != null
+                        && areaId.equals(u.getPersona().getCarrera().getArea().getId()))
+                .map(Usuario::getId)
+                .toList();
+        if (vendedores.isEmpty()) {
+            throw new IllegalArgumentException("No hay vendedores activos en esa facultad");
+        }
+
+        int nuevas = dao.agregarPuestosAVendedores(vendedores, pedidos, adminId);
+        List<Long> disponibles = dao.nombresDeCategoriaPorPuesto(pedidos).stream()
+                .map(f -> numero(f[0]))
+                .distinct()
+                .toList();
+        Set<Long> disponiblesSet = Set.copyOf(disponibles);
+        List<Long> noDisponibles = pedidos.stream().filter(id -> !disponiblesSet.contains(id)).toList();
+
+        for (Long vendedorId : vendedores) {
+            avisarAlVendedor(vendedorId, "Se te habilitaron " + disponibles.size()
+                    + casetas(disponibles.size()) + " por asignacion de facultad.");
+        }
+        difundirCambios(disponibles);
+        logger.info("Area {}: {} caseta(s) agregadas a {} vendedor(es) por admin {}",
+                areaId, disponibles.size(), vendedores.size(), adminId);
+        return new ResultadoAsignacionMasiva(vendedores.size(), disponibles.size(),
+                nuevas, noDisponibles);
     }
 
     /**
