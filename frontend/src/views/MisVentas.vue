@@ -305,7 +305,7 @@ async function abrirFicha(id) {
  */
 const cupo = ref(null);
 const modalResp = reactive({
-  abierto: false, nombre: '', paterno: '', materno: '', ci: '', celular: '', comprobante: null,
+  abierto: false, nombre: '', paterno: '', materno: '', ci: '', celular: '', comprobante: null, foto: null,
 });
 const guardandoResp = ref(false);
 
@@ -321,7 +321,7 @@ async function cargarCupo(id) {
 
 function abrirAgregarResponsable() {
   Object.assign(modalResp, {
-    abierto: true, nombre: '', paterno: '', materno: '', ci: '', celular: '', comprobante: null,
+    abierto: true, nombre: '', paterno: '', materno: '', ci: '', celular: '', comprobante: null, foto: null,
   });
 }
 
@@ -330,10 +330,39 @@ function elegirComprobanteResp(e) {
   modalResp.comprobante = f || null;
 }
 
+function elegirFotoResp(e) {
+  const f = e.target.files?.[0];
+  modalResp.foto = f || null;
+}
+
+async function subirFotoResponsableNuevo(inscripcionId, responsableId) {
+  if (!modalResp.foto) return null;
+  const datos = new FormData();
+  datos.append('archivo', modalResp.foto);
+  const r = await apiFetch(`/api/app/inscripciones/${inscripcionId}/responsables/${responsableId}/foto`, {
+    method: 'POST',
+    body: datos,
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || d.ok === false) throw new Error(d.mensaje || 'No se pudo subir la foto del responsable');
+  return true;
+}
+
+async function enviarWhatsAppResponsableNuevo(inscripcionId, responsableId) {
+  const r = await apiFetch('/api/app/credenciales/whatsapp', {
+    method: 'POST',
+    body: JSON.stringify({ inscripcionId, responsables: [responsableId] }),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || d.ok === false) throw new Error(d.mensaje || 'No se pudo enviar la credencial por WhatsApp');
+  return d.credenciales || 1;
+}
+
 async function guardarResponsableNuevo() {
   if (guardandoResp.value || !ficha.value) return;
   if (!modalResp.nombre.trim()) { await alerta('Falta el nombre', 'error', 0); return; }
   if (!modalResp.ci.trim()) { await alerta('Falta el C.I.', 'error', 0); return; }
+  if (!modalResp.foto) { await alerta('Adjunta la foto para enviar la credencial por WhatsApp.', 'error', 0); return; }
   // El cobro sin comprobante es el agujero por el que se pierden los pagos: se corta aqui y el
   // servidor lo vuelve a comprobar, porque esta pantalla no es una garantia.
   if (!cupo.value?.dentroDelDerecho && !modalResp.comprobante) {
@@ -351,17 +380,31 @@ async function guardarResponsableNuevo() {
     fd.append('celular', modalResp.celular.trim());
     if (modalResp.comprobante) fd.append('comprobante', modalResp.comprobante);
 
-    const r = await apiFetch(`/api/app/inscripciones/${ficha.value.id}/responsables`,
+    const inscripcionId = ficha.value.id;
+    const r = await apiFetch(`/api/app/inscripciones/${inscripcionId}/responsables`,
       { method: 'POST', body: fd });
     const d = await r.json().catch(() => ({}));
     if (!r.ok || d.ok === false) { await alerta(d.mensaje || 'No se pudo agregar', 'error', 0); return; }
 
+    let avisoWhatsApp = '';
+    if (d.responsableId) {
+      textoCarga.value = 'Subiendo foto del responsable…';
+      try {
+        await subirFotoResponsableNuevo(inscripcionId, d.responsableId);
+        textoCarga.value = 'Enviando credencial por WhatsApp…';
+        await enviarWhatsAppResponsableNuevo(inscripcionId, d.responsableId);
+        avisoWhatsApp = '\n\nSe envió por WhatsApp la credencial de este responsable.';
+      } catch (e) {
+        avisoWhatsApp = `\n\nNo se pudo enviar la credencial por WhatsApp: ${e.message}. Puedes reenviarla desde Credenciales.`;
+      }
+    }
+
     modalResp.abierto = false;
     await alerta(d.cobrado
-      ? `Responsable agregado. Se registró el cobro de ${d.monto} Bs.`
-      : 'Responsable agregado.', 'ok');
+      ? `Responsable agregado. Se registró el cobro de ${d.monto} Bs.${avisoWhatsApp}`
+      : `Responsable agregado.${avisoWhatsApp}`, 'ok');
     // Se recarga la ficha entera: cambian los responsables, el cupo y el "faltan fotos".
-    await abrirFicha(ficha.value.id);
+    await abrirFicha(inscripcionId);
   } catch (e) {
     await alerta(e.message, 'error', 0);
   } finally {
@@ -813,6 +856,17 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
       <label class="campo"><span>Celular</span>
         <CampoCelular v-model="modalResp.celular" /></label>
 
+      <div class="campo">
+        <span>Foto para la credencial *</span>
+        <!-- Sin `capture`: igual que comprobantes, muchas fotos ya estan en galeria. -->
+        <input id="foto-resp-nuevo" class="oculto" type="file" accept="image/*"
+               @change="elegirFotoResp" />
+        <label for="foto-resp-nuevo" class="btn">
+          📷 {{ modalResp.foto ? 'Cambiar foto' : 'Adjuntar foto' }}
+        </label>
+        <span v-if="modalResp.foto" class="muted">{{ modalResp.foto.name }}</span>
+      </div>
+
       <div v-if="cupo && !cupo.dentroDelDerecho" class="campo">
         <span>Comprobante del pago *</span>
         <!-- Sin `capture`: forzar la camara quita la galeria en Android, y el comprobante
@@ -826,8 +880,7 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
       </div>
 
       <p class="muted chico">
-        La <strong>foto</strong> se toma después, desde esta misma ficha; con ella ya se puede
-        generar su credencial virtual.
+        Si adjuntas la foto ahora, se enviará por WhatsApp solo la credencial de esta persona.
       </p>
     </div>
     <template #pie>
