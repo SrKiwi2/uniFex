@@ -34,7 +34,31 @@ public record CredencialDTO(
         String casetas,
         Long inscripcionId,
         boolean conComprobante,
-        boolean conFoto) {
+        boolean conFoto,
+        /**
+         * true si esta POR ENCIMA de los dos responsables por caseta: se le cobro aparte (V34).
+         *
+         * La pantalla de credenciales lo marca. Sin el distintivo, una credencial de pago se
+         * mezcla con las de derecho y no hay forma de saber cual hubo que cobrar.
+         */
+        boolean esExtra,
+        /** Bs cobrados por ese extra, congelados el dia del cobro. Null si no es extra. */
+        java.math.BigDecimal montoExtra,
+        /** Ruta en /files/** del comprobante de ESE cobro, o null. */
+        String comprobanteExtraUrl,
+        /**
+         * true cuando esta venta NO cuesta nada: todas sus casetas van a 0 Bs.
+         *
+         * Hay categorias y casetas sueltas con precio 0 —invitados, convenios, espacios que la
+         * universidad cede—. Ahi no existe ningun recibo que adjuntar, asi que exigir el
+         * comprobante dejaba esas credenciales bloqueadas PARA SIEMPRE: nadie podia completar
+         * un papel que nunca se emitio.
+         *
+         * Se manda resuelto y no el importe porque quien lee esto decide una sola cosa —si se
+         * exige comprobante— y mandar el numero obligaria a cada cliente a repetir la misma
+         * comparacion. El importe ya se consulta en Mis ventas y en los reportes.
+         */
+        boolean sinCosto) {
 
     /**
      * ¿Esa plantilla imprime datos de la persona y por tanto exige su foto?
@@ -47,16 +71,37 @@ public record CredencialDTO(
         return PlantillaCredencial.oPorDefecto(plantilla).requiereFoto();
     }
 
+    /**
+     * ¿Hace falta el comprobante de pago para esta credencial?
+     *
+     * No, cuando la venta no cuesta nada: sin cobro no hay recibo que adjuntar, y pedirlo dejaba
+     * esas credenciales bloqueadas para siempre.
+     *
+     * <b>El responsable EXTRA es la excepcion de la excepcion.</b> Un extra se cobra aparte
+     * (15 Bs, V34) y su cobro NO entra en el total de la inscripcion, asi que una venta de 0 Bs
+     * con un extra si tiene un cobro de por medio. Exonerar mirando solo el importe de la venta
+     * habria abierto justo el agujero que la regla del comprobante viene a cerrar.
+     *
+     * En la practica ese caso no llega hasta aqui: `ResponsableExtraService` no crea un extra
+     * sin su comprobante —el cobro y el recibo viajan en la misma peticion, para que no exista
+     * el estado "extra creado y sin pagar"—. Esta condicion es el cinturon sobre el tirante: si
+     * alguna vez se abriera otra via de alta, la credencial no se emitiria sin respaldo.
+     */
+    public boolean requiereComprobante() {
+        if (!sinCosto) return true;
+        return esExtra && comprobanteExtraUrl == null;
+    }
+
     /** ¿Se puede imprimir con esa plantilla sin que quede nada pendiente? */
     public boolean apto(String plantilla) {
-        if (!conComprobante) return false;
+        if (requiereComprobante() && !conComprobante) return false;
         return !requiereFoto(plantilla) || conFoto;
     }
 
     /** Lo que le falta para esa plantilla, en palabras, para poder decirselo a quien mira. */
     public List<String> faltantes(String plantilla) {
         return Stream.of(
-                        conComprobante ? null : "sin comprobante",
+                        (requiereComprobante() && !conComprobante) ? "sin comprobante" : null,
                         (requiereFoto(plantilla) && !conFoto) ? "sin foto" : null)
                 .filter(Objects::nonNull)
                 .toList();

@@ -33,6 +33,7 @@ public enum PantallasSistema {
     SEGUIMIENTO("seguimiento", "Seguimiento en vivo", "Administracion"),
     ANUNCIOS("anuncios", "Anuncios", "Administracion"),
     SEGUIMIENTO_FACULTAD("seguimiento-facultad", "Seguimiento por facultad", "Feria"),
+    RESPONSABLES_EXTRA("responsables-extra", "Responsables extra", "Acreditacion"),
     VENDEDORES("vendedores", "Vendedores", "Administracion"),
     INSCRIPCIONES("inscripciones", "Inscripciones", "Feria"),
     INTERESADOS("interesados", "Interesados en exponer", "Feria"),

@@ -220,3 +220,24 @@ export async function descargarRecibo(inscripcionId, carpeta = null) {
     return false;
   }
 }
+
+/**
+ * Descarga el recibo de un responsable extra (credencial adicional).
+ * @param {number} inscripcionId - ID de la inscripción (venta)
+ * @param {number} responsableId - ID del responsable extra
+ * @param {string} entidadNombre - Nombre de la entidad para la carpeta
+ */
+export async function descargarReciboExtra(inscripcionId, responsableId, entidadNombre = null) {
+  try {
+    const carpeta = entidadNombre ? nombreSeguro(entidadNombre) : null;
+    const res = await descargarPdf(`/api/app/inscripciones/${inscripcionId}/responsables/${responsableId}/recibo-extra`,
+                                   `recibo-extra-${responsableId}.pdf`, { carpeta });
+    toast(res.destino === 'telefono'
+      ? (res.carpeta ? `Recibo extra guardado en Documentos › ${res.carpeta}` : 'Recibo extra guardado en Documentos')
+      : 'Recibo extra descargado', 'ok');
+    return true;
+  } catch (e) {
+    toast(`No se pudo descargar el recibo extra: ${e.message}`, 'error');
+    return false;
+  }
+}

@@ -141,7 +141,15 @@ public class CredencialService {
                 ordenarCasetas(f.getCasetas()),
                 f.getInscripcionId(),
                 conComprobante,
-                conFoto);
+                conFoto,
+                Boolean.TRUE.equals(f.getEsExtra()),
+                f.getMontoExtra(),
+                (f.getComprobanteExtra() != null && !f.getComprobanteExtra().isBlank())
+                        ? "/files/" + f.getComprobanteExtra() : null,
+                // Nulo se trata como 0: una venta sin casetas vivas no ha cobrado nada. El
+                // `signum() <= 0` en vez de `== 0` por si alguna correccion dejara un negativo;
+                // tampoco ahi habria recibo que pedir.
+                f.getTotalVenta() == null || f.getTotalVenta().signum() <= 0);
     }
 
     private static String nombreCompleto(CredencialFilaView f) {

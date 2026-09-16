@@ -148,7 +148,7 @@ watch(() => props.inscripcionId, cargar, { immediate: true });
         <div class="acciones">
           <!-- Sin `capture`: a veces la foto ya está en la galería (la mandó el cliente por
                WhatsApp) y forzar la cámara obligaría a fotografiar una pantalla. -->
-          <input :ref="(el) => (entradas[r.id] = el)" type="file" accept="image/*"
+          <input :ref="(el) => (entradas[r.id] = el)" type="file" accept="image/jpeg,image/png"
                  class="oculto" @change="(e) => onArchivoElegido(r, e)" />
           <button class="btn btn-sm" :disabled="ocupado === r.id"
                   @click="entradas[r.id]?.click()">
@@ -156,6 +156,7 @@ watch(() => props.inscripcionId, cargar, { immediate: true });
           </button>
           <button v-if="r.tieneFoto" class="btn btn-fantasma btn-sm" :disabled="ocupado === r.id"
                   title="Quitar la foto" @click="quitar(r)">✕</button>
+          <span class="formato-permitido">Formatos: JPG, PNG</span>
         </div>
       </li>
     </ul>
@@ -198,6 +199,7 @@ watch(() => props.inscripcionId, cargar, { immediate: true });
 .datos .muted { font-size: 0.82rem; }
 .acciones { display: flex; align-items: center; gap: 0.35rem; flex: none; }
 .oculto { display: none; }
+.formato-permitido { font-size: 0.72rem; color: var(--muted); margin-left: auto; }
 
 @media (max-width: 560px) {
   .persona { flex-wrap: wrap; }

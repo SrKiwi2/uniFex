@@ -2,7 +2,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 import { apiFetch } from '../api';
 import { toast } from '../ui/toast';
-import { descargarRecibo, compartirRecibo } from '../ui/descargas';
+import { descargarRecibo, compartirRecibo, descargarReciboExtra } from '../ui/descargas';
 import { alerta, aviso } from '../ui/alerta';
 import { mostrarCarga, ocultarCarga, cambiarTextoCarga } from '../ui/cargando';
 import { url as urlApi } from '../config';
@@ -442,6 +442,7 @@ function editarEntidad() {
     entidadNombre: e.nombre || '', nit: e.nit || '', descripcion: e.descripcion || '',
     representanteLegal: e.representanteLegal || '', ciRepresentante: e.ciRepresentante || '',
     celularRepresentante: e.celularRepresentante || '',
+    entidadBancaria: e.entidadBancaria || '', numComprobante: e.numComprobante || '',
   });
   editando.value = 'entidad';
 }
@@ -540,7 +541,7 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
   <!-- Entrada de archivo única y oculta: en el móvil abre la cámara o la galería.
        `capture` no se fuerza a propósito — muchos comprobantes ya están en la galería
        como captura de la transferencia. -->
-  <input ref="entradaArchivo" type="file" accept="image/*,application/pdf"
+  <input ref="entradaArchivo" type="file" accept="image/jpeg,image/png,application/pdf"
          class="oculto" @change="onArchivoElegido" />
 
   <!-- Pendientes primero: es lo único de esta pantalla sobre lo que hay que actuar. -->
@@ -669,6 +670,8 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
               <div><dt>Responsable legal</dt><dd>{{ ficha.entidad.representanteLegal || '—' }}</dd></div>
               <div><dt>C.I.</dt><dd>{{ ficha.entidad.ciRepresentante || '—' }}</dd></div>
               <div><dt>Celular</dt><dd>{{ ficha.entidad.celularRepresentante || '—' }}</dd></div>
+              <div v-if="ficha.entidad.entidadBancaria"><dt>Entidad bancaria</dt><dd>{{ ficha.entidad.entidadBancaria }}</dd></div>
+              <div v-if="ficha.entidad.numComprobante"><dt>N.º comprobante</dt><dd>{{ ficha.entidad.numComprobante }}</dd></div>
             </dl>
 
             <div v-else class="form">
@@ -688,6 +691,11 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
                 <label class="campo"><span>Celular</span>
                   <CampoCelular v-model="borrador.celularRepresentante" /></label>
               </div>
+              <div class="separador"></div>
+              <label class="campo"><span>Entidad bancaria</span>
+                <input class="control mayus" v-model="borrador.entidadBancaria" placeholder="Ej. Banco Unión" /></label>
+              <label class="campo"><span>N.º de comprobante</span>
+                <input class="control" type="text" inputmode="text" v-model="borrador.numComprobante" placeholder="Número o código del comprobante" /></label>
               <div class="acciones-form">
                 <button class="btn btn-fantasma" @click="editando = null">Cancelar</button>
                 <button class="btn btn-primario" :disabled="guardando" @click="guardarEdicion">
@@ -719,7 +727,7 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
             </header>
             <dl class="datos">
               <div><dt>Forma</dt><dd>{{ ficha.pago.contado ? 'Al contado' : 'Crédito' }}</dd></div>
-              <div v-if="ficha.pago.entidadBancaria"><dt>Banco</dt><dd>{{ ficha.pago.entidadBancaria }}</dd></div>
+              <div v-if="ficha.pago.entidadBancaria"><dt>Entidad bancaria</dt><dd>{{ ficha.pago.entidadBancaria }}</dd></div>
               <div v-if="ficha.pago.numComprobante"><dt>N.º comprobante</dt><dd>{{ ficha.pago.numComprobante }}</dd></div>
             </dl>
 
@@ -760,6 +768,17 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
                 <div class="quien">
                   <strong>{{ r.nombre }}</strong>
                   <span class="muted">C.I. {{ r.ci || '—' }}<template v-if="r.celular"> · {{ r.celular }}</template></span>
+                  <!-- Quien entro por encima del derecho y pago. Con el enlace a SU comprobante:
+                       el del pago de la venta es otro, y confundirlos al cuadrar es fácil. -->
+                  <span v-if="r.esExtra" class="extra-linea muted">
+                    <span class="badge badge-extra">extra · {{ r.montoExtra }} Bs</span>
+                    <a v-if="r.comprobanteExtraUrl" :href="urlArchivo(r.comprobanteExtraUrl)"
+                       target="_blank" rel="noopener">ver su comprobante</a>
+                    <span v-else class="sin-comp">sin comprobante</span>
+                    <button class="btn btn-fantasma btn-sm" @click="descargarReciboExtra(ficha.id, r.id, ficha.entidad?.nombre)">
+                      🧾 Recibo extra
+                    </button>
+                  </span>
                 </div>
                 <span class="badge" :class="r.tieneFoto ? 'badge-ok' : 'badge-danger'">
                   {{ r.tieneFoto ? 'con foto' : 'sin foto' }}
@@ -878,24 +897,26 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
       <div class="campo">
         <span>Foto para la credencial *</span>
         <!-- Sin `capture`: igual que comprobantes, muchas fotos ya estan en galeria. -->
-        <input id="foto-resp-nuevo" class="oculto" type="file" accept="image/*"
+        <input id="foto-resp-nuevo" class="oculto" type="file" accept="image/jpeg,image/png"
                @change="elegirFotoResp" />
         <label for="foto-resp-nuevo" class="btn">
           📷 {{ modalResp.foto ? 'Cambiar foto' : 'Adjuntar foto' }}
         </label>
         <span v-if="modalResp.foto" class="muted">{{ modalResp.foto.name }}</span>
+        <span class="formato-permitido">Formatos: JPG, PNG</span>
       </div>
 
       <div v-if="cupo && !cupo.dentroDelDerecho" class="campo">
         <span>Comprobante del pago *</span>
         <!-- Sin `capture`: forzar la camara quita la galeria en Android, y el comprobante
              muchas veces ya esta en el telefono. Mismo criterio que el resto del modulo. -->
-        <input id="comp-resp" class="oculto" type="file" accept="image/*,application/pdf"
+        <input id="comp-resp" class="oculto" type="file" accept="image/jpeg,image/png,application/pdf"
                @change="elegirComprobanteResp" />
         <label for="comp-resp" class="btn">
           📷 {{ modalResp.comprobante ? 'Cambiar comprobante' : 'Adjuntar comprobante' }}
         </label>
         <span v-if="modalResp.comprobante" class="muted">{{ modalResp.comprobante.name }}</span>
+        <span class="formato-permitido">Formatos: JPG, PNG, PDF</span>
       </div>
 
       <p class="muted chico">
@@ -1013,6 +1034,7 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
 .form-resp .campo { display: flex; flex-direction: column; gap: 0.3rem; }
 .aviso-cobro { padding: 0.7rem; line-height: 1.5; margin: 0; }
 .chico { font-size: 0.85rem; }
+.formato-permitido { font-size: 0.72rem; color: var(--muted); margin-left: auto; }
 .oculto { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .responsables { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 .responsables li {
@@ -1020,6 +1042,9 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
   padding: 0.6rem 0.7rem; border-radius: var(--radio-sm); background: var(--panel-2);
 }
 .responsables .quien { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.extra-linea { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; font-size: 0.82rem; margin-top: 0.15rem; }
+.badge-extra { background: color-mix(in srgb, #a855f7 18%, transparent); color: #7e22ce; font-weight: 700; }
+.extra-linea .sin-comp { color: var(--danger); font-weight: 600; }
 .responsables .form { flex-basis: 100%; }
 /* El recibo y el comprobante se pulsan de pie: botones con palabras, no un emoji suelto. */
 .btn-grande { min-height: 48px; font-size: 0.98rem; font-weight: 700; }

@@ -173,4 +173,40 @@ public interface IResponsableDao extends JpaRepository<Responsable, Long> {
 List<ResponsableDetalleRow> findDetallePorCi(@Param("ci") String ci);
 
 
+
+    /**
+     * Todos los responsables EXTRA de la edicion activa, con su cobro, su comprobante y quien
+     * los agrego.
+     *
+     * Columnas: responsableId, nombre, ci, celular, foto, montoExtra, comprobanteExtra,
+     *           inscripcionId, entidad, agregadoPor, cuando.
+     *
+     * Nativa y no JPQL porque arma el nombre con `concat_ws` y cruza con `usuario`/`persona` para
+     * decir QUIEN lo agrego, que es la mitad de lo que se viene a auditar.
+     */
+    @Query(value = """
+            SELECT r.id                                                  AS responsable_id,
+                   concat_ws(' ', p.nombre, p.paterno, p.materno)        AS nombre,
+                   p.ci                                                  AS ci,
+                   p.celular                                             AS celular,
+                   p.foto                                                AS foto,
+                   r.monto_extra                                         AS monto_extra,
+                   r.comprobante_extra                                   AS comprobante_extra,
+                   i.id                                                  AS inscripcion_id,
+                   e.nombre                                              AS entidad,
+                   concat_ws(' ', qp.nombre, qp.paterno)                 AS agregado_por,
+                   r."_fecha_registro"                                   AS cuando
+              FROM responsable r
+              INNER JOIN persona p     ON p.id = r.id_persona
+              INNER JOIN entidad e     ON e.id = r.id_entidad
+              INNER JOIN inscripcion i ON i.id_entidad = e.id
+                                      AND (i."_estado" IS NULL OR i."_estado" <> 'X')
+              LEFT  JOIN usuario qu    ON qu.id = r."_registro_id_usuario"
+              LEFT  JOIN persona qp    ON qp.id = qu.persona_id
+             WHERE r.es_extra = true
+               AND (r."_estado" IS NULL OR r."_estado" <> 'X')
+               AND i.id_edicion = (SELECT ed.id FROM edicion ed WHERE ed.activa LIMIT 1)
+             ORDER BY r."_fecha_registro" DESC
+            """, nativeQuery = true)
+    List<Object[]> listarExtrasDeEdicionActiva();
 }

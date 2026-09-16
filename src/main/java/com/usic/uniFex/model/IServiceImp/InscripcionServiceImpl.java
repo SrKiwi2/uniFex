@@ -130,7 +130,11 @@ public class InscripcionServiceImpl implements IInscripcionService{
                             r.isEsTitular(),
                             // Misma forma que en el resto del sistema: la ruta que sirve
                             // /files/**, no el nombre suelto del archivo.
-                            (foto != null && !foto.isBlank()) ? "/files/" + foto : null);
+                            (foto != null && !foto.isBlank()) ? "/files/" + foto : null,
+                            r.isEsExtra(),
+                            r.getMontoExtra(),
+                            (r.getComprobanteExtra() != null && !r.getComprobanteExtra().isBlank())
+                                    ? "/files/" + r.getComprobanteExtra() : null);
                 })
                 .collect(Collectors.toList());
 

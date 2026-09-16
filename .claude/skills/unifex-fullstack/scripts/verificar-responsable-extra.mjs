@@ -50,8 +50,13 @@ let r = await api('/api/app/inscripciones', { method: 'POST', body: JSON.stringi
   entidadNombre: `ZZ RESP EXTRA ${marca}`, nit: '', descripcion: 'P', objeto: '',
   representanteLegal: 'REP PRUEBA', ciRepresentante: `RE${marca}`, celularRepresentante: '59170000000',
   tipoEntidadId: tipo?.id, fechaInicio: null, fechaFin: null,
-  responsables: [{ nombre: 'UNO', paterno: 'PRUEBA', materno: '', ci: `R1${marca}`,
-                   celular: '59170000001', correo: null }],
+  // DOS responsables: 1 caseta da derecho a 2, asi que el que se agregue desde la pantalla
+  // sera el tercero — el que se cobra. Con uno solo, el alta caia dentro del derecho y la
+  // prueba no ejercitaba nada del cobro.
+  responsables: [
+    { nombre: 'UNO', paterno: 'PRUEBA', materno: '', ci: `R1${marca}`, celular: '59170000001', correo: null },
+    { nombre: 'DOS', paterno: 'PRUEBA', materno: '', ci: `R2${marca}`, celular: '59170000002', correo: null },
+  ],
   entidadBancaria: '', numComprobante: null, pagoContado: true, puestos: [libre.id] }) });
 const insId = r.cuerpo?.inscripcionId;
 paso('hay una venta de prueba', !!insId, `id=${insId}`);
@@ -119,11 +124,22 @@ await ch.evaluar(`(() => {
   const foto = document.getElementById('foto-resp-nuevo');
   foto.files = dt.files;
   foto.dispatchEvent(new Event('change', { bubbles: true }));
-  return true;
+
+  // Pasado el derecho, el formulario pide ademas el comprobante del cobro.
+  const comp = document.getElementById('comp-resp');
+  if (comp) {
+    const dt2 = new DataTransfer();
+    dt2.items.add(new File([new Uint8Array([0xff,0xd8,0xff,0xdb,0,1,2,3])], 'pago.jpg', { type: 'image/jpeg' }));
+    comp.files = dt2.files;
+    comp.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  return !!comp;
 })()`);
 await ch.esperar(400);
 paso('la foto queda adjunta antes de guardar',
      await ch.evaluar(`document.querySelector('.form-resp').textContent.includes('cara.jpg')`));
+paso('y el formulario pide el comprobante porque este se cobra',
+     await ch.evaluar(`document.querySelector('.form-resp').textContent.includes('pago.jpg')`));
 
 await ch.evaluar(`(() => { const b=[...document.querySelectorAll('button')]
   .find(x=>/^\\s*Agregar\\s*$/.test(x.textContent)); b?.click(); return !!b; })()`);
@@ -159,6 +175,89 @@ r = await api(`/api/app/inscripciones/${insId}/detalle`);
 const nuevo = (r.cuerpo?.responsables || []).find((x) => (x.nombre || '').includes(`NUEVO${marca}`));
 paso('el responsable esta en la venta', !!nuevo, nuevo?.nombre);
 paso('y con su foto subida', !!nuevo?.tieneFoto, nuevo?.fotoUrl || '(sin foto)');
+
+// ---------------------------------------------------------------- lo que se guardo
+titulo('Lo guardado se puede ver y auditar');
+
+r = await api(`/api/app/inscripciones/${insId}/detalle`);
+const enFicha = (r.cuerpo?.responsables || []).find((x) => (x.nombre || '').includes(`NUEVO${marca}`));
+paso('la ficha marca al responsable como EXTRA', enFicha?.esExtra === true,
+     `esExtra=${enFicha?.esExtra} monto=${enFicha?.montoExtra}`);
+paso('con el importe que se le cobro', Number(enFicha?.montoExtra) === 15, `${enFicha?.montoExtra} Bs`);
+paso('y con la ruta de SU comprobante', !!enFicha?.comprobanteExtraUrl, enFicha?.comprobanteExtraUrl);
+
+// Que el archivo se pueda ABRIR, no solo que la ruta este en el JSON: una ruta guardada cuyo
+// archivo no existe es peor que no tenerla, porque parece que si esta.
+if (enFicha?.comprobanteExtraUrl) {
+  const img = await fetch(API + enFicha.comprobanteExtraUrl);
+  paso('y el comprobante se descarga de verdad', img.ok, `HTTP ${img.status}`);
+}
+
+r = await api('/api/app/credenciales');
+const enCred = (r.cuerpo || []).find((c) => (c.nombre || '').includes(`NUEVO${marca}`));
+paso('el modulo de credenciales lo marca como extra', enCred?.esExtra === true,
+     `esExtra=${enCred?.esExtra}`);
+
+r = await api('/api/app/inscripciones/responsables-extra');
+const enAuditoria = (r.cuerpo || []).find((x) => (x.nombre || '').includes(`NUEVO${marca}`));
+paso('sale en el listado de control de extras', !!enAuditoria,
+     enAuditoria ? `${enAuditoria.entidad} · ${enAuditoria.monto} Bs` : '(no aparece)');
+paso('con quien lo agrego y su comprobante',
+     !!enAuditoria?.agregadoPor && !!enAuditoria?.comprobanteUrl,
+     `lo agrego ${enAuditoria?.agregadoPor}`);
+
+/*
+ * El comprobante adjuntado DENTRO del derecho tambien se guarda.
+ *
+ * Estaba dentro del `if (cobra)`, asi que el archivo se escribia en disco y la ruta se tiraba: un
+ * huerfano que nadie podia encontrar, con el vendedor creyendo que lo habia adjuntado.
+ *
+ * Necesita su PROPIA venta, con sitio libre en el derecho. Antes se hacia sobre la de arriba, que
+ * ya estaba llena, asi que el alta salia cobrada y la comprobacion se SALTABA en silencio — una
+ * asercion que no corre y sale en verde es peor que no tenerla.
+ */
+{
+  const libre2 = ((await api('/api/app/puestos')).cuerpo || []).find((p) => p.estado === 'L');
+  if (!libre2) {
+    paso('hay una caseta libre para la segunda venta', false, 'no quedan casetas libres');
+  } else {
+    await api('/api/app/puestos/carrito', { method: 'POST', body: JSON.stringify({ ids: [libre2.id] }) });
+    // UN solo responsable: 1 caseta da derecho a 2, asi que queda sitio para el siguiente.
+    const r2 = await api('/api/app/inscripciones', { method: 'POST', body: JSON.stringify({
+      entidadNombre: `ZZ DERECHO ${marca}`, nit: '', descripcion: 'P', objeto: '',
+      representanteLegal: 'REP', ciRepresentante: `RD${marca}`, celularRepresentante: '59170000000',
+      tipoEntidadId: tipo?.id, fechaInicio: null, fechaFin: null,
+      responsables: [{ nombre: 'SOLO', paterno: 'UNO', materno: '', ci: `S1${marca}`,
+                       celular: '59170000003', correo: null }],
+      entidadBancaria: '', numComprobante: null, pagoContado: true, puestos: [libre2.id] }) });
+    const ins2 = r2.cuerpo?.inscripcionId;
+
+    const fd = new FormData();
+    fd.append('nombre', `GRATIS${marca}`);
+    fd.append('ci', `GR${marca}`);
+    fd.append('comprobante', new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xdb, 0, 1])],
+      { type: 'image/jpeg' }), 'papel.jpg');
+    const rr = await fetch(`${API}/api/app/inscripciones/${ins2}/responsables`,
+      { method: 'POST', headers: { Authorization: `Bearer ${T}` }, body: fd });
+    const dd = await rr.json().catch(() => ({}));
+    paso('el segundo responsable entra SIN cobro (queda derecho)', dd?.ok && dd.cobrado === false,
+         dd?.mensaje);
+
+    const det = await api(`/api/app/inscripciones/${ins2}/detalle`);
+    const gratis = (det.cuerpo?.responsables || []).find((x) => (x.nombre || '').includes(`GRATIS${marca}`));
+    paso('y su comprobante NO se pierde aunque no se le cobre',
+         !!gratis?.comprobanteExtraUrl, gratis?.comprobanteExtraUrl || '(se tiro la ruta)');
+    if (gratis?.comprobanteExtraUrl) {
+      const f = await fetch(API + gratis.comprobanteExtraUrl);
+      paso('y tambien se descarga', f.ok, `HTTP ${f.status}`);
+    }
+
+    if (ins2) {
+      await api(`/api/app/inscripciones/${ins2}/cancelar`, { method: 'POST',
+        body: JSON.stringify({ motivo: 'Prueba de comprobante dentro del derecho' }) });
+    }
+  }
+}
 
 titulo('Consola');
 const errores = erroresDe(ch.eventos).filter((e) => !/favicon|PLANO-|whatsapp/i.test(e));

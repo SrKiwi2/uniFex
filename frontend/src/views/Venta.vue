@@ -194,9 +194,9 @@ const AYUDAS = {
   contado: ['Pagó al contado',
     'Marca esto si te pagó en efectivo, en el momento. OJO: marcarlo dice CÓMO pagó, no que '
     + 'exista el recibo. El comprobante hay que subirlo igual, o no se le puede acreditar.'],
-  banco: ['Banco y N.º de comprobante',
-    'Si pagó por transferencia o depósito, el banco y el número que figura en el papel. Sirve '
-    + 'para cuadrar el cobro con el extracto.'],
+  banco: ['Entidad bancaria y N.º de comprobante',
+    'Si pagó por transferencia o depósito: el nombre del banco (ej. Banco Unión) y el número '
+    + 'que figura en el comprobante. Sirven para cuadrar el cobro con el extracto bancario.'],
 };
 
 function ayuda(clave) {
@@ -1003,12 +1003,13 @@ onUnmounted(() => {
             <div class="foto-acciones">
               <!-- Sin `capture`: forzar la cámara quita la galería en Android, y a veces la
                    foto ya existe. Mismo criterio que FotosResponsables y el comprobante. -->
-              <input :id="`foto-${i}`" class="oculto" type="file" accept="image/*"
+              <input :id="`foto-${i}`" class="oculto" type="file" accept="image/jpeg,image/png"
                      @change="elegirFoto(i, $event)" />
               <label :for="`foto-${i}`" class="btn btn-sm">
                 📷 {{ fotos[i] ? 'Cambiar foto' : 'Tomar foto' }}
               </label>
               <button v-if="fotos[i]" class="btn btn-peligro btn-sm" @click="quitarFoto(i)">Quitar</button>
+              <span class="muted formato-permitido">Formatos: JPG, PNG</span>
               <span class="muted opcional">Opcional</span>
               <button type="button" class="ayuda" @click.prevent="ayuda('fotoResp')" aria-label="Qué es esto">?</button>
             </div>
@@ -1105,13 +1106,13 @@ onUnmounted(() => {
         <template v-if="form.formaPago === 'deposito'">
           <div class="dos">
             <label class="campo">
-              <span>Banco<button type="button" class="ayuda" @click.prevent="ayuda('banco')" aria-label="Qué es esto">?</button></span>
+              <span>Entidad bancaria<button type="button" class="ayuda" @click.prevent="ayuda('banco')" aria-label="Qué es esto">?</button></span>
               <input class="control mayus" v-model="form.entidadBancaria" placeholder="Ej. Banco Unión" />
             </label>
             <label class="campo">
-              <span>N.º de depósito</span>
-              <input class="control" type="number" inputmode="numeric"
-                     v-model.number="form.numComprobante" placeholder="Solo números" />
+              <span>N.º de comprobante</span>
+              <input class="control" type="text" inputmode="text"
+                     v-model="form.numComprobante" placeholder="Número o código del comprobante" />
             </label>
           </div>
         </template>
@@ -1133,12 +1134,13 @@ onUnmounted(() => {
           </p>
           <div class="acciones-adj">
             <input id="comprobante-venta" class="oculto" type="file"
-                   accept="image/*,application/pdf" @change="elegirComprobante" />
+                   accept="image/jpeg,image/png,application/pdf" @change="elegirComprobante" />
             <label for="comprobante-venta" class="btn btn-sm">
               📎 {{ comprobante ? 'Cambiar' : 'Adjuntar comprobante' }}
             </label>
             <button v-if="comprobante" type="button" class="btn btn-peligro btn-sm"
                     @click="quitarComprobante">Quitar</button>
+            <span class="muted formato-permitido">Formatos: JPG, PNG, PDF</span>
           </div>
           <div v-if="comprobante" class="previa-adj">
             <img v-if="comprobante.url" :src="comprobante.url" alt="Comprobante elegido" />
@@ -1292,6 +1294,7 @@ onUnmounted(() => {
   width: 100%; max-height: 200px; object-fit: contain; border-radius: var(--radio-sm);
   border: 1px solid var(--border); background: var(--panel);
 }
+.formato-permitido { font-size: 0.72rem; color: var(--muted); margin-left: auto; }
 
 /* El "?" de cada campo: discreto en reposo, grande para el dedo. */
 .ayuda {

@@ -143,9 +143,17 @@ public class ResponsableExtraService {
         r.setPersona(persona);
         r.setEsTitular(false);
         r.setEsExtra(cobra);
+        /*
+         * El comprobante se guarda SIEMPRE que venga, cobre o no.
+         *
+         * Estaba dentro del `if (cobra)`, asi que adjuntar un recibo a un responsable que entraba
+         * dentro del derecho dejaba el archivo escrito en disco y TIRABA la ruta: un archivo
+         * huerfano que nadie podia volver a encontrar, y el vendedor creyendo que lo adjunto.
+         * Si alguien se toma la molestia de subir un papel, ese papel se guarda.
+         */
+        r.setComprobanteExtra(ruta);
         if (cobra) {
             r.setMontoExtra(RegistroVentaService.COSTO_RESPONSABLE_EXTRA);
-            r.setComprobanteExtra(ruta);
         }
         r.setEstado(RESPONSABLE);
         r.setRegistro(ahora);
@@ -158,6 +166,47 @@ public class ResponsableExtraService {
                 cobra ? "Responsable agregado y cobro registrado" : "Responsable agregado",
                 r.getId(), cobra, cobra ? RegistroVentaService.COSTO_RESPONSABLE_EXTRA : BigDecimal.ZERO);
     }
+
+    /** Un responsable extra tal como lo lista la pantalla de control de cobros. */
+    public record ExtraListado(Long responsableId, String nombre, String ci, String celular,
+                               String fotoUrl, java.math.BigDecimal monto, String comprobanteUrl,
+                               Long inscripcionId, String entidad,
+                               String agregadoPor, java.time.LocalDateTime cuando) {
+    }
+
+    /**
+     * Todos los responsables extra de la edicion activa, con su cobro y su comprobante.
+     *
+     * Existe porque la pregunta "¿quien se agrego de mas y pago?" es de TODA la feria, no de una
+     * venta: contestarla abriendo venta por venta con cien ventas no lo hace nadie, y por eso los
+     * cobros se perdian de vista.
+     *
+     * Se listan tambien los que NO tienen comprobante: son exactamente los que hay que reclamar.
+     */
+    @Transactional(readOnly = true)
+    public List<ExtraListado> listarExtras() {
+        return responsableDao.listarExtrasDeEdicionActiva().stream().map(f -> new ExtraListado(
+                numero(f[0]),
+                texto(f[1]),
+                texto(f[2]),
+                texto(f[3]),
+                ruta(texto(f[4])),
+                (java.math.BigDecimal) f[5],
+                ruta(texto(f[6])),
+                numero(f[7]),
+                texto(f[8]),
+                texto(f[9]),
+                f[10] == null ? null : ((java.sql.Timestamp) f[10]).toLocalDateTime()
+        )).toList();
+    }
+
+    /** Los archivos viajan como la ruta que sirve /files/**, nunca como el nombre suelto. */
+    private static String ruta(String archivo) {
+        return (archivo == null || archivo.isBlank()) ? null : "/files/" + archivo;
+    }
+
+    private static Long numero(Object o) { return o == null ? null : ((Number) o).longValue(); }
+    private static String texto(Object o) { return o == null ? null : o.toString(); }
 
     private static boolean vacio(String s) {
         return s == null || s.trim().isEmpty();

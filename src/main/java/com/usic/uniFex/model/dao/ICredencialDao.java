@@ -30,11 +30,28 @@ public interface ICredencialDao extends JpaRepository<Responsable, Long> {
                    p.ci                                   AS ci,
                    p.foto                                 AS foto,
                    r.es_titular                           AS esTitular,
+                   r.es_extra                             AS esExtra,
+                   r.monto_extra                          AS montoExtra,
+                   r.comprobante_extra                    AS comprobanteExtra,
                    e.nombre                               AS entidad,
                    e.descripcion                          AS rubro,
                    i.id                                   AS inscripcionId,
                    i.pago_contado                         AS pagoContado,
                    i.img_comprobante                      AS comprobante,
+                   /*
+                    * Lo que cuesta ESTA venta, sumando sus casetas vivas.
+                    *
+                    * Hace falta para saber si hay algo que pagar: una venta de 0 Bs no tiene
+                    * comprobante que adjuntar, y exigirselo dejaba esas credenciales
+                    * bloqueadas para siempre. Se suma aqui y no en otra consulta porque
+                    * `inscripcion_puesto` YA esta en el join; pedirlo aparte serian 800
+                    * viajes mas, uno por credencial.
+                    *
+                    * No hay multiplicacion de filas: por cada (responsable, inscripcion) hay
+                    * una fila por caseta y los demas joins son 1:1, asi que el SUM es el total
+                    * real y no un multiplo.
+                    */
+                   COALESCE(SUM(ip.costo), 0)             AS totalVenta,
                    string_agg(DISTINCT c.nombre, ', ')    AS categorias,
                    string_agg(DISTINCT pu.codigo, ', ')   AS casetas
               FROM responsable r
@@ -52,6 +69,7 @@ public interface ICredencialDao extends JpaRepository<Responsable, Long> {
 
     String GROUP = """
              GROUP BY r.id, p.nombre, p.paterno, p.materno, p.ci, p.foto, r.es_titular,
+                      r.es_extra, r.monto_extra, r.comprobante_extra,
                       e.nombre, e.descripcion, i.id, i.pago_contado, i.img_comprobante
             """;
 

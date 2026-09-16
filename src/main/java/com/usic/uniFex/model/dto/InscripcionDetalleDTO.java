@@ -49,7 +49,18 @@ public record InscripcionDetalleDTO(
                                       * poder ver lo adjuntado obliga a abrir otra pantalla
                                       * para comprobar justo lo que se viene a comprobar.
                                       */
-                                     String fotoUrl) {
+                                     String fotoUrl,
+                                     /**
+                                      * true si esta POR ENCIMA de los dos responsables por
+                                      * caseta: se le cobro aparte (V34). Sin esto, en la ficha
+                                      * no habia forma de distinguir a quien pago de quien
+                                      * entraba por derecho, y el cobro quedaba invisible.
+                                      */
+                                     boolean esExtra,
+                                     /** Bs cobrados, congelados el dia del cobro. Null si no es extra. */
+                                     BigDecimal montoExtra,
+                                     /** Ruta en /files/** del comprobante de ESE cobro, o null. */
+                                     String comprobanteExtraUrl) {
     }
 
     /** Una caseta vendida, con el precio que se congelo el dia de la venta. */

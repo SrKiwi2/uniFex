@@ -26,7 +26,19 @@ public record ResponsableFotoDTO(
         boolean esTitular,
         /** Ruta servida en /files/**, o null si todavia no tiene foto. */
         String fotoUrl,
-        boolean tieneFoto) {
+        boolean tieneFoto,
+        /**
+         * true si esta POR ENCIMA de los dos responsables por caseta: se le cobro aparte (V34).
+         *
+         * Va aqui y no solo en `InscripcionDetalleDTO` porque ESTE es el DTO que consume la
+         * ficha de la venta (`/detalle` arma su mapa con `responsableFoto.listar`). Cambiar el
+         * otro no cambiaba nada de lo que se ve, que es justo el error que costo encontrar.
+         */
+        boolean esExtra,
+        /** Bs cobrados, congelados el dia del cobro. Null si no es extra. */
+        java.math.BigDecimal montoExtra,
+        /** Ruta en /files/** del comprobante de ESE cobro. Ojo: no es el de la venta. */
+        String comprobanteExtraUrl) {
 
     public static ResponsableFotoDTO de(Responsable r) {
         Persona p = r.getPersona();
@@ -46,6 +58,10 @@ public record ResponsableFotoDTO(
                 p != null ? p.getCelular() : null,
                 r.isEsTitular(),
                 hay ? "/files/" + foto : null,
-                hay);
+                hay,
+                r.isEsExtra(),
+                r.getMontoExtra(),
+                (r.getComprobanteExtra() != null && !r.getComprobanteExtra().isBlank())
+                        ? "/files/" + r.getComprobanteExtra() : null);
     }
 }

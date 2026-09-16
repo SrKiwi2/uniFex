@@ -55,6 +55,7 @@ const router = createRouter({
         { path: 'seguimiento', component: () => import('./views/Seguimiento.vue'), meta: { titulo: 'Seguimiento en vivo', requiereAuth: true, pantalla: 'seguimiento'} },
         { path: 'anuncios', component: () => import('./views/Anuncios.vue'), meta: { titulo: 'Anuncios', requiereAuth: true, pantalla: 'anuncios'} },
         { path: 'seguimiento-facultad', component: () => import('./views/SeguimientoFacultad.vue'), meta: { titulo: 'Seguimiento por facultad', requiereAuth: true, pantalla: 'seguimiento-facultad'} },
+        { path: 'responsables-extra', component: () => import('./views/ResponsablesExtra.vue'), meta: { titulo: 'Responsables extra', requiereAuth: true, pantalla: 'responsables-extra'} },
         { path: 'usuarios', component: () => import('./views/Usuarios.vue'), meta: { titulo: 'Usuarios', requiereAuth: true, pantalla: 'usuarios'} },
         { path: 'roles', component: () => import('./views/Roles.vue'), meta: { titulo: 'Roles', requiereAuth: true, pantalla: 'roles'} },
         { path: 'mantenimiento', component: () => import('./views/Mantenimiento.vue'), meta: { titulo: 'Mantenimiento', requiereAuth: true, pantalla: 'mantenimiento'} },

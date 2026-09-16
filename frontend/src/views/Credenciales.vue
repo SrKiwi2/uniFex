@@ -16,8 +16,10 @@ import { alerta } from '../ui/alerta';
  *
  * Dos reglas que conviene tener presentes al leer esto:
  *
- *   - el COMPROBANTE hace falta siempre, tambien en las ventas "al contado". Marcar contado
- *     dice como se pago, no que exista el recibo;
+ *   - el COMPROBANTE hace falta siempre que la venta CUESTE algo, tambien en las ventas "al
+ *     contado" —marcar contado dice como se pago, no que exista el recibo—. La excepcion son
+ *     las ventas de 0 Bs (categorias y casetas cedidas): ahi no hay ningun recibo que
+ *     adjuntar, y exigirlo dejaba esas credenciales bloqueadas para siempre;
  *   - la FOTO solo la exige la plantilla con etiquetas, que es la que imprime los datos de la
  *     persona. La de QR grande no lleva ni nombre ni C.I., asi que no la pide.
  *
@@ -55,6 +57,20 @@ const ID_VIRTUAL = 'CREDENCIAL_VIRTUAL';
 const virtualesListas = (c) => grupoDe(c).filter((x) => x.listo?.[ID_VIRTUAL]);
 
 /**
+ * Lo que de verdad le falta a un grupo, en palabras.
+ *
+ * Antes el aviso decia siempre "hace falta el comprobante y la foto". A una venta de 0 Bs no
+ * le hace falta ningun comprobante, asi que ese texto mandaba a buscar un papel inexistente y
+ * escondia lo unico que si faltaba: la foto.
+ */
+function loQueFalta(lista) {
+  const faltas = new Set();
+  for (const c of lista) for (const f of c.faltantes?.[ID_VIRTUAL] || []) faltas.add(f);
+  if (!faltas.size) return 'falta algo';
+  return [...faltas].join(' y ');
+}
+
+/**
  * Descarga la credencial virtual de un responsable, o de toda su entidad.
  *
  * Una a una y no en un archivo unico: cada credencial es de UNA persona y se le manda a esa
@@ -64,8 +80,7 @@ async function bajarVirtual(lista) {
   if (generando.value) return;
   const aptas = lista.filter((x) => x.listo?.[ID_VIRTUAL]);
   if (!aptas.length) {
-    alerta('Todavía no se puede emitir: hace falta el comprobante de pago y la foto del '
-      + 'responsable.', 'advertencia');
+    alerta(`Todavía no se puede emitir: ${loQueFalta(lista)}.`, 'advertencia');
     return;
   }
   generando.value = true;
@@ -88,8 +103,7 @@ async function reenviarWhatsApp(lista) {
   if (generando.value) return;
   const aptas = lista.filter((x) => x.listo?.[ID_VIRTUAL]);
   if (!aptas.length) {
-    alerta('Todavía no se puede reenviar: hace falta el comprobante de pago y la foto del responsable.',
-      'advertencia');
+    alerta(`Todavía no se puede reenviar: ${loQueFalta(lista)}.`, 'advertencia');
     return;
   }
   generando.value = true;
@@ -546,6 +560,15 @@ onMounted(() => {
 
             <div class="quien">
               <strong>{{ c.nombre }}</strong>
+              <!-- El distintivo del que se agrego de mas y pago. Sin el, una credencial de
+                   pago se mezcla con las de derecho y no hay forma de saber cual hubo que
+                   cobrar. El detalle del cobro vive en "Responsables extra". -->
+              <span v-if="c.esExtra" class="badge badge-extra"
+                    :title="c.comprobanteExtraUrl
+                      ? `Responsable adicional. Se cobraron ${c.montoExtra} Bs y tiene comprobante.`
+                      : 'Responsable adicional: se le cobró, pero NO tiene comprobante adjunto.'">
+                extra{{ c.montoExtra ? ` · ${c.montoExtra} Bs` : '' }}
+              </span>
               <span class="muted">
                 C.I. {{ c.ci || '—' }}
                 <template v-if="c.esTitular"> · titular</template>
@@ -554,6 +577,13 @@ onMounted(() => {
 
             <div class="estado">
               <span v-if="esListo(c)" class="badge badge-ok">Lista</span>
+              <!-- Por qué a ésta no se le pide comprobante. Sin decirlo, una credencial sin
+                   recibo marcada «Lista» junto a otra bloqueada por lo mismo parece un fallo,
+                   y la razón —que la caseta va a 0 Bs— no se ve desde la lista. -->
+              <span v-if="c.sinCosto" class="badge badge-gratis"
+                    title="Esta venta no tiene costo, así que no hay comprobante que adjuntar.">
+                sin costo
+              </span>
               <span v-for="f in faltaDe(c)" :key="f" class="badge badge-danger">{{ f }}</span>
               <!-- Ya entregada: importa saberlo antes de volver a generarla, y sobre todo si
                    se entrego cuando aun faltaba algo. -->
@@ -568,7 +598,10 @@ onMounted(() => {
 
             <!-- Completar lo que falta sin salir de la pantalla. -->
             <div class="acciones">
-              <template v-if="!c.conComprobante">
+              <!-- El botón de comprobante NO sale cuando la venta no cuesta nada: no existe
+                   ningún recibo que adjuntar, y ofrecerlo mandaba a buscar un papel que nadie
+                   emitió. `requiereComprobante` lo decide el servidor, donde vive la regla. -->
+              <template v-if="!c.conComprobante && c.requiereComprobante !== false">
                 <input :id="`comp-${c.responsableId}`" class="oculto" type="file"
                        accept="image/*,application/pdf" @change="subir(c, 'comprobante', $event)" />
                 <label :for="`comp-${c.responsableId}`" class="btn btn-sm"
@@ -636,6 +669,21 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* "Sin costo" en azul informativo: no es un estado bueno ni malo de la credencial, es un
+   hecho de la venta que explica por qué no se le pide el recibo. Verde diría "listo" (que ya
+   lo dice la otra insignia) y rojo diría "falta algo", que es justo lo contrario. */
+.badge-gratis {
+  background: color-mix(in srgb, var(--acento) 15%, transparent);
+  color: var(--acento); font-weight: 700;
+}
+
+/* El extra se marca en violeta, distinto del verde de "lista" y del rojo de lo que falta:
+   no es un estado de la credencial, es de dónde salió esa persona. */
+.badge-extra {
+  background: color-mix(in srgb, #a855f7 18%, transparent);
+  color: #7e22ce; font-weight: 700;
+}
+
 .credenciales { display: flex; flex-direction: column; gap: 1rem; }
 
 /* ---- resumen ---- */

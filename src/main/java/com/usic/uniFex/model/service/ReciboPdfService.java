@@ -512,4 +512,180 @@ public class ReciboPdfService {
         if (adm != null && adm.getCodigoFuncionario() != null) return adm.getCodigoFuncionario();
         return usuario != null && usuario.getUsername() != null ? usuario.getUsername() : "—";
     }
+
+    /**
+     * Genera el recibo de un responsable extra (credencial adicional) en formato duplicado.
+     *
+     * Cada mitad es un recibo completo con QR verificable. Se imprime una hoja y se corta
+     * a la mitad: una copia para el cliente, otra para archivo.
+     */
+    @Transactional(readOnly = true)
+    public void generarReciboResponsableExtra(Long responsableId, OutputStream os) throws Exception {
+        var rOpt = responsableDao.findById(responsableId);
+        if (rOpt.isEmpty()) throw new IllegalArgumentException("Responsable no encontrado");
+        Responsable r = rOpt.get();
+        if (!r.isEsExtra()) throw new IllegalArgumentException("El responsable no es extra");
+
+        Entidad entidad = r.getEntidad();
+        Persona persona = r.getPersona();
+        BigDecimal monto = r.getMontoExtra() != null ? r.getMontoExtra() : BigDecimal.ZERO;
+        String comprobanteUrl = r.getComprobanteExtra();
+
+        String codigo = "FXE-" + responsableId.toString().toUpperCase() + "-" +
+                java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(
+                        (responsableId + "-" + System.currentTimeMillis()).getBytes());
+        LocalDateTime emitida = r.getRegistro() != null ? r.getRegistro().toInstant()
+                .atZone(java.time.ZoneId.systemDefault()).toLocalDateTime() : LocalDateTime.now();
+
+        Document doc = new Document(PageSize.LETTER, MARGEN, MARGEN, MARGEN, MARGEN);
+        PdfWriter writer = PdfWriter.getInstance(doc, os);
+        doc.open();
+        PdfContentByte cb = writer.getDirectContent();
+
+        DatosExtra datos = new DatosExtra(r, entidad, persona, monto, comprobanteUrl, codigo, emitida);
+
+        PdfPTable cuerpo = null;
+        for (float esc : ESCALAS) {
+            PdfPTable intento = construirMitadExtra(datos, esc, false);
+            if (intento.getTotalHeight() <= ALTO_MITAD - COLCHON) { cuerpo = intento; break; }
+        }
+        if (cuerpo == null) {
+            for (float esc : ESCALAS) {
+                PdfPTable intento = construirMitadExtra(datos, esc, true);
+                if (intento.getTotalHeight() <= ALTO_MITAD - COLCHON) { cuerpo = intento; break; }
+            }
+        }
+        if (cuerpo == null) cuerpo = construirMitadExtra(datos, ESCALAS[ESCALAS.length - 1], true);
+
+        for (int mitad = 0; mitad < 2; mitad++) {
+            float topeSuperior = mitad == 0 ? MARGEN + ALTO_MITAD : ALTO_PAGINA - MARGEN;
+            cuerpo.writeSelectedRows(0, -1, MARGEN, topeSuperior, cb);
+        }
+
+        dibujarLineaCorte(cb);
+        doc.close();
+    }
+
+    /** Todo lo que necesita una mitad del recibo extra. */
+    private record DatosExtra(Responsable responsable, Entidad entidad, Persona persona,
+                              BigDecimal monto, String comprobanteUrl, String codigo, LocalDateTime emitida) {
+    }
+
+    /**
+     * Una mitad completa del recibo extra como UNA tabla, para poder medirla antes de escribirla.
+     */
+    private PdfPTable construirMitadExtra(DatosExtra d, float esc, boolean compacto) throws DocumentException {
+        Font fMarca    = fuente(10.5f, esc, Font.BOLD, TINTA);
+        Font fEdicion  = fuente(8f,    esc, Font.BOLD, TINTA_SUAVE);
+        Font fSeccion  = fuente(6.2f,  esc, Font.BOLD, TINTA_SUAVE);
+        Font fEtiqueta = fuente(6.4f,  esc, Font.BOLD, TINTA);
+        Font fNorm     = fuente(7f,    esc, Font.NORMAL, TINTA);
+        Font fSmall    = fuente(5.8f,  esc, Font.NORMAL, TINTA_SUAVE);
+        Font fTotal    = fuente(9f,    esc, Font.BOLD, TINTA);
+        Font fAnulada  = fuente(9f,    esc, Font.BOLD, ROJO);
+        float pad = 2.6f * esc;
+        float hueco = 4f * esc;
+
+        PdfPTable hoja = new PdfPTable(1);
+        hoja.setTotalWidth(ANCHO_UTIL);
+        hoja.setLockedWidth(true);
+
+        // ---- Cabecera: quien emite a la izquierda, identificacion a la derecha ----
+        PdfPTable cab = tabla(new float[] { 62, 38 });
+        Paragraph izq = new Paragraph();
+        izq.add(new Phrase("UNIVERSIDAD AMAZÓNICA DE PANDO\n", fMarca));
+        izq.add(new Phrase("FEXPO UAP\n", fEdicion));
+        izq.add(new Phrase("RECIBO DE CREDENCIAL EXTRA · documento interno", fSmall));
+        izq.setLeading(fMarca.getSize() * 1.15f);
+        cab.addCell(sinBorde(izq));
+
+        Paragraph der = new Paragraph();
+        der.add(new Phrase("N.º " + d.responsable().getId() + "\n", fEtiqueta));
+        der.add(new Phrase("Código " + (d.codigo() != null ? d.codigo() : "—") + "\n", fEtiqueta));
+        der.add(new Phrase(d.emitida().format(F_HORA), fSmall));
+        der.setLeading(fEtiqueta.getSize() * 1.3f);
+        der.setAlignment(Element.ALIGN_RIGHT);
+        cab.addCell(sinBorde(der));
+        hoja.addCell(envolver(cab, 0, hueco));
+
+        hoja.addCell(separador(hueco));
+
+        // ---- Entidad ----
+        hoja.addCell(rotulo("ENTIDAD", fSeccion, pad));
+        PdfPTable ent = tabla(new float[] { 15, 35, 15, 35 });
+        Entidad e = d.entidad();
+        par(ent, "Entidad", e != null ? e.getNombre() : null, fEtiqueta, fNorm, pad);
+        par(ent, "NIT", e != null ? e.getNit() : null, fEtiqueta, fNorm, pad);
+        par(ent, "Rep. legal", unir(" · ", e != null ? e.getRepresentanteLegal() : null,
+                e != null ? e.getCiRepresentante() : null), fEtiqueta, fNorm, pad);
+        par(ent, "Tipo", e != null && e.getTipoEntidad() != null ? e.getTipoEntidad().getNombre() : null,
+                fEtiqueta, fNorm, pad);
+        hoja.addCell(envolver(ent, 0, hueco));
+
+        // ---- Responsable ----
+        hoja.addCell(rotulo("RESPONSABLE", fSeccion, pad));
+        PdfPTable resp = tabla(new float[] { 15, 35, 15, 35 });
+        Persona p = d.persona();
+        par(resp, "Nombre", unir(" ", p != null ? p.getNombre() : null, p != null ? p.getPaterno() : null,
+                p != null ? p.getMaterno() : null), fEtiqueta, fNorm, pad);
+        par(resp, "C.I.", p != null ? p.getCi() : null, fEtiqueta, fNorm, pad);
+        par(resp, "Celular", p != null ? p.getCelular() : null, fEtiqueta, fNorm, pad);
+        par(resp, "Correo", p != null ? p.getCorreo() : null, fEtiqueta, fNorm, pad);
+        hoja.addCell(envolver(resp, 0, hueco));
+
+        // ---- Cobro ----
+        hoja.addCell(rotulo("COBRO", fSeccion, pad));
+        PdfPTable cobro = tabla(new float[] { 15, 35, 15, 35 });
+        par(cobro, "Concepto", "Credencial adicional (responsable extra)", fEtiqueta, fNorm, pad);
+        par(cobro, "Monto", "Bs " + money(d.monto()), fEtiqueta, fTotal, pad);
+        par(cobro, "Comprobante", d.comprobanteUrl() != null ? "Adjunto" : "No adjunto", fEtiqueta, fNorm, pad);
+        hoja.addCell(envolver(cobro, 0, hueco));
+
+        // ---- Vendedor ----
+        hoja.addCell(rotulo("VENDEDOR", fSeccion, pad));
+        PdfPTable vend = tabla(new float[] { 15, 35, 15, 35 });
+        Usuario u = d.responsable().getRegistroIdUsuario() != null
+                ? usuarioService.findById(d.responsable().getRegistroIdUsuario()) : null;
+        Persona pv = u != null ? u.getPersona() : null;
+        String vendedor = pv != null ? unir(" ", pv.getNombre(), pv.getPaterno(), pv.getMaterno()) : "—";
+        par(vend, "Vendedor", vendedor, fEtiqueta, fNorm, pad);
+        par(vend, "Fecha", d.emitida().format(F_HORA), fEtiqueta, fNorm, pad);
+        hoja.addCell(envolver(vend, 0, hueco));
+
+        // ---- Pie: verificacion + QR, y el espacio de firma ----
+        hoja.addCell(separador(hueco * 0.5f));
+        PdfPTable pie = tabla(new float[] { 58, 20, 22 });
+
+        Paragraph verif = new Paragraph();
+        verif.add(new Phrase("Verificación · ", fEtiqueta));
+        verif.add(new Phrase("Recibo de credencial extra, no es factura. Su validez se comprueba con el "
+                + "código impreso: escanee el QR o consúltelo en el sistema. Una copia sin código, "
+                + "o con uno que el sistema no reconozca, no respalda ningún cobro.", fSmall));
+        verif.setLeading(fSmall.getSize() * 1.25f);
+        pie.addCell(sinBorde(verif));
+
+        Paragraph firma = new Paragraph();
+        firma.add(new Phrase("\n\n_______________________\n", fSmall));
+        firma.add(new Phrase("Firma y sello", fSmall));
+        firma.setAlignment(Element.ALIGN_CENTER);
+        firma.setLeading(fSmall.getSize() * 1.2f);
+        pie.addCell(sinBorde(firma));
+
+        if (d.codigo() != null) {
+            String contenidoQr = vacio(urlVerificacion) ? d.codigo() : urlVerificacion + d.codigo();
+            BarcodeQRCode qr = new BarcodeQRCode(contenidoQr, 200, 200, null);
+            Image img = qr.getImage();
+            float lado = 54f * esc;
+            img.scaleAbsolute(lado, lado);
+            PdfPCell cq = new PdfPCell(img, false);
+            cq.setBorder(Rectangle.NO_BORDER);
+            cq.setHorizontalAlignment(Element.ALIGN_RIGHT);
+            pie.addCell(cq);
+        } else {
+            pie.addCell(sinBorde(new Paragraph("")));
+        }
+        hoja.addCell(envolver(pie, 0, 0));
+
+        return hoja;
+    }
 }

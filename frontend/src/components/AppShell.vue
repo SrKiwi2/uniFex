@@ -80,6 +80,7 @@ const TODOS = [
   { a: '/vendedores', p: 'vendedores', g: 'Administracion', icono: '👥', txt: 'Vendedores' },
   { a: '/anuncios', p: 'anuncios', g: 'Administracion', icono: '📣', txt: 'Anuncios' },
   { a: '/seguimiento-facultad', p: 'seguimiento-facultad', g: 'Feria', icono: '🎓', txt: 'Seguimiento por facultad' },
+  { a: '/responsables-extra', p: 'responsables-extra', g: 'Acreditacion', icono: '🧾', txt: 'Responsables extra' },
   { a: '/usuarios', p: 'usuarios', g: 'Administracion', icono: '👤', txt: 'Usuarios' },
   { a: '/roles', p: 'roles', g: 'Administracion', icono: '🛡️', txt: 'Roles' },
   { a: '/permisos', p: 'permisos', g: 'Administracion', icono: '🔐', txt: 'Permisos por rol' },

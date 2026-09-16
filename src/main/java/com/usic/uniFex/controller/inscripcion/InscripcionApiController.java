@@ -27,9 +27,11 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.usic.uniFex.model.IService.IInscripcionService;
+import com.usic.uniFex.model.dao.IResponsableDao;
 import com.usic.uniFex.model.dto.InscripcionDetalleDTO;
 import com.usic.uniFex.model.dto.InscripcionListadoDTO;
 import com.usic.uniFex.model.entity.Inscripcion;
+import com.usic.uniFex.model.entity.Responsable;
 import com.usic.uniFex.model.service.AuditoriaService;
 import com.usic.uniFex.model.service.CancelarInscripcionService;
 import com.usic.uniFex.model.service.ReciboPdfService;
@@ -58,6 +60,7 @@ import lombok.extern.slf4j.Slf4j;
 public class InscripcionApiController {
 
     private final IInscripcionService inscripcionService;
+    private final IResponsableDao responsableDao;
 
     private final com.usic.uniFex.model.service.ResponsableExtraService responsableExtra;
     private final RegistroVentaService registroVenta;
@@ -258,6 +261,44 @@ public class InscripcionApiController {
     }
 
     /**
+     * Recibo de un responsable extra (credencial adicional) en PDF.
+     *
+     * Lo puede descargar **quien registró la venta**, o administración. El responsable
+     * debe ser "extra" (es_extra = true) y pertenecer a la entidad de la inscripción.
+     */
+    @GetMapping("/{id}/responsables/{responsableId}/recibo-extra")
+    public ResponseEntity<byte[]> reciboResponsableExtra(
+            @PathVariable Long id,
+            @PathVariable Long responsableId) {
+        Long usuarioId = usuarioActual();
+        if (usuarioId == null) return ResponseEntity.status(401).build();
+
+        Inscripcion i = inscripcionService.findById(id);
+        if (i == null) return ResponseEntity.notFound().build();
+        if (!usuarioId.equals(i.getRegistroIdUsuario()) && !esAdministracion()) {
+            return ResponseEntity.status(403).build();
+        }
+
+        // Verificar que el responsable pertenezca a esta entidad y sea extra
+        var rOpt = responsableDao.findById(responsableId);
+        if (rOpt.isEmpty() || !rOpt.get().getEntidad().getId().equals(i.getEntidad().getId()) || !rOpt.get().isEsExtra()) {
+            return ResponseEntity.status(404).build();
+        }
+
+        try (ByteArrayOutputStream salida = new ByteArrayOutputStream()) {
+            reciboPdfService.generarReciboResponsableExtra(responsableId, salida);
+            return ResponseEntity.ok()
+                    .contentType(MediaType.APPLICATION_PDF)
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            "inline; filename=recibo-extra-" + responsableId + ".pdf")
+                    .body(salida.toByteArray());
+        } catch (Exception e) {
+            log.error("No se pudo generar el recibo extra del responsable {}", responsableId, e);
+            return ResponseEntity.status(500).build();
+        }
+    }
+
+    /**
      * Responsables de la venta con el estado de su foto, y si ya estan todas.
      *
      * Es la pantalla de "¿a quien me falta la foto?": en la feria casi nunca se tienen las dos
@@ -404,6 +445,22 @@ public class InscripcionApiController {
         cuerpo.put("mensaje", r.mensaje());
         cuerpo.put("responsable", r.responsable());
         return r.ok() ? ResponseEntity.ok(cuerpo) : ResponseEntity.badRequest().body(cuerpo);
+    }
+
+    /**
+     * Todos los responsables EXTRA de la feria, con su cobro y su comprobante.
+     *
+     * Va aqui, y no dentro de la ficha de cada venta, porque la pregunta que contesta es de toda
+     * la feria: "¿quien se agrego de mas y pago?". Con cien ventas, responderla abriendo una por
+     * una no lo hace nadie — y por eso los cobros de 15 Bs se perdian de vista.
+     *
+     * Mismo permiso que el listado global de inscripciones: enseña un SUBCONJUNTO de lo que esas
+     * pantallas ya muestran, asi que negarlo aqui seria arbitrario.
+     */
+    @GetMapping("/responsables-extra")
+    @PreAuthorize(Roles.VE_INSCRIPCIONES)
+    public List<ResponsableExtraService.ExtraListado> responsablesExtra() {
+        return responsableExtra.listarExtras();
     }
 
     /**

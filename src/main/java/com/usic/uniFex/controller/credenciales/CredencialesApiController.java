@@ -189,6 +189,21 @@ public class CredencialesApiController {
             m.put("inscripcionId", c.inscripcionId());
             m.put("conComprobante", c.conComprobante());
             m.put("conFoto", c.conFoto());
+            // El distintivo del que se agrego POR ENCIMA del derecho y pago (V34). Sin el, una
+            // credencial de pago se mezcla con las de derecho y no hay forma de saber cual hubo
+            // que cobrar. El detalle del cobro vive en la pantalla "Responsables extra".
+            //
+            // OJO: esta lista NO es el DTO, es un mapa armado a mano. Añadir el campo solo a
+            // `CredencialDTO` no cambia nada de lo que ve la pantalla — pasó, y costó encontrarlo.
+            m.put("esExtra", c.esExtra());
+            m.put("montoExtra", c.montoExtra());
+            m.put("comprobanteExtraUrl", c.comprobanteExtraUrl());
+            // Para que la pantalla EXPLIQUE por que a esa fila no se le pide comprobante. Sin
+            // esto, una credencial sin recibo y marcada "Lista" al lado de otra bloqueada por
+            // lo mismo parece un fallo del sistema, y la diferencia —que una no cuesta nada—
+            // no se puede adivinar desde la lista.
+            m.put("sinCosto", c.sinCosto());
+            m.put("requiereComprobante", c.requiereComprobante());
             // Se resuelve para LAS DOS plantillas en el servidor, en vez de mandar los dos
             // booleanos y que el cliente aplique la regla: asi la regla vive en un solo sitio
             // y cambiar de plantilla en pantalla no obliga a volver a pedir la lista.
