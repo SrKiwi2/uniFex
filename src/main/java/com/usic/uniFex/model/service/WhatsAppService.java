@@ -39,6 +39,7 @@ public class WhatsAppService {
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
     private final OkHttpClient client = new OkHttpClient();
     private final ObjectMapper mapper = new ObjectMapper();
+    private final MensajesWhatsAppVenta mensajesVenta;
 
     @Value("${whatsapp.api.url:}")
     private String apiBaseUrl;
@@ -182,18 +183,9 @@ public class WhatsAppService {
             return;
         }
 
-        // 1. Texto de bienvenida. Los documentos van adjuntos, no como enlaces.
-        String mensaje = String.join("\n",
-                "🎉 ¡Bienvenido a la FEXPO UAP!",
-                "",
-                "Hola " + (nombreEntidad != null ? nombreEntidad : "expositor") + ",",
-                "Tu inscripción ha sido registrada con éxito.",
-                "",
-                "📎 Adjunto encontrarás tu recibo en PDF y tus credenciales virtuales.",
-                "Registra este número para recibir cualquier novedad de la feria.",
-                "",
-                "Mensaje enviado desde el sistema automatizado de la Universidad Amazónica de Pando.",
-                "¡Nos vemos en la feria!");
+        // 1. Texto de bienvenida. Se rota entre diez variantes sin repetir la anterior.
+        // Los documentos van adjuntos, no como enlaces.
+        String mensaje = mensajesVenta.siguiente(nombreEntidad);
 
         log.info("[WHATSAPP] Inicio paquete venta inscripcion={} celular={} reciboBytes={} credenciales={} baseUrl={}",
                 inscripcionId, celular, reciboPdf == null ? 0 : reciboPdf.length,

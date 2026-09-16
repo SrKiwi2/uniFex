@@ -106,8 +106,14 @@ async function guardar() {
 const TITULOS_ACCION = {
   subir: 'Foto o video de fondo',
   quitar: 'Quitar foto o video',
+  musica: 'Música de la noche (MP3)',
+  quitarMusica: 'Quitar música',
   eliminar: 'Eliminar noche',
 };
+
+// La música se valida por extensión y no por `type`: según el sistema, el navegador informa un
+// .mp3 como "audio/mpeg", "audio/mp3" o incluso vacío. El servidor vuelve a exigir .mp3.
+const ES_MP3 = /\.mp3$/i;
 
 const accion = reactive({ tipo: null, noche: null, archivo: null, vistaPrevia: '', error: '' });
 const arrastrando = ref(false);
@@ -141,7 +147,12 @@ function tamanoLegible(bytes) {
 function elegirArchivo(archivo) {
   if (!archivo) return;
   accion.error = '';
-  if (!TIPOS_MEDIO.includes(archivo.type)) {
+  if (accion.tipo === 'musica') {
+    if (!ES_MP3.test(archivo.name)) {
+      accion.error = 'Formato no admitido. La música tiene que ser un archivo MP3.';
+      return;
+    }
+  } else if (!TIPOS_MEDIO.includes(archivo.type)) {
     accion.error = 'Formato no admitido. Usa una foto (PNG, JPG, WEBP, GIF) o un video (MP4, WEBM).';
     return;
   }
@@ -176,6 +187,15 @@ async function confirmarAccion() {
       (d) => aplicarLocal(d.noche));
   } else if (accion.tipo === 'quitar') {
     await ejecutar(() => apiFetch(`${base}/medio`, { method: 'DELETE' }),
+      (d) => aplicarLocal(d.noche));
+  } else if (accion.tipo === 'musica') {
+    if (!accion.archivo) return;
+    const datos = new FormData();
+    datos.append('archivo', accion.archivo);
+    await ejecutar(() => apiFetch(`${base}/audio`, { method: 'POST', body: datos }),
+      (d) => aplicarLocal(d.noche));
+  } else if (accion.tipo === 'quitarMusica') {
+    await ejecutar(() => apiFetch(`${base}/audio`, { method: 'DELETE' }),
       (d) => aplicarLocal(d.noche));
   } else if (accion.tipo === 'eliminar') {
     // Baja lógica: el backend solo marca la noche como eliminada (_estado = 'X'), la fila
@@ -252,12 +272,19 @@ onUnmounted(() => {
           </td>
           <td>{{ n.fecha }}</td>
           <td><strong>{{ n.titulo }}</strong></td>
-          <td>{{ n.nombreArtista || '— por revelar —' }}</td>
+          <td>
+            {{ n.nombreArtista || '— por revelar —' }}
+            <span v-if="n.urlAudio" class="con-musica" title="Tiene música: suena al pasar el cursor por su tarjeta">🎵</span>
+          </td>
           <td class="acciones">
             <button class="btn btn-sm btn-fantasma" :disabled="ocupado" title="Subir foto o video"
               @click="abrirAccion('subir', n)">📷</button>
             <button v-if="n.urlMedio" class="btn btn-sm btn-fantasma" :disabled="ocupado" title="Quitar foto o video"
               @click="abrirAccion('quitar', n)">🚫</button>
+            <button class="btn btn-sm btn-fantasma" :disabled="ocupado" title="Subir música (MP3)"
+              @click="abrirAccion('musica', n)">🎵</button>
+            <button v-if="n.urlAudio" class="btn btn-sm btn-fantasma" :disabled="ocupado" title="Quitar música"
+              @click="abrirAccion('quitarMusica', n)">🔇</button>
             <button class="btn btn-sm btn-fantasma" :disabled="ocupado" title="Editar" @click="abrirEditar(n)">✏️</button>
             <button class="btn btn-sm btn-peligro" :disabled="ocupado" title="Eliminar"
               @click="abrirAccion('eliminar', n)">🗑</button>
@@ -348,9 +375,55 @@ onUnmounted(() => {
       </p>
     </template>
 
+    <template v-else-if="accion.tipo === 'musica'">
+      <div v-if="accion.noche.urlAudio && !accion.archivo" class="musica-actual">
+        <span class="muted">Música actual</span>
+        <audio :src="urlApi(accion.noche.urlAudio)" controls preload="none"></audio>
+      </div>
+
+      <label
+        v-if="!accion.archivo"
+        class="zona-archivo"
+        :class="{ activa: arrastrando }"
+        @dragover.prevent="arrastrando = true"
+        @dragleave="arrastrando = false"
+        @drop.prevent="onSoltar"
+      >
+        <input type="file" class="oculto-visual" accept=".mp3,audio/mpeg" @change="onInputArchivo" />
+        <span class="zona-icono" aria-hidden="true">🎵</span>
+        <strong>Arrastra aquí un MP3</strong>
+        <span class="muted">o haz clic para elegirlo · solo MP3 · máx. {{ MAX_MEDIO_MB }} MB</span>
+      </label>
+
+      <div v-else class="vista-previa">
+        <audio :src="accion.vistaPrevia" controls class="audio-previa"></audio>
+        <div class="vista-previa-pie">
+          <span class="archivo-nombre" :title="accion.archivo.name">{{ accion.archivo.name }}</span>
+          <span class="muted">{{ tamanoLegible(accion.archivo.size) }}</span>
+          <label class="btn btn-sm btn-fantasma" :class="{ deshabilitado: ocupado }">
+            <input type="file" class="oculto-visual" accept=".mp3,audio/mpeg" :disabled="ocupado"
+              @change="onInputArchivo" />
+            Cambiar
+          </label>
+        </div>
+      </div>
+
+      <p v-if="accion.error" class="error-accion" role="alert">{{ accion.error }}</p>
+      <p class="muted nota-accion">
+        <template v-if="accion.noche.urlAudio">Reemplaza la música actual. </template>
+        En la vista pública suena mientras el cursor está sobre la tarjeta de esta noche (en el
+        celular, al tocarla) y se repite en bucle: conviene un fragmento corto de la canción.
+      </p>
+    </template>
+
     <p v-else-if="accion.tipo === 'quitar'" class="muted nota-accion">
       La tarjeta de esta noche en la vista pública volverá a su fondo de color. El archivo queda
       guardado en el servidor: si lo necesitas, puedes volver a subirlo.
+    </p>
+
+    <p v-else-if="accion.tipo === 'quitarMusica'" class="muted nota-accion">
+      La tarjeta de esta noche dejará de sonar en la vista pública. El MP3 queda guardado en el
+      servidor: si lo necesitas, puedes volver a subirlo.
     </p>
 
     <p v-else-if="accion.tipo === 'eliminar'" class="muted nota-accion">
@@ -360,12 +433,15 @@ onUnmounted(() => {
 
     <template #pie>
       <button class="btn btn-fantasma" :disabled="ocupado" @click="cerrarAccion">Cancelar</button>
-      <button v-if="accion.tipo === 'subir'" class="btn btn-primario" :disabled="ocupado || !accion.archivo"
-        @click="confirmarAccion">
+      <button v-if="accion.tipo === 'subir' || accion.tipo === 'musica'" class="btn btn-primario"
+        :disabled="ocupado || !accion.archivo" @click="confirmarAccion">
         {{ ocupado ? 'Subiendo…' : '⬆ Subir' }}
       </button>
       <button v-else-if="accion.tipo === 'quitar'" class="btn btn-peligro" :disabled="ocupado" @click="confirmarAccion">
         {{ ocupado ? 'Quitando…' : '🚫 Quitar' }}
+      </button>
+      <button v-else-if="accion.tipo === 'quitarMusica'" class="btn btn-peligro" :disabled="ocupado" @click="confirmarAccion">
+        {{ ocupado ? 'Quitando…' : '🔇 Quitar música' }}
       </button>
       <button v-else class="btn btn-peligro" :disabled="ocupado" @click="confirmarAccion">
         {{ ocupado ? 'Eliminando…' : '🗑 Eliminar' }}
@@ -445,6 +521,12 @@ onUnmounted(() => {
 .archivo-nombre { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .vista-previa-pie label { position: relative; cursor: pointer; }
 .vista-previa-pie label.deshabilitado { opacity: 0.5; cursor: default; }
+
+/* Música (V38) */
+.con-musica { margin-left: 0.3rem; font-size: 0.85rem; }
+.audio-previa { display: block; width: 100%; padding: 0.6rem 0.7rem 0; box-sizing: border-box; }
+.musica-actual { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; }
+.musica-actual audio { width: 100%; }
 
 .error-accion {
   margin: 0;

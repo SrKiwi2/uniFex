@@ -22,14 +22,15 @@ public class FileStorageService {
     private String uploadRoot;
 
     // Extensiones/mime permitidos (ajusta si quieres PDF en comprobante)
-    // .mp4/.webm y sus mime: solo los usa el bucket NOCHES (ver NochesFexpoService), pero el
-    // allowlist es unico para todo el servicio -- no hay forma de acotarlo por bucket sin
-    // reescribir la firma de save().
+    // .mp4/.webm/.mp3 y sus mime: solo los usa el bucket NOCHES (video de fondo y musica, ver
+    // NochesFexpoService), pero el allowlist es unico para todo el servicio -- no hay forma de
+    // acotarlo por bucket sin reescribir la firma de save(). "audio/mp3" no es estandar, pero
+    // algunos navegadores lo mandan para un .mp3 en vez de "audio/mpeg".
     private static final Set<String> ALLOWED_EXT =
-            Set.of(".png", ".jpg", ".jpeg", ".webp", ".gif", ".pdf", ".mp4", ".webm");
+            Set.of(".png", ".jpg", ".jpeg", ".webp", ".gif", ".pdf", ".mp4", ".webm", ".mp3");
     private static final Set<String> ALLOWED_MIME = Set.of(
             "image/png", "image/jpeg", "image/webp", "image/gif", "application/pdf",
-            "video/mp4", "video/webm"
+            "video/mp4", "video/webm", "audio/mpeg", "audio/mp3"
     );
 
     public enum Bucket {

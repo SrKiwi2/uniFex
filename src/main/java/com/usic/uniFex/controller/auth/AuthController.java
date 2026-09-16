@@ -33,7 +33,8 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<Map<String, Object>> login(@RequestBody LoginRequest req) {
         Usuario u = usuarioService.findByUsername(req.usuario()).orElse(null);
-        if (u == null || !passwordEncoder.matches(req.contrasena(), u.getPassword())) {
+        // Contrasena nula = login fallido (401), no un 500: BCrypt lanza si recibe null.
+        if (u == null || req.contrasena() == null || !passwordEncoder.matches(req.contrasena(), u.getPassword())) {
             return ResponseEntity.status(401)
                     .body(Map.<String, Object>of("ok", false, "mensaje", "Usuario o contrasena incorrectos"));
         }

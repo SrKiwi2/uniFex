@@ -139,6 +139,9 @@ Authorities arrive as `ROLE_<rol uppercased, spaces → underscores>`, so `SUPER
 - **Receipts** → iText, in-code, in `ReciboPdfService`.
 - **Other reports** (credentials, XLSX, DOCX) → **JasperReports** in `IServiceImp/UtilidadesServiceImpl`, which compiles `.jrxml` at runtime read from a `reportes/` directory resolved **relative to the process working directory**. These templates are **not in the repo** and must exist on disk where the app runs, or report generation fails.
 - **Payments** → UAP gateway (`pasarela.*` properties) via `pasarela/PagoController` and `PagoPasarelaService`.
+- **WhatsApp post-sale message** → `MensajesWhatsAppVenta` contains ten welcome-message variants.
+  It shuffles them in rounds, uses all ten before repeating one, and never repeats the previous
+  variant at a round boundary. `WhatsAppService` still sends the same receipt and credentials.
 
 ## Frontend
 

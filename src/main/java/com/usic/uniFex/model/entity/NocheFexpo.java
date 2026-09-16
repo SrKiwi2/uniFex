@@ -74,4 +74,12 @@ public class NocheFexpo extends AuditoriaConfig {
     /** Ruta relativa bajo {@code app.upload-root} (bucket "noches"), servida en {@code /files/**}. */
     @Column(name = "medio_archivo", length = 300)
     private String medioArchivo;
+
+    /**
+     * MP3 que suena en la vista publica mientras el cursor esta sobre la tarjeta (V38). Ruta
+     * relativa bajo {@code app.upload-root} (bucket "noches"), servida en {@code /files/**}.
+     * NULL = sin musica.
+     */
+    @Column(name = "audio_archivo", length = 300)
+    private String audioArchivo;
 }
