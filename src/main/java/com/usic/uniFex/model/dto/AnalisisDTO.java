@@ -60,6 +60,48 @@ public final class AnalisisDTO {
             BigDecimal ticketMedio) {
     }
 
+    /**
+     * Lo vendido por la facultad (area academica) DEL VENDEDOR que registro la venta.
+     *
+     * La carrera cuelga de {@code persona.id_carrera} y el area de la carrera (V35). El area
+     * no se copia a ningun sitio: se deduce por la carrera, y por eso cambiar una carrera de
+     * area corrige el historico entero sin tocar una sola venta.
+     *
+     * {@code vendedores} cuenta personas DISTINTAS que vendieron algo, no los usuarios del
+     * area: una facultad con veinte vendedores de los que solo tres han vendido sale con 3, que
+     * es lo que hace comparables las dos columnas de al lado.
+     *
+     * Las ventas de quien no tiene carrera asignada NO se descartan: se agrupan aparte. Tirarlas
+     * haria que la suma del reporte no cuadrara con el total de la feria, y ese descuadre es
+     * justo el que nadie sabe explicar tres meses despues.
+     */
+    public record Facultad(
+            String sigla,
+            String nombre,
+            int vendedores,
+            int ventas,
+            int casetas,
+            BigDecimal totalBs,
+            /** Sobre el total vendido de la feria. 0..100. */
+            BigDecimal porcentaje) {
+    }
+
+    /**
+     * Lo VENDIDO de una categoria, sin lo que queda por vender.
+     *
+     * Es un corte de {@link Ocupacion}, no un calculo aparte: sale del mismo sitio para que las
+     * dos cosas no puedan decir numeros distintos.
+     */
+    public record VendidoCategoria(
+            String categoria,
+            int vendidas,
+            int total,
+            BigDecimal porcentajeVendido,
+            BigDecimal totalBs,
+            /** Lo cobrado por esta categoria sobre el total vendido de la feria. 0..100. */
+            BigDecimal porcentajeDelDinero) {
+    }
+
     /** Un corte del cobro: contado, deposito, o lo que todavia no tiene comprobante. */
     public record Cobro(
             String concepto,

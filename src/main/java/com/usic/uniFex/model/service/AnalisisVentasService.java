@@ -175,6 +175,99 @@ public class AnalisisVentasService {
         return r;
     }
 
+    // ------------------------------------------------------------------ por facultad
+
+    /**
+     * Lo vendido por la facultad (area academica) del vendedor que registro cada venta.
+     *
+     * El area se deduce por la carrera de la persona (V35) y no se copia a ningun sitio: por eso
+     * mover una carrera de area corrige el historico entero sin tocar una sola venta.
+     *
+     * <b>Quien no tiene carrera asignada sale agrupado aparte, no se descarta.</b> Descartarlo
+     * haria que la suma del reporte no cuadrara con el total de la feria, y un descuadre asi es
+     * el que nadie sabe explicar tres meses despues. Ademas hoy es el caso MAYORITARIO: el
+     * catalogo se sembro con V35 pero las carreras se asignan a mano desde la pantalla de
+     * Vendedores, asi que mientras nadie lo haga este reporte sale entero en esa fila. No es un
+     * fallo del reporte; es que falta el dato.
+     */
+    @Transactional(readOnly = true)
+    public List<AnalisisDTO.Facultad> porFacultad() {
+        String sql = """
+                select a.sigla, a.nombre,
+                       count(distinct u.id)::int as vendedores,
+                       count(distinct i.id)::int as ventas,
+                       count(ip.id)::int as casetas,
+                       coalesce(sum(ip.costo), 0) as total_bs
+                """ + DESDE_VENTAS + """
+                  join usuario u on u.id = i."_registro_id_usuario"
+                  left join persona pe on pe.id = u.persona_id
+                  left join carrera ca on ca.id = pe.id_carrera
+                  left join area a on a.id = ca.id_area
+                """ + SOLO_VIVAS_EDICION_ACTIVA + """
+                 group by a.sigla, a.nombre
+                 order by total_bs desc
+                """;
+
+        @SuppressWarnings("unchecked")
+        List<Object[]> filas = em.createNativeQuery(sql).getResultList();
+
+        BigDecimal total = filas.stream()
+                .map(f -> decimal(f[5]))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        List<AnalisisDTO.Facultad> r = new ArrayList<>();
+        for (Object[] f : filas) {
+            BigDecimal bs = decimal(f[5]);
+            BigDecimal pct = total.signum() == 0 ? BigDecimal.ZERO
+                    : bs.multiply(BigDecimal.valueOf(100)).divide(total, 1, RoundingMode.HALF_UP);
+            String sigla = texto(f[0]);
+            r.add(new AnalisisDTO.Facultad(
+                    sigla == null ? "SIN CARRERA" : sigla,
+                    // El nombre largo arranca igual que la sigla a proposito (V35): los oficiales
+                    // no estaban confirmados. Si siguen iguales, no se repite en pantalla.
+                    nombreArea(sigla, texto(f[1])),
+                    entero(f[2]), entero(f[3]), entero(f[4]), bs, pct));
+        }
+        return r;
+    }
+
+    /** El nombre del area solo cuando aporta algo sobre la sigla. */
+    private static String nombreArea(String sigla, String nombre) {
+        if (sigla == null) return "Sin carrera asignada";
+        if (nombre == null || nombre.equalsIgnoreCase(sigla)) return null;
+        return nombre;
+    }
+
+    // ------------------------------------------------------------------ vendido por categoria
+
+    /**
+     * Lo VENDIDO de cada categoria, en casetas y en dinero.
+     *
+     * Se deriva de {@link #ocupacion()} en vez de consultar aparte: es el mismo dato mirado sin
+     * lo que queda por vender. Con dos consultas distintas, el dia que una cambie de criterio
+     * —un filtro de estado, una anulacion— las dos pantallas diran numeros distintos y no habra
+     * forma de saber cual creer.
+     *
+     * Salen tambien las categorias con CERO vendidas. Es informacion: una categoria que no ha
+     * vendido nada es justamente la que hay que mirar, y esconderla la vuelve invisible.
+     */
+    @Transactional(readOnly = true)
+    public List<AnalisisDTO.VendidoCategoria> vendidoPorCategoria() {
+        List<AnalisisDTO.Ocupacion> base = ocupacion();
+        BigDecimal total = base.stream()
+                .map(AnalisisDTO.Ocupacion::bsVendido)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        return base.stream()
+                .sorted((a, b) -> b.bsVendido().compareTo(a.bsVendido()))
+                .map(o -> new AnalisisDTO.VendidoCategoria(
+                        o.categoria(), o.vendidas(), o.total(), o.porcentajeVendido(), o.bsVendido(),
+                        total.signum() == 0 ? BigDecimal.ZERO
+                                : o.bsVendido().multiply(BigDecimal.valueOf(100))
+                                        .divide(total, 1, RoundingMode.HALF_UP)))
+                .toList();
+    }
+
     // ------------------------------------------------------------------ cobros
 
     /**

@@ -160,6 +160,44 @@ try {
     'document.documentElement.scrollWidth > document.documentElement.clientWidth + 1');
   ok(desborda === false, 'el tablero no se desplaza de lado');
 
+  // ---- 5. los reportes descargables, en la pantalla Reportes ----
+  console.log('\nPantalla Reportes');
+  ok(await entrarComo(admin, '/reportes') === true, 'la pantalla de reportes se pinta');
+
+  const rep = JSON.parse(await evaluar(`(async () => {
+    for (let i = 0; i < 50; i++) {
+      if (document.querySelector('.tab-reporte')) break;
+      await new Promise(r => setTimeout(r, 300));
+    }
+    const tab = [...document.querySelectorAll('.tab-reporte')]
+      .find(b => /an[áa]lisis/i.test(b.textContent));
+    if (!tab) return JSON.stringify({ error: 'sin pestaña de analisis' });
+    tab.click();
+    await new Promise(r => setTimeout(r, 800));
+    return JSON.stringify({
+      titulos: [...document.querySelectorAll('.fila-analisis .texto strong')].map(e => e.textContent.trim()),
+      botones: document.querySelectorAll('.fila-analisis .acciones button').length,
+      aviso: !!document.querySelector('.aviso-dato'),
+      // La seccion de ventas era un v-else del resumen, asi que se colaba aqui debajo.
+      ventasColada: !!document.querySelector('.reporte-ventas'),
+      desplaza: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    });
+  })()`));
+
+  ok(!rep.error, 'existe la pestaña de reportes de análisis', rep.error);
+  const pide = (t) => (rep.titulos || []).some((x) => x.toLowerCase().includes(t));
+  ok(pide('categoría') || pide('categoria'), 'está «puestos vendidos por categoría»',
+    (rep.titulos || []).join(' | '));
+  ok(pide('facultad'), 'está «venta por facultad»');
+  ok(pide('administrativo'), 'está «venta por administrativo»');
+  ok(rep.botones === (rep.titulos || []).length * 2, 'cada reporte tiene su PDF y su Excel',
+    `${rep.botones} botones para ${(rep.titulos || []).length} reportes`);
+  ok(rep.aviso === true,
+    'el de facultad avisa de que hace falta asignar la carrera (si no, saldría vacío sin explicar por qué)');
+  ok(rep.ventasColada === false,
+    'el reporte detallado de ventas NO se cuela en esta pestaña');
+  ok(rep.desplaza === false, 'la pantalla de reportes no se desplaza de lado');
+
   console.log(`\n${fallos === 0 ? 'Todo bien.' : `${fallos} comprobacion(es) fallidas.`}\n`);
 } finally {
   if (cab && jefeId) {

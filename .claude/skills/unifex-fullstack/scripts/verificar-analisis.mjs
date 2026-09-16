@@ -60,6 +60,9 @@ async function main() {
      && Array.isArray(antes?.avance) && antes?.cobros, 'trae los cuatro analisis en UNA peticion',
      JSON.stringify(Object.keys(antes || {})));
 
+  // La foto de facultad ANTES de vender: luego se comprueba que la venta suba exactamente una.
+  const facAntes = (await api('/api/app/analisis/facultad')).cuerpo || [];
+
   const sumaVendidas = (a) => (a.ocupacion || []).reduce((s, o) => s + o.vendidas, 0);
   const sumaBs = (a) => (a.ocupacion || []).reduce((s, o) => s + num(o.bsVendido), 0);
   const cobradoDe = (a) => num(a.cobros?.totalCobrado);
@@ -151,11 +154,86 @@ async function main() {
   ok((despues.cobros?.pendientes || []).some((p) => Number(p.inscripcionId) === Number(insId)),
     'cobros: la venta sale en el detalle de pendientes');
 
-  const hoy = new Date().toISOString().slice(0, 10);
-  const diaHoy = (despues.avance || []).find((d) => d.fecha === hoy);
-  ok(Boolean(diaHoy), 'avance: hay una fila para hoy', `dias: ${(despues.avance || []).map(d => d.fecha).join(', ')}`);
-  ok(num(diaHoy?.totalBs) >= PRECIO, `avance: el dia de hoy incluye los ${PRECIO} Bs`,
-    `hoy=${num(diaHoy?.totalBs)}`);
+  /*
+   * Se mira el ULTIMO dia de la serie, no "hoy" calculado aqui.
+   *
+   * La primera version hacia `new Date().toISOString().slice(0,10)`, que da la fecha en UTC,
+   * mientras que la base agrupa por `date(fecha_compra)` en la zona del servidor. En Bolivia
+   * (UTC-4) eso las descuadra un dia entero a partir de las 20:00, y la prueba empezaba a
+   * fallar sola por la tarde sin que nada estuviera roto. La venta acaba de hacerse, asi que
+   * tiene que estar en el dia mas reciente: eso es cierto en cualquier zona horaria.
+   */
+  const dias = despues.avance || [];
+  const ultimoDia = dias[dias.length - 1];
+  const antesUltimo = (antes.avance || []).find((d) => d.fecha === ultimoDia?.fecha);
+  ok(Boolean(ultimoDia), 'avance: hay al menos un dia con ventas',
+    `dias: ${dias.map((d) => d.fecha).join(', ')}`);
+  ok(num(ultimoDia?.totalBs) === num(antesUltimo?.totalBs) + PRECIO,
+    `avance: el ultimo dia sube ${PRECIO} Bs`,
+    `${num(antesUltimo?.totalBs)} -> ${num(ultimoDia?.totalBs)} (dia ${ultimoDia?.fecha})`);
+
+  // ---- venta por facultad ----
+  //
+  // El area sale de la CARRERA del vendedor (V35), y las carreras se asignan a mano. Mientras
+  // nadie lo haga, todo cae en "SIN CARRERA": eso no es un fallo del reporte, pero tiene que
+  // cuadrar igual con el total de la feria, que es lo unico que no puede fallar nunca.
+  console.log('\nVenta por facultad');
+  const fac = (await api('/api/app/analisis/facultad')).cuerpo || [];
+  ok(Array.isArray(fac) && fac.length > 0, 'devuelve al menos una fila',
+    JSON.stringify(fac).slice(0, 150));
+
+  const bsFac = fac.reduce((s, f) => s + num(f.totalBs), 0);
+  ok(Math.abs(bsFac - sumaBs(despues)) < 0.01,
+    'la suma por facultad cuadra con el total vendido de la feria',
+    `facultad=${bsFac} vs ocupacion=${sumaBs(despues)}`);
+
+  const pctFac = fac.reduce((s, f) => s + num(f.porcentaje), 0);
+  ok(Math.abs(pctFac - 100) < 0.5, 'los porcentajes suman 100', `suman ${pctFac}`);
+
+  /*
+   * La venta tiene que caer en UNA sola facultad y subirla exactamente en PRECIO.
+   *
+   * Se compara contra la foto previa en vez de buscar la fila "SIN CARRERA". Esa version daba
+   * por hecho que quien corre la prueba no tiene carrera asignada, y en cuanto se le asigna
+   * una —que es justo lo que hay que hacer para que este reporte sirva de algo— la prueba
+   * fallaba sola sin que nada estuviera roto. Asi vale en los dos casos, y ademas comprueba lo
+   * que de verdad importa: que la venta se atribuya a su facultad, sin repartirse ni perderse.
+   */
+  const crecieron = fac.filter((f) => {
+    const previo = facAntes.find((x) => x.sigla === f.sigla);
+    return Math.abs(num(f.totalBs) - num(previo?.totalBs)) > 0.01;
+  });
+  ok(crecieron.length === 1, 'la venta sube UNA sola facultad, no varias',
+    `cambiaron ${crecieron.length}: ${crecieron.map((f) => f.sigla).join(', ')}`);
+  if (crecieron.length === 1) {
+    const f = crecieron[0];
+    const previo = facAntes.find((x) => x.sigla === f.sigla);
+    ok(Math.abs(num(f.totalBs) - (num(previo?.totalBs) + PRECIO)) < 0.01,
+      `y la sube exactamente ${PRECIO} Bs (facultad ${f.sigla})`,
+      `${num(previo?.totalBs)} -> ${num(f.totalBs)}`);
+  }
+
+  const siglasValidas = fac.every((f) => f.sigla && f.sigla.trim().length > 0);
+  ok(siglasValidas, 'ninguna fila sale sin etiqueta (quien no tiene carrera va a «SIN CARRERA»)',
+    `siglas: ${fac.map((f) => f.sigla).join(', ')}`);
+
+  const casetasFac = fac.reduce((s, f) => s + num(f.casetas), 0);
+  ok(casetasFac === sumaVendidas(despues),
+    'las casetas por facultad cuadran con las vendidas',
+    `${casetasFac} vs ${sumaVendidas(despues)}`);
+
+  // ---- puestos vendidos por categoria ----
+  console.log('\nPuestos vendidos por categoria');
+  const porCat = (await api('/api/app/analisis/vendido-categoria')).cuerpo || [];
+  ok(porCat.length === (despues.ocupacion || []).length,
+    'trae TODAS las categorias, tambien las que no vendieron nada',
+    `${porCat.length} vs ${(despues.ocupacion || []).length}`);
+  ok(porCat.reduce((s, c) => s + num(c.vendidas), 0) === sumaVendidas(despues),
+    'las vendidas cuadran con la ocupacion (sale del mismo calculo)');
+  ok(Math.abs(porCat.reduce((s, c) => s + num(c.totalBs), 0) - sumaBs(despues)) < 0.01,
+    'y el dinero tambien');
+  const ordenado = porCat.every((c, i) => i === 0 || num(porCat[i - 1].totalBs) >= num(c.totalBs));
+  ok(ordenado, 'viene ordenado por importe, de mas a menos');
 
   // ---- quien puede mirar ----
   console.log('\nQuien puede mirarlo');
@@ -199,7 +277,7 @@ async function main() {
 
   // ---- descargas ----
   console.log('\nDescargas');
-  for (const nombre of ['ocupacion', 'vendedores', 'cobros', 'avance']) {
+  for (const nombre of ['ocupacion', 'vendedores', 'cobros', 'avance', 'facultad', 'vendido-categoria']) {
     for (const formato of ['pdf', 'excel']) {
       const r = await fetch(`${BASE}/api/app/analisis/${nombre}/${formato}`, {
         headers: { Authorization: `Bearer ${T}` },

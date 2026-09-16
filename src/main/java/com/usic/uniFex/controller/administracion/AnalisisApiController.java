@@ -87,6 +87,18 @@ public class AnalisisApiController {
         return analisis.avance();
     }
 
+    /** Lo vendido por facultad (area academica) del vendedor que registro la venta. */
+    @GetMapping("/facultad")
+    public List<AnalisisDTO.Facultad> facultad() {
+        return analisis.porFacultad();
+    }
+
+    /** Lo VENDIDO de cada categoria, sin lo que queda por vender. */
+    @GetMapping("/vendido-categoria")
+    public List<AnalisisDTO.VendidoCategoria> vendidoCategoria() {
+        return analisis.vendidoPorCategoria();
+    }
+
     // ------------------------------------------------------------------ descargas
 
     /**
@@ -103,6 +115,8 @@ public class AnalisisApiController {
             case "vendedores" -> tablaVendedores();
             case "cobros" -> tablaCobros();
             case "avance" -> tablaAvance();
+            case "facultad" -> tablaFacultad();
+            case "vendido-categoria" -> tablaVendidoCategoria();
             default -> null;
         };
         if (tabla == null) {
@@ -237,6 +251,75 @@ public class AnalisisApiController {
                         Columna.numero("Bs del dia"), Columna.numero("Casetas acum."),
                         Columna.numero("Bs acumulado")),
                 filas);
+    }
+
+    private Tabla tablaFacultad() {
+        List<AnalisisDTO.Facultad> filas = analisis.porFacultad();
+        List<List<String>> cuerpo = new ArrayList<>();
+        int vendedores = 0, ventas = 0, casetas = 0;
+        BigDecimal total = BigDecimal.ZERO;
+        boolean haySinCarrera = false;
+        for (AnalisisDTO.Facultad f : filas) {
+            cuerpo.add(List.of(f.sigla(), f.nombre() == null ? "" : f.nombre(),
+                    String.valueOf(f.vendedores()), String.valueOf(f.ventas()),
+                    String.valueOf(f.casetas()), bs(f.totalBs()), bs(f.porcentaje()) + " %"));
+            vendedores += f.vendedores();
+            ventas += f.ventas();
+            casetas += f.casetas();
+            total = total.add(f.totalBs());
+            if ("SIN CARRERA".equals(f.sigla())) haySinCarrera = true;
+        }
+        if (!cuerpo.isEmpty()) {
+            cuerpo.add(List.of("TOTAL", "", String.valueOf(vendedores), String.valueOf(ventas),
+                    String.valueOf(casetas), bs(total), "100,00 %"));
+        }
+
+        List<String> notas = new ArrayList<>(List.of(
+                "Edicion activa. Solo ventas vivas.",
+                "La facultad es la del VENDEDOR que registro la venta: sale de su carrera (V35).",
+                "Vendedores = personas distintas que vendieron algo, no cuantas hay en el area."));
+        // El aviso solo cuando aplica: un reporte que sale casi entero en "sin carrera" parece
+        // roto, y la causa —que falta asignarles la carrera— no se adivina mirando el papel.
+        if (haySinCarrera) {
+            notas.add("ATENCION: hay ventas SIN CARRERA asignada. La carrera de cada vendedor se "
+                    + "pone en Administracion > Vendedores; hasta entonces sus ventas no se "
+                    + "reparten por facultad.");
+        }
+
+        return new Tabla("Venta por facultad", notas,
+                List.of(Columna.texto("Facultad"), Columna.texto("Nombre"),
+                        Columna.numero("Vendedores"), Columna.numero("Ventas"),
+                        Columna.numero("Casetas"), Columna.numero("Total Bs"),
+                        Columna.numero("% del total")),
+                cuerpo);
+    }
+
+    private Tabla tablaVendidoCategoria() {
+        List<AnalisisDTO.VendidoCategoria> filas = analisis.vendidoPorCategoria();
+        List<List<String>> cuerpo = new ArrayList<>();
+        int vendidas = 0, total = 0;
+        BigDecimal bsTotal = BigDecimal.ZERO;
+        for (AnalisisDTO.VendidoCategoria v : filas) {
+            cuerpo.add(List.of(v.categoria() == null ? "(sin categoría)" : v.categoria(),
+                    String.valueOf(v.vendidas()), String.valueOf(v.total()),
+                    bs(v.porcentajeVendido()) + " %", bs(v.totalBs()),
+                    bs(v.porcentajeDelDinero()) + " %"));
+            vendidas += v.vendidas();
+            total += v.total();
+            bsTotal = bsTotal.add(v.totalBs());
+        }
+        if (!cuerpo.isEmpty()) {
+            cuerpo.add(List.of("TOTAL", String.valueOf(vendidas), String.valueOf(total), "",
+                    bs(bsTotal), "100,00 %"));
+        }
+        return new Tabla("Puestos vendidos por categoria",
+                List.of("Edicion activa. Solo ventas vivas.",
+                        "Importe al precio CONGELADO del dia de la venta, no al vigente.",
+                        "Salen tambien las categorias sin ninguna venta: son las que hay que mirar."),
+                List.of(Columna.texto("Categoria"), Columna.numero("Vendidas"),
+                        Columna.numero("Casetas totales"), Columna.numero("% vendido"),
+                        Columna.numero("Total Bs"), Columna.numero("% del dinero")),
+                cuerpo);
     }
 
     /** Formato es-BO: el punto agrupa y la coma separa decimales. */

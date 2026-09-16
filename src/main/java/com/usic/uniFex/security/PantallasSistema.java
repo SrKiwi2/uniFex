@@ -32,6 +32,7 @@ public enum PantallasSistema {
     PUESTOS("puestos", "Puestos", "Plano y precios"),
     SEGUIMIENTO("seguimiento", "Seguimiento en vivo", "Administracion"),
     ANUNCIOS("anuncios", "Anuncios", "Administracion"),
+    SEGUIMIENTO_FACULTAD("seguimiento-facultad", "Seguimiento por facultad", "Feria"),
     VENDEDORES("vendedores", "Vendedores", "Administracion"),
     INSCRIPCIONES("inscripciones", "Inscripciones", "Feria"),
     INTERESADOS("interesados", "Interesados en exponer", "Feria"),

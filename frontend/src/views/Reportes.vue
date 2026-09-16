@@ -115,6 +115,50 @@ async function exportarVentasExcel() {
   }
 }
 
+/*
+ * ---- reportes de análisis, para bajar y entregar ----
+ *
+ * El `id` es la ruta: `/api/app/analisis/{id}/{pdf|excel}`. Un id desconocido responde 400,
+ * así que la lista de aquí y el `switch` del servidor no pueden separarse en silencio.
+ *
+ * Los tres primeros son los que se pidieron; los tres últimos ya alimentaban el Tablero de
+ * dirección y se ofrecen aquí también, porque quien viene a "Reportes" viene a llevarse un
+ * papel, no a mirar una pantalla.
+ */
+const REPORTES = [
+  { id: 'vendido-categoria', titulo: 'Puestos vendidos por categoría',
+    detalle: 'Cuántas se vendieron de cada categoría y cuánto dinero representa.' },
+  { id: 'facultad', titulo: 'Venta por facultad',
+    detalle: 'Agrupado por el área académica del vendedor que registró la venta.',
+    aviso: 'Necesita que cada vendedor tenga su carrera asignada (Vendedores). '
+         + 'Sin ella, sus ventas salen en «Sin carrera».' },
+  { id: 'vendedores', titulo: 'Venta por administrativo',
+    detalle: 'Ranking de vendedores: ventas, casetas, total y ticket medio.' },
+  { id: 'ocupacion', titulo: 'Ocupación del plano',
+    detalle: 'Lo vendido y lo que queda por vender, por categoría.' },
+  { id: 'cobros', titulo: 'Cobros: pagado y pendiente',
+    detalle: 'Qué se cobró de verdad y qué ventas siguen sin comprobante.' },
+  { id: 'avance', titulo: 'Avance en el tiempo',
+    detalle: 'Ventas por día, con el acumulado.' },
+];
+
+const bajando = ref('');
+async function bajarAnalisis(id, formato) {
+  if (bajando.value) return;
+  bajando.value = `${id}-${formato}`;
+  try {
+    const ruta = `/api/app/analisis/${id}/${formato}`;
+    const archivo = `${id}.${formato === 'pdf' ? 'pdf' : 'xlsx'}`;
+    if (formato === 'pdf') await descargarPdf(ruta, archivo);
+    else await descargarArchivo(ruta, archivo);
+    toast('Reporte descargado', 'ok');
+  } catch (e) {
+    toast(e.message || 'No se pudo descargar el reporte', 'error');
+  } finally {
+    bajando.value = '';
+  }
+}
+
 onMounted(cargar);
 </script>
 
@@ -128,7 +172,38 @@ onMounted(cargar);
       <span>Ventas realizadas</span>
       <small>Filtros y PDF</small>
     </button>
+    <button class="tab-reporte" :class="{ activo: seccion === 'analisis' }" @click="seccion = 'analisis'">
+      <span>Reportes de análisis</span>
+      <small>Por categoría, facultad y vendedor</small>
+    </button>
   </div>
+
+  <!-- Reportes que se bajan y se entregan. Cada uno sale del MISMO cálculo que alimenta el
+       Tablero de dirección, no de una consulta propia: con dos consultas, el día que una
+       cambie de criterio el papel diría una cifra y la pantalla otra. -->
+  <template v-if="seccion === 'analisis'">
+    <p class="muted nota-analisis">
+      Todos miran la <strong>edición activa</strong> y descartan las ventas canceladas.
+      El importe es el <strong>congelado</strong> el día de la venta, no el precio de hoy.
+    </p>
+    <div class="lista-analisis">
+      <article v-for="r in REPORTES" :key="r.id" class="card fila-analisis">
+        <div class="texto">
+          <strong>{{ r.titulo }}</strong>
+          <span class="muted">{{ r.detalle }}</span>
+          <span v-if="r.aviso" class="aviso-dato">{{ r.aviso }}</span>
+        </div>
+        <div class="acciones">
+          <button class="btn btn-fantasma" :disabled="!!bajando" @click="bajarAnalisis(r.id, 'pdf')">
+            {{ bajando === r.id + '-pdf' ? '…' : 'PDF' }}
+          </button>
+          <button class="btn btn-fantasma" :disabled="!!bajando" @click="bajarAnalisis(r.id, 'excel')">
+            {{ bajando === r.id + '-excel' ? '…' : 'Excel' }}
+          </button>
+        </div>
+      </article>
+    </div>
+  </template>
 
   <template v-if="seccion === 'resumen'">
     <div class="kpis">
@@ -174,7 +249,11 @@ onMounted(cargar);
     </template>
   </template>
 
-  <template v-else>
+  <!-- `v-else-if` y no `v-else`: mientras fue un `v-else` del resumen, cualquier sección que no
+       fuera «resumen» lo pintaba — al añadir la tercera pestaña, el reporte detallado de ventas
+       aparecía debajo de los reportes de análisis. Con tres pestañas, cada una tiene que decir
+       explícitamente cuál es la suya. -->
+  <template v-else-if="seccion === 'ventas'">
     <section class="card reporte-ventas">
       <div class="reporte-head">
         <div>
@@ -248,7 +327,9 @@ onMounted(cargar);
 </template>
 
 <style scoped>
-.tabs-reportes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; margin-bottom: 1rem; padding: 0.35rem; border: 1px solid var(--border); border-radius: var(--radio); background: linear-gradient(135deg, var(--panel-2), var(--panel)); box-shadow: var(--sombra); }
+/* auto-fit: eran dos columnas fijas y la tercera pestaña caía sola en una segunda fila,
+   ocupando el doble de ancho que las otras dos. */
+.tabs-reportes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 0.75rem; margin-bottom: 1rem; padding: 0.35rem; border: 1px solid var(--border); border-radius: var(--radio); background: linear-gradient(135deg, var(--panel-2), var(--panel)); box-shadow: var(--sombra); }
 .tab-reporte { border: 0; border-radius: calc(var(--radio) - 0.25rem); padding: 0.9rem 1rem; background: transparent; color: var(--texto); text-align: left; cursor: pointer; transition: 0.18s ease; }
 .tab-reporte span { display: block; font-weight: 900; }
 .tab-reporte small { display: block; margin-top: 0.2rem; color: var(--muted); font-weight: 700; }
@@ -293,4 +374,21 @@ section.grafico { padding: 1.2rem; }
   .filtros, .mini-kpis { grid-template-columns: 1fr; }
   .buscar { grid-column: auto; }
 }
+
+/* ---- reportes de análisis ---- */
+.nota-analisis { margin: 0 0 0.9rem; line-height: 1.5; font-size: 0.9rem; }
+.lista-analisis { display: flex; flex-direction: column; gap: 0.6rem; }
+/* `fila-analisis` y no `fila`: en style.css hay una utilidad GLOBAL `.fila` con
+   `align-items: center`, y `scoped` NO protege de ella —solo añade especificidad a las reglas
+   propias—. Ese choque ya encogió una barra del tablero a 0 px de ancho sin dar ningún error. */
+.fila-analisis {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 0.9rem 1rem; flex-wrap: wrap;
+}
+.fila-analisis .texto { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; flex: 1 1 260px; }
+.fila-analisis .texto strong { font-size: 1rem; }
+.fila-analisis .texto span { font-size: 0.85rem; line-height: 1.4; }
+/* Ámbar: no es un error, es un dato que falta y que cambia lo que dice el reporte. */
+.aviso-dato { color: var(--tramite); }
+.fila-analisis .acciones { display: flex; gap: 0.4rem; flex: none; }
 </style>

@@ -78,6 +78,7 @@ const TODOS = [
   { a: '/seguimiento', p: 'seguimiento', g: 'Administracion', icono: '📡', txt: 'Seguimiento en vivo' },
   { a: '/vendedores', p: 'vendedores', g: 'Administracion', icono: '👥', txt: 'Vendedores' },
   { a: '/anuncios', p: 'anuncios', g: 'Administracion', icono: '📣', txt: 'Anuncios' },
+  { a: '/seguimiento-facultad', p: 'seguimiento-facultad', g: 'Feria', icono: '🎓', txt: 'Seguimiento por facultad' },
   { a: '/usuarios', p: 'usuarios', g: 'Administracion', icono: '👤', txt: 'Usuarios' },
   { a: '/roles', p: 'roles', g: 'Administracion', icono: '🛡️', txt: 'Roles' },
   { a: '/permisos', p: 'permisos', g: 'Administracion', icono: '🔐', txt: 'Permisos por rol' },
