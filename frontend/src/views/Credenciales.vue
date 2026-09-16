@@ -6,6 +6,7 @@ import { descargarPdf, descargarCredencialVirtual } from '../ui/descargas';
 import { mostrarCarga, ocultarCarga } from '../ui/cargando';
 import { toast } from '../ui/toast';
 import { alerta } from '../ui/alerta';
+import { asegurarCategorias, categorias } from '../ui/catalogoCategorias';
 
 /*
  * Acreditacion: preparar y emitir las credenciales de la feria.
@@ -132,6 +133,7 @@ const cargando = ref(true);
 const credenciales = ref([]);
 const busqueda = ref('');
 const filtro = ref('listas');        // listas | pendientes | todas
+const categoriaFiltro = ref(null);   // null = todas, o id de la categoria
 const seleccion = ref(new Set());
 const generando = ref(false);
 /** Fotos que la base dice tener pero que no estan en disco. Ver CredencialPublica.vue. */
@@ -210,8 +212,12 @@ const visibles = computed(() => {
   const base = filtro.value === 'listas' ? listas.value
     : filtro.value === 'pendientes' ? pendientes.value
     : credenciales.value;
-  if (!q) return base;
-  return base.filter((c) =>
+  let filtradas = base;
+  if (categoriaFiltro.value) {
+    filtradas = filtradas.filter((c) => c.categoriaId === categoriaFiltro.value);
+  }
+  if (!q) return filtradas;
+  return filtradas.filter((c) =>
     `${c.nombre} ${c.entidad} ${c.ci} ${c.categoria} ${c.casetas}`.toLowerCase().includes(q));
 });
 
@@ -393,6 +399,7 @@ function imprimirTodasListas() {
 
 onMounted(() => {
   cargarPlantillas();
+  asegurarCategorias();
   cargar();
 });
 </script>
@@ -463,6 +470,12 @@ onMounted(() => {
 
     <div class="barra">
       <input v-model="busqueda" class="control" placeholder="Buscar por nombre, entidad, C.I. o caseta…" />
+      <select v-model="categoriaFiltro" class="control" style="min-width: 180px;" :disabled="!categorias?.length">
+        <option :value="null">Todas las categorías</option>
+        <option v-for="c in categorias" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+        <option v-if="!categorias?.length" disabled>Cargando…</option>
+      </select>
+      <button class="btn btn-fantasma" @click="categoriaFiltro = null" :disabled="!categoriaFiltro">Quitar filtro</button>
       <button class="btn btn-fantasma" @click="marcarVisibles(true)">Marcar visibles</button>
       <button class="btn btn-fantasma" :disabled="!seleccion.size" @click="seleccion = new Set()">
         Quitar marcas
