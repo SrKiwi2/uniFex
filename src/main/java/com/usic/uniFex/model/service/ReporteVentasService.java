@@ -50,6 +50,7 @@ public class ReporteVentasService {
                   left join responsable r on r.id_entidad = e.id and (r."_estado" is null or r."_estado" <> 'X')
                   left join persona rp on rp.id = r.id_persona
                  where i."_estado" <> 'X'
+                   and i.id_edicion = (select ed.id from edicion ed where ed.activa limit 1)
                 """);
         Map<String, Object> params = new LinkedHashMap<>();
         if (f.desde() != null) {
@@ -93,12 +94,15 @@ public class ReporteVentasService {
                  where c."_estado" is null or c."_estado" <> 'X'
                  order by c.nombre
                 """));
+        // Misma edicion que el listado que filtran. Si el desplegable ofreciera promotores de
+        // otros años, elegir uno daria una tabla vacia sin explicar por que.
         r.put("promotores", opciones("""
                 select distinct u.id, coalesce(nullif(btrim(concat_ws(' ', p.nombre, p.paterno, p.materno)), ''), u.username) as nombre
                   from inscripcion i
                   join usuario u on u.id = i._registro_id_usuario
                   left join persona p on p.id = u.persona_id
                  where i."_estado" <> 'X'
+                   and i.id_edicion = (select ed.id from edicion ed where ed.activa limit 1)
                  order by nombre
                 """));
         return r;

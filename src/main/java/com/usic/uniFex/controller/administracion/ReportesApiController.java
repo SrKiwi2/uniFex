@@ -27,8 +27,13 @@ import com.usic.uniFex.security.Roles;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Reportes globales de la feria para la SPA (Fase G). Solo administracion: aqui se ve el total
- * (todas las inscripciones, todos los vendedores), a diferencia de "mis ventas" que es lo propio.
+ * Reportes globales de la feria para la SPA (Fase G). Aqui se ve el total —todas las
+ * inscripciones, todos los vendedores—, a diferencia de "mis ventas", que es lo propio.
+ *
+ * <b>Se protege con {@link Roles#VE_REPORTES} y no con GESTIONA_USUARIOS.</b> Estaba con lo
+ * segundo, que nunca cuadro: esto es de solo lectura y no crea ni toca una sola cuenta. El
+ * efecto practico era que a direccion (ASESORIA) le salia "Reportes" en el menu y respondia
+ * 403 al entrar — el fallo mudo que este proyecto ya sufrio con VERIFICADOR.
  *
  * Se apoya en las proyecciones {@code resumenPor*} de IInscripcionService, que —al reves que
  * fn_get_inscripciones— NO filtran por casetas confirmadas ('O'), asi que cuentan todo lo
@@ -37,7 +42,7 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/app/reportes")
 @RequiredArgsConstructor
-@PreAuthorize(Roles.GESTIONA_USUARIOS)
+@PreAuthorize(Roles.VE_REPORTES)
 public class ReportesApiController {
 
     private final IInscripcionService inscripcionService;

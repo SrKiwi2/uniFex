@@ -21,21 +21,22 @@ import java.util.List;
  */
 public enum PantallasSistema {
 
-    INICIO("inicio", "Inicio", "General"),
-    MAPA("mapa", "Mapa de ventas", "Venta"),
-    VENTA("venta", "Registrar venta", "Venta"),
-    MIS_VENTAS("mis-ventas", "Mis ventas", "Venta"),
-    CATALOGO("catalogo", "Catalogo", "Venta"),
-    TABLERO("tablero", "Tablero", "Venta"),
-    EDITOR("editor", "Editor del plano", "Feria"),
-    CATEGORIAS("categorias", "Categorías", "Feria"),
-    PUESTOS("puestos", "Puestos", "Feria"),
+    INICIO("inicio", "Inicio", "Mi trabajo"),
+    MAPA("mapa", "Mapa de ventas", "Mi trabajo"),
+    VENTA("venta", "Registrar venta", "Mi trabajo"),
+    MIS_VENTAS("mis-ventas", "Mis ventas", "Mi trabajo"),
+    CATALOGO("catalogo", "Catalogo", "Feria"),
+    TABLERO("tablero", "Tablero", "Feria"),
+    EDITOR("editor", "Editor del plano", "Plano y precios"),
+    CATEGORIAS("categorias", "Categorías", "Plano y precios"),
+    PUESTOS("puestos", "Puestos", "Plano y precios"),
     SEGUIMIENTO("seguimiento", "Seguimiento en vivo", "Administracion"),
     ANUNCIOS("anuncios", "Anuncios", "Administracion"),
-    VENDEDORES("vendedores", "Vendedores", "Feria"),
+    VENDEDORES("vendedores", "Vendedores", "Administracion"),
     INSCRIPCIONES("inscripciones", "Inscripciones", "Feria"),
     INTERESADOS("interesados", "Interesados en exponer", "Feria"),
-    REPORTES("reportes", "Reportes", "Feria"),
+    DIRECCION("direccion", "Tablero de dirección", "Administracion"),
+    REPORTES("reportes", "Reportes", "Administracion"),
     NOCHES_FEXPO("noches-fexpo", "Noches de FEXPO", "Feria"),
     CREDENCIALES("credenciales", "Credenciales", "Acreditacion"),
     ESCANER("escaner", "Escanear credencial", "Acreditacion"),
@@ -45,7 +46,7 @@ public enum PantallasSistema {
     PERMISOS("permisos", "Permisos por rol", "Administracion"),
     PERSONAS("personas", "Personas", "Administracion"),
     PERSONAL_APOYO("personal-apoyo", "Personal de apoyo", "Administracion"),
-    NOTIFICACIONES("notificaciones", "Notificaciones", "General");
+    NOTIFICACIONES("notificaciones", "Notificaciones", "Mi trabajo");
 
     private final String clave;
     private final String titulo;

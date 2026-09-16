@@ -32,33 +32,59 @@ const inmersivo = computed(() => Boolean(route.meta.inmersivo));
  * menu estaba cableado a un rol concreto, asi que un rol nuevo —CONTROL en la puerta,
  * VERIFICADOR— no tenia forma de ver lo suyo sin tocar este archivo.
  */
+/*
+ * Los grupos, en el orden en que se leen. `MI TRABAJO` va primero porque es lo que abre un
+ * vendedor cincuenta veces al dia; `ADMINISTRACION` al final porque se toca una vez por
+ * semana. Las claves coinciden con `PantallasSistema.grupo` en el servidor, que es lo que
+ * agrupa las casillas de "Permisos por rol": si discrepan, la misma pantalla sale en un grupo
+ * distinto en cada sitio y nadie sabe cual es el bueno. Hay una guarda que lo comprueba
+ * (verificar-menu-agrupado.mjs).
+ */
+const GRUPOS = [
+  { clave: 'Mi trabajo', titulo: 'Mi trabajo' },
+  { clave: 'Feria', titulo: 'Feria' },
+  { clave: 'Acreditacion', titulo: 'Acreditación' },
+  { clave: 'Plano y precios', titulo: 'Plano y precios' },
+  { clave: 'Administracion', titulo: 'Administración' },
+];
+
 const TODOS = [
-  { a: '/', p: 'inicio', icono: '🏠', txt: 'Inicio' },
-  { a: '/mapa', p: 'mapa', icono: '🗺️', txt: 'Mapa de ventas' },
-  { a: '/venta', p: 'venta', icono: '🛒', txt: 'Registrar venta' },
-  { a: '/mis-ventas', p: 'mis-ventas', icono: '🧾', txt: 'Mis ventas' },
-  { a: '/catalogo', p: 'catalogo', icono: '🏷️', txt: 'Catálogo' },
-  { a: '/escaner', p: 'escaner', icono: '📷', txt: 'Escanear credencial' },
-  { a: '/notificaciones', p: 'notificaciones', icono: '🔔', txt: 'Notificaciones' },
-  { a: '/tablero', p: 'tablero', icono: '📌', txt: 'Tablero' },
-  { a: '/credenciales', p: 'credenciales', icono: '🪪', txt: 'Credenciales' },
-  { a: '/vendedores', p: 'vendedores', icono: '👥', txt: 'Vendedores' },
-  { a: '/inscripciones', p: 'inscripciones', icono: '📋', txt: 'Inscripciones' },
-  { a: '/interesados', p: 'interesados', icono: '🙋', txt: 'Interesados' },
-  { a: '/reportes', p: 'reportes', icono: '📊', txt: 'Reportes' },
-  { a: '/noches-fexpo', p: 'noches-fexpo', icono: '🎤', txt: 'Noches de FEXPO' },
-  { a: '/editor', p: 'editor', icono: '✏️', txt: 'Editor del plano' },
-  { a: '/categorias', p: 'categorias', icono: '🏷️', txt: 'Categorías' },
-  { a: '/anuncios', p: 'anuncios', icono: '📣', txt: 'Anuncios' },
-  { a: '/puestos', p: 'puestos', icono: '🔢', txt: 'Puestos' },
-  { a: '/seguimiento', p: 'seguimiento', icono: '📡', txt: 'Seguimiento en vivo' },
-  { a: '/personas', p: 'personas', icono: '🪪', txt: 'Personas' },
-  { a: '/personal-apoyo', p: 'personal-apoyo', icono: '👥', txt: 'Personal de apoyo' },
-  { a: '/usuarios', p: 'usuarios', icono: '👤', txt: 'Usuarios' },
-  { a: '/roles', p: 'roles', icono: '🛡️', txt: 'Roles' },
-  { a: '/mantenimiento', p: 'mantenimiento', icono: '⚙️', txt: 'Mantenimiento' },
-  { a: '/errores', soloAdministracion: true, icono: '⚠️', txt: 'Registro de errores' },
-  { a: '/permisos', p: 'permisos', icono: '🔐', txt: 'Permisos por rol' },
+  // --- Mi trabajo: el dia a dia del vendedor ---
+  { a: '/', p: 'inicio', g: 'Mi trabajo', icono: '🏠', txt: 'Inicio' },
+  { a: '/mapa', p: 'mapa', g: 'Mi trabajo', icono: '🗺️', txt: 'Mapa de ventas' },
+  { a: '/venta', p: 'venta', g: 'Mi trabajo', icono: '🛒', txt: 'Registrar venta' },
+  { a: '/mis-ventas', p: 'mis-ventas', g: 'Mi trabajo', icono: '🧾', txt: 'Mis ventas' },
+  { a: '/notificaciones', p: 'notificaciones', g: 'Mi trabajo', icono: '🔔', txt: 'Notificaciones' },
+
+  // --- Feria: lo que pasa de puertas afuera ---
+  { a: '/tablero', p: 'tablero', g: 'Feria', icono: '📌', txt: 'Tablero' },
+  { a: '/catalogo', p: 'catalogo', g: 'Feria', icono: '🏷️', txt: 'Catálogo' },
+  { a: '/inscripciones', p: 'inscripciones', g: 'Feria', icono: '📋', txt: 'Inscripciones' },
+  { a: '/interesados', p: 'interesados', g: 'Feria', icono: '🙋', txt: 'Interesados' },
+  { a: '/noches-fexpo', p: 'noches-fexpo', g: 'Feria', icono: '🎤', txt: 'Noches de FEXPO' },
+
+  // --- Acreditacion: la puerta ---
+  { a: '/credenciales', p: 'credenciales', g: 'Acreditacion', icono: '🪪', txt: 'Credenciales' },
+  { a: '/escaner', p: 'escaner', g: 'Acreditacion', icono: '📷', txt: 'Escanear credencial' },
+
+  // --- Plano y precios: como esta armada la feria ---
+  { a: '/editor', p: 'editor', g: 'Plano y precios', icono: '✏️', txt: 'Editor del plano' },
+  { a: '/categorias', p: 'categorias', g: 'Plano y precios', icono: '🏷️', txt: 'Categorías' },
+  { a: '/puestos', p: 'puestos', g: 'Plano y precios', icono: '🔢', txt: 'Puestos' },
+
+  // --- Administracion ---
+  { a: '/direccion', p: 'direccion', g: 'Administracion', icono: '📈', txt: 'Tablero de dirección' },
+  { a: '/reportes', p: 'reportes', g: 'Administracion', icono: '📊', txt: 'Reportes' },
+  { a: '/seguimiento', p: 'seguimiento', g: 'Administracion', icono: '📡', txt: 'Seguimiento en vivo' },
+  { a: '/vendedores', p: 'vendedores', g: 'Administracion', icono: '👥', txt: 'Vendedores' },
+  { a: '/anuncios', p: 'anuncios', g: 'Administracion', icono: '📣', txt: 'Anuncios' },
+  { a: '/usuarios', p: 'usuarios', g: 'Administracion', icono: '👤', txt: 'Usuarios' },
+  { a: '/roles', p: 'roles', g: 'Administracion', icono: '🛡️', txt: 'Roles' },
+  { a: '/permisos', p: 'permisos', g: 'Administracion', icono: '🔐', txt: 'Permisos por rol' },
+  { a: '/personas', p: 'personas', g: 'Administracion', icono: '🪪', txt: 'Personas' },
+  { a: '/personal-apoyo', p: 'personal-apoyo', g: 'Administracion', icono: '👥', txt: 'Personal de apoyo' },
+  { a: '/mantenimiento', p: 'mantenimiento', g: 'Administracion', icono: '⚙️', txt: 'Mantenimiento' },
+  { a: '/errores', soloAdministracion: true, g: 'Administracion', icono: '⚠️', txt: 'Registro de errores' },
 ];
 
 const anuncios = useAnunciosStore();
@@ -66,10 +92,29 @@ const anuncios = useAnunciosStore();
 const enlaces = computed(() => TODOS.filter((e) => e.soloAdministracion
   ? auth.puedeEditarPlano : permisos.puedeVer(e.p)));
 
-// Las 4 tareas del día a día del vendedor, para la barra inferior estilo app: los mismos
-// destinos de siempre, solo que a mano del pulgar en vez de en un cajón que hay que abrir.
-// El resto (herramientas de administración, Salir) queda en el cajón, detrás de "Más".
-const enlacesPrincipales = computed(() => enlaces.value.slice(0, 4));
+/**
+ * El menu ya agrupado, sin los grupos que quedan vacios.
+ *
+ * Se filtra PRIMERO y se agrupa despues: a un CONTROL le toca una sola pantalla de toda
+ * "Administracion", y pintarle esa cabecera sobre un grupo vacio seria enseñarle secciones
+ * que no puede abrir. Con esto, cada quien ve solo los titulos que le corresponden.
+ */
+const grupos = computed(() => GRUPOS
+  .map((g) => ({ ...g, enlaces: enlaces.value.filter((e) => e.g === g.clave) }))
+  .filter((g) => g.enlaces.length > 0));
+
+/**
+ * Las 4 de la barra inferior del movil.
+ *
+ * Salen del grupo "Mi trabajo" y no de los primeros cuatro enlaces sueltos: al agrupar, ese
+ * `slice(0, 4)` habria empezado a arrastrar lo que quedara arriba del todo —para un CONTROL,
+ * pantallas de acreditacion— en vez de las tareas del dia a dia. Si el usuario no tiene ese
+ * grupo (un jefe, que solo consulta), se cae a los primeros que sí puede ver.
+ */
+const enlacesPrincipales = computed(() => {
+  const mias = enlaces.value.filter((e) => e.g === 'Mi trabajo');
+  return (mias.length ? mias : enlaces.value).slice(0, 4);
+});
 
 const iconoTema = computed(() => (tema.value === 'dark' ? '🌙' : tema.value === 'light' ? '☀️' : '🌗'));
 
@@ -175,9 +220,14 @@ function salir() {
         <strong>UniFex</strong>
       </div>
       <nav>
-        <router-link v-for="e in enlaces" :key="e.a" :to="e.a" class="enlace" @click="abierto = false">
-          <span class="ico">{{ e.icono }}</span>{{ e.txt }}
-        </router-link>
+        <!-- Un grupo sin enlaces visibles no se pinta (ver `grupos`), así que la cabecera
+             nunca aparece sobre un hueco. -->
+        <div v-for="g in grupos" :key="g.clave" class="grupo">
+          <h3 class="grupo-titulo">{{ g.titulo }}</h3>
+          <router-link v-for="e in g.enlaces" :key="e.a" :to="e.a" class="enlace" @click="abierto = false">
+            <span class="ico">{{ e.icono }}</span>{{ e.txt }}
+          </router-link>
+        </div>
       </nav>
       <div class="pie-side">
         <div class="quien">
@@ -237,6 +287,16 @@ function salir() {
   background: var(--acento); color: var(--acento-texto); font-weight: 800; font-size: 0.8rem;
 }
 nav { display: flex; flex-direction: column; gap: 2px; padding: 0.4rem 0.6rem; flex: 1; overflow-y: auto; }
+.grupo { display: flex; flex-direction: column; gap: 2px; }
+/* La cabecera separa sin gritar: pequeña, en mayúsculas y en gris. Si compitiera en peso con
+   los enlaces, leer el menú costaría más que antes de agruparlo. El primer grupo no lleva
+   margen superior, que dejaría un hueco raro pegado al logotipo. */
+.grupo-titulo {
+  margin: 0.9rem 0 0.2rem; padding: 0 0.7rem;
+  font-size: 0.68rem; font-weight: 800; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--muted);
+}
+.grupo:first-child .grupo-titulo { margin-top: 0.2rem; }
 .enlace {
   display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.7rem; border-radius: var(--radio-sm);
   color: var(--text); text-decoration: none; font-weight: 600; font-size: 0.92rem;

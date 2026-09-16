@@ -87,8 +87,33 @@ public final class Roles {
      * —que se pago, que se adjunto, quienes son los responsables—, no solo la fila de la
      * credencial. Es mirar, no tocar: cancelar y aprobar siguen siendo de {@link #ADMINISTRA}.
      */
+    /**
+     * Incluye ASESORIA porque a ese rol ya se le concede la PANTALLA de inscripciones, y una
+     * pantalla concedida cuyo API responde 403 es el peor fallo de los dos: el enlace aparece,
+     * se toca, y no pasa nada ni se explica por que. Este proyecto ya lo sufrio con VERIFICADOR.
+     *
+     * Lo que da: LEER el listado y el detalle de cualquier venta, datos personales del
+     * responsable incluidos (C.I. y celular). Cancelar y aprobar siguen siendo de
+     * {@link #ADMINISTRA}. Si algun dia direccion no debe ver esos datos, la correccion es
+     * quitarle la pantalla en `rol_pantalla` **y** sacarlo de aqui — las dos cosas, o vuelve el
+     * enlace que no lleva a ninguna parte.
+     */
     public static final String VE_INSCRIPCIONES =
-            "hasAnyRole('SUPER_USUARIO','ADMINISTRADOR','VERIFICADOR')";
+            "hasAnyRole('SUPER_USUARIO','ADMINISTRADOR','VERIFICADOR','ASESORIA')";
+
+    /**
+     * Quien CONSULTA los numeros de la feria: reportes y analisis de direccion.
+     *
+     * Incluye ASESORIA, que existe para esto y solo para esto —"ve listados y reportes de la
+     * feria, sin modificar nada"—, y es el rol con el que entra quien dirige. Por eso no vale
+     * reutilizar {@link #ADMINISTRA}: eso le daria de paso los usuarios, el plano y las
+     * cancelaciones. Es mirar, no tocar.
+     *
+     * Un ADMINISTRATIVO NO entra: aqui esta el total de la feria y el ranking de sus
+     * compañeros, y su sitio para eso es "Mis ventas", que solo enseña lo suyo.
+     */
+    public static final String VE_REPORTES =
+            "hasAnyRole('SUPER_USUARIO','ADMINISTRADOR','ASESORIA')";
 
     /**
      * Quien controla la puerta: escanea credenciales y anota entradas y salidas.

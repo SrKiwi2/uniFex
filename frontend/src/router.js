@@ -45,6 +45,7 @@ const router = createRouter({
         { path: 'errores', component: () => import('./views/Errores.vue'), meta: { titulo: 'Registro de errores', requiereAuth: true, soloAdministracion: true } },
         { path: 'personas', component: () => import('./views/Personas.vue'), meta: { titulo: 'Personas', requiereAuth: true, pantalla: 'personas'} },
         { path: 'personal-apoyo', component: () => import('./views/PersonalApoyo.vue'), meta: { titulo: 'Personal de apoyo', requiereAuth: true, pantalla: 'personal-apoyo' } },
+        { path: 'direccion', component: () => import('./views/Direccion.vue'), meta: { titulo: 'Tablero de dirección', requiereAuth: true, pantalla: 'direccion'} },
         { path: 'reportes', component: () => import('./views/Reportes.vue'), meta: { titulo: 'Reportes', requiereAuth: true, pantalla: 'reportes'} },
         { path: 'noches-fexpo', component: () => import('./views/NochesFexpo.vue'), meta: { titulo: 'Noches de FEXPO', requiereAuth: true, pantalla: 'noches-fexpo' } },
         { path: 'inscripciones', component: () => import('./views/Inscripciones.vue'), meta: { titulo: 'Inscripciones', requiereAuth: true, pantalla: 'inscripciones'} },
