@@ -19,8 +19,10 @@ import com.usic.uniFex.model.entity.Edicion;
 import com.usic.uniFex.model.entity.Puesto;
 import com.usic.uniFex.model.dto.EdicionDTO;
 import com.usic.uniFex.model.dto.NocheFexpoDTO;
+import com.usic.uniFex.model.dto.NoticiaDTO;
 import com.usic.uniFex.model.dto.PlanoDTO;
 import com.usic.uniFex.model.service.NochesFexpoService;
+import com.usic.uniFex.model.service.NoticiasService;
 import com.usic.uniFex.model.service.VisitasPaginaService;
 
 import lombok.RequiredArgsConstructor;
@@ -35,6 +37,7 @@ public class FeriaPublicaController {
     private final IPuestoDao puestoDao;
     private final com.usic.uniFex.model.service.PlanoService planoService;
     private final NochesFexpoService nochesFexpoService;
+    private final NoticiasService noticiasService;
     private final VisitasPaginaService visitasService;
 
     /**
@@ -158,6 +161,9 @@ public class FeriaPublicaController {
                 .toList();
         cuerpo.put("noches", noches);
 
+        // 6b. Noticias: las 10 últimas registradas, para el carrusel de novedades (ver V42)
+        cuerpo.put("noticias", noticiasService.recientesPublicas().stream().map(NoticiaDTO::de).toList());
+
         // 7. Plano (info completa para el visor público)
         PlanoDTO plano = planoService.activo();
         if (plano != null) {
@@ -184,6 +190,17 @@ public class FeriaPublicaController {
         return nochesFexpoService.listarDeEdicionActiva().stream()
                 .map(NocheFexpoDTO::de)
                 .toList();
+    }
+
+    /**
+     * TODAS las noticias de la edición activa, de la última registrada a la primera: la vista
+     * "todas las noticias" (agrupada por día) y la resincronización del carrusel, que se queda
+     * con las 10 primeras. Mismo papel que {@link #noches()}: es la misma lista que difunde
+     * {@code /topic/publico/noticias} (ver NoticiasEventPublisher), pedida al (re)conectar.
+     */
+    @GetMapping("/noticias")
+    public List<NoticiaDTO> noticias() {
+        return noticiasService.listarDeEdicionActiva().stream().map(NoticiaDTO::de).toList();
     }
 
     /**

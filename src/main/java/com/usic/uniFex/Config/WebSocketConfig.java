@@ -33,7 +33,8 @@ import lombok.RequiredArgsConstructor;
  * - Los clientes se conectan al endpoint {@code /ws} por WebSocket nativo.
  * - El servidor publica el estado de las casetas en {@code /topic/puestos} (y demas topics
  *   internos), que exigen JWT, y el contenido de la vista publica bajo
- *   {@link #PREFIJO_PUBLICO} (hoy, la cartelera de "Noches de FEXPO"), abierto a anonimos.
+ *   {@link #PREFIJO_PUBLICO} (hoy, la cartelera de "Noches de FEXPO" y las noticias), abierto a
+ *   anonimos.
  */
 @Configuration
 @EnableWebSocketMessageBroker

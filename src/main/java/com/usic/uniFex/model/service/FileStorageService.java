@@ -22,10 +22,11 @@ public class FileStorageService {
     private String uploadRoot;
 
     // Extensiones/mime permitidos (ajusta si quieres PDF en comprobante)
-    // .mp4/.webm/.mp3 y sus mime: solo los usa el bucket NOCHES (video de fondo y musica, ver
-    // NochesFexpoService), pero el allowlist es unico para todo el servicio -- no hay forma de
-    // acotarlo por bucket sin reescribir la firma de save(). "audio/mp3" no es estandar, pero
-    // algunos navegadores lo mandan para un .mp3 en vez de "audio/mpeg".
+    // .mp4/.webm/.mp3 y sus mime: solo los usan los buckets NOCHES (video de fondo y musica, ver
+    // NochesFexpoService) y NOTICIAS (video, ver NoticiasService), pero el allowlist es unico
+    // para todo el servicio -- no hay forma de acotarlo por bucket sin reescribir la firma de
+    // save(). "audio/mp3" no es estandar, pero algunos navegadores lo mandan para un .mp3 en
+    // vez de "audio/mpeg".
     private static final Set<String> ALLOWED_EXT =
             Set.of(".png", ".jpg", ".jpeg", ".webp", ".gif", ".pdf", ".mp4", ".webm", ".mp3");
     private static final Set<String> ALLOWED_MIME = Set.of(
@@ -41,7 +42,9 @@ public class FileStorageService {
         /** Plano de la feria, uno por edicion (ver V13 y PlanoService). */
         PLANOS("planos"),
         /** Foto o video de fondo de una noche de la cartelera (ver V26 y NochesFexpoService). */
-        NOCHES("noches");
+        NOCHES("noches"),
+        /** Foto o video de una noticia del carrusel publico (ver V42 y NoticiasService). */
+        NOTICIAS("noticias");
 
         private final String dir;
         Bucket(String dir) { this.dir = dir; }
