@@ -3,7 +3,7 @@ import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue';
 import { url as urlApi } from '../config.js';
 import { aviso } from '../ui/alerta.js';
 import { vFiltro, CELULAR_VALIDO } from '../ui/filtroEntrada.js';
-import { escucharNoches } from '../nochesEnVivo.js';
+import { escucharListasPublicas, SUSCRIPCION_NOCHES, SUSCRIPCION_NOTICIAS } from '../publicoEnVivo.js';
 import { IDIOMAS, TEXTOS } from '../i18n/feriaPublica.js';
 
 // Idioma de la vista: español o portugués (selector ES | PT arriba a la derecha). Se recuerda
@@ -83,12 +83,13 @@ function diaDelMes(iso) {
 // silueta animada de "por revelar"; cuando no subió foto/video, la tarjeta se queda con el
 // fondo de color plano de siempre.
 //
-// En vivo por WebSocket (ver nochesEnVivo.js / NochesFexpoEventPublisher): cada alta,
+// En vivo por WebSocket (ver publicoEnVivo.js / NochesFexpoEventPublisher): cada alta,
 // edición, foto nueva o baja hecha en el panel llega aquí sola, sin recargar la página.
 // Mientras no haya llegado nada (null) se usa lo que trajo /api/publico/feria; desde entonces
 // manda lo recibido en vivo, que siempre es igual o más reciente.
 const nochesEnVivo = ref(null);
-let dejarDeEscucharNoches = null;
+// Una sola conexión para las noches y las noticias (ver onMounted).
+let dejarDeEscucharPublico = null;
 
 const nochesFexpo = computed(() => {
   const noches = nochesEnVivo.value ?? datos.value?.noches ?? [];
@@ -103,26 +104,187 @@ const nochesFexpo = computed(() => {
   }));
 });
 
-// Música de cada noche (V38, se sube desde el panel "Noches de FEXPO"). Suena mientras el
-// cursor está sobre la tarjeta y se apaga con un fundido corto al salir. En pantallas
-// táctiles no existe "encima": ahí un toque la enciende o la apaga, igual que Enter/Espacio
-// con el teclado.
+// Noticias (V42, se cargan desde el panel "Noticias"): carrusel entre la cartelera de artistas
+// y los stands, con las 10 últimas registradas. En vivo por WebSocket, igual que las noches:
+// mientras no haya llegado nada (null) se usa lo que trajo /api/publico/feria. Lo que llega en
+// vivo es la lista ENTERA (la comparte con /feria/noticias), de ahí el slice.
+const MAXIMO_NOTICIAS_CARRUSEL = 10;
+const noticiasEnVivo = ref(null);
+
+const noticias = computed(() =>
+  (noticiasEnVivo.value ?? datos.value?.noticias ?? []).slice(0, MAXIMO_NOTICIAS_CARRUSEL).map((n) => ({
+    ...n,
+    urlMedio: urlApi(n.urlMedio),
+    fechaTexto: formatearFechaNoticia(n.fecha),
+  })));
+
+function formatearFechaNoticia(iso) {
+  if (!iso) return '';
+  // Mediodía fijo por lo mismo que formatearFechaNoche: en Bolivia la medianoche UTC es el día anterior.
+  return new Date(`${iso}T12:00:00`).toLocaleDateString(locale.value, { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+// Carrusel: una noticia por "página" de un contenedor con scroll horizontal y scroll-snap. El
+// desplazamiento lo hace el propio navegador, así deslizar con el dedo o el touchpad es nativo;
+// con ratón se arrastra (ver alPresionarPista). En PC hay además dos flechas tenues a los lados.
+//
+// Avanza solo cada 4 s. El temporizador se reprograma cada vez que el carrusel se detiene (por el
+// avance automático o porque alguien deslizó), así nunca salta justo después de que la persona
+// eligió una noticia. Se pausa mientras el cursor está encima (para leer) o se está arrastrando.
+const INTERVALO_NOTICIAS_MS = 4000;
+const pistaNoticias = ref(null);
+const noticiaActual = ref(0);
+let temporizadorNoticias = null;
+let finDeScroll = null;
+let cursorSobreNoticias = false;
+let arrastre = null;
+// true mientras se mueve por el avance automático: ese scroll no reinicia la cuenta de 4 s.
+let avanceAutomatico = false;
+const arrastrandoNoticias = ref(false);
+
+const movimientoReducido = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+function irANoticia(i, suave = true) {
+  const pista = pistaNoticias.value;
+  if (!pista || !noticias.value.length) return;
+  const total = noticias.value.length;
+  const destino = ((i % total) + total) % total;
+  pista.scrollTo({
+    left: destino * pista.clientWidth,
+    behavior: suave && !movimientoReducido.matches ? 'smooth' : 'auto',
+  });
+}
+
+// Flechas laterales (solo PC): la anterior desde la primera va a la última, y al revés.
+function noticiaVecina(paso) {
+  avanceAutomatico = false;
+  irANoticia(noticiaActual.value + paso);
+}
+
+function programarNoticias() {
+  clearTimeout(temporizadorNoticias);
+  if (noticias.value.length < 2 || cursorSobreNoticias || arrastre) return;
+  temporizadorNoticias = setTimeout(() => {
+    avanceAutomatico = true;
+    irANoticia(noticiaActual.value + 1);
+    // La siguiente cuenta empieza ya, no cuando termina la animación: así cambia cada 4 s justos.
+    programarNoticias();
+  }, INTERVALO_NOTICIAS_MS);
+}
+
+function alDesplazarNoticias() {
+  const pista = pistaNoticias.value;
+  if (!pista) return;
+  if (!avanceAutomatico) clearTimeout(temporizadorNoticias);
+  clearTimeout(finDeScroll);
+  // "scrollend" no existe en Safari: se da por terminado cuando deja de moverse un momento.
+  finDeScroll = setTimeout(() => {
+    noticiaActual.value = Math.round(pista.scrollLeft / Math.max(1, pista.clientWidth));
+    if (avanceAutomatico) avanceAutomatico = false;
+    else programarNoticias();
+  }, 120);
+}
+
+function alEntrarNoticias(e) {
+  if (e.pointerType !== 'mouse') return;
+  cursorSobreNoticias = true;
+  avanceAutomatico = false;
+  clearTimeout(temporizadorNoticias);
+}
+function alSalirNoticias(e) {
+  if (e.pointerType !== 'mouse') return;
+  cursorSobreNoticias = false;
+  programarNoticias();
+}
+
+// Arrastrar con el ratón. El dedo y el touchpad ya desplazan solos; el ratón no, y sin esto en
+// PC solo se podría cambiar de noticia con los puntos. Durante el arrastre se apaga el snap
+// (si no, el navegador lo corrige a cada píxel) y al soltar se encaja en la más cercana.
+function alPresionarPista(e) {
+  // Con el dedo el navegador desplaza solo; basta con que el avance automático no le gane la mano.
+  // La cuenta se reprograma cuando el deslizamiento termina (alDesplazarNoticias).
+  if (e.pointerType !== 'mouse') {
+    avanceAutomatico = false;
+    clearTimeout(temporizadorNoticias);
+    return;
+  }
+  if (e.button !== 0 || noticias.value.length < 2) return;
+  arrastre = { x: e.clientX, inicio: pistaNoticias.value.scrollLeft, movido: false };
+  avanceAutomatico = false;
+  clearTimeout(temporizadorNoticias);
+  window.addEventListener('pointermove', alMoverPista);
+  window.addEventListener('pointerup', alSoltarPista, { once: true });
+}
+function alMoverPista(e) {
+  if (!arrastre) return;
+  const dx = e.clientX - arrastre.x;
+  if (!arrastre.movido && Math.abs(dx) < 5) return;
+  arrastre.movido = true;
+  arrastrandoNoticias.value = true;
+  pistaNoticias.value.scrollLeft = arrastre.inicio - dx;
+}
+function alSoltarPista(e) {
+  window.removeEventListener('pointermove', alMoverPista);
+  const pista = pistaNoticias.value;
+  const datosArrastre = arrastre;
+  arrastre = null;
+  arrastrandoNoticias.value = false;
+  if (!pista || !datosArrastre) return;
+  if (!datosArrastre.movido) return programarNoticias();
+  // Un tirón corto ya cambia de noticia: no hace falta arrastrar media pantalla.
+  const dx = e.clientX - datosArrastre.x;
+  const desde = Math.round(datosArrastre.inicio / Math.max(1, pista.clientWidth));
+  const umbral = Math.min(80, pista.clientWidth * 0.15);
+  const destino = dx <= -umbral ? desde + 1 : dx >= umbral ? desde - 1 : desde;
+  irANoticia(Math.max(0, Math.min(noticias.value.length - 1, destino)));
+}
+
+// Si cambia la lista (llega una noticia nueva por WebSocket) o el tamaño de la ventana, se
+// vuelve a encajar en la noticia actual sin animación.
+watch(() => noticias.value.length, async (total) => {
+  if (noticiaActual.value >= total) noticiaActual.value = 0;
+  await nextTick();
+  irANoticia(noticiaActual.value, false);
+  programarNoticias();
+});
+function alRedimensionar() {
+  irANoticia(noticiaActual.value, false);
+}
+onMounted(() => window.addEventListener('resize', alRedimensionar));
+onUnmounted(() => {
+  window.removeEventListener('resize', alRedimensionar);
+  window.removeEventListener('pointermove', alMoverPista);
+  clearTimeout(temporizadorNoticias);
+  clearTimeout(finDeScroll);
+});
+
+// Música de cada noche (V38, se sube desde el panel "Noches de FEXPO"). Suena solo mientras el
+// cursor está sobre la tarjeta y se apaga con un fundido corto al salir. En pantallas táctiles
+// no existe "encima": ahí un toque la enciende o la apaga, igual que Enter/Espacio con el
+// teclado, y sobre las tarjetas se avisa que hay que tocarlas (ver esPantallaTactil). Dentro de
+// la tarjeta no hay ningún botón, ícono ni aviso.
 //
 // Un solo reproductor para toda la sección: pasar a otra tarjeta cambia la pista, así nunca
 // suenan dos a la vez. Volver a la misma tarjeta sigue donde se quedó.
 //
 // Los navegadores no dejan sonar audio hasta que la persona interactuó con la página (clic,
-// toque o tecla); pasar el cursor NO cuenta. Si play() se rechaza por eso, la tarjeta muestra
-// "Haz clic para escuchar" y ese primer clic ya la hace sonar.
+// toque o tecla EN CUALQUIER PARTE); pasar el cursor o hacer scroll con la rueda NO cuenta, y
+// ningún código puede saltarse esa regla. Lo que se hace es aprovecharla sin que se note: la
+// primera interacción en cualquier lugar de la página desbloquea el reproductor en silencio y,
+// si el cursor ya estaba sobre una tarjeta, esa música arranca en ese momento.
 const VOLUMEN_MUSICA = 0.8;
 const nocheSonando = ref(null);     // id de la noche que suena
-const sonidoBloqueado = ref(null);  // id de la noche que el navegador no dejó sonar
 let reproductor = null;
 let pistaActual = null;             // URL cargada (a.src devuelve la absoluta: no sirve para comparar)
 let fundido = null;
-// La noche que DEBERÍA sonar. play() es asíncrono (tiene que cargar el MP3): si el cursor se
-// va antes de que termine, al volver ya no es la deseada y no debe empezar a sonar.
+// La noche que DEBERÍA sonar (el cursor está encima). play() es asíncrono (tiene que cargar el
+// MP3): si el cursor se va antes de que termine, ya no es la deseada y no debe empezar a sonar.
 let nocheDeseada = null;
+// La noche sobre la que está el cursor pero que el navegador todavía no dejó sonar.
+let nocheEnEspera = null;
+let sonidoDesbloqueado = false;
+// Tipo del último puntero que pulsó: el click de Safari no trae pointerType.
+let ultimoPuntero = 'mouse';
 
 function obtenerReproductor() {
   if (!reproductor) {
@@ -159,28 +321,31 @@ async function sonarNoche(n) {
     a.src = n.urlAudio;
     pistaActual = n.urlAudio;
   }
+  a.muted = false;
   a.volume = 0;
   try {
     await a.play();
   } catch (e) {
-    // NotAllowedError = falta esa primera interacción. Cualquier otro fallo (archivo que ya no
-    // existe, pista reemplazada a mitad de carga) se ignora: la tarjeta sigue, sin música.
-    if (nocheDeseada === n.id && e?.name === 'NotAllowedError') sonidoBloqueado.value = n.id;
+    // NotAllowedError = falta esa primera interacción: se queda esperando, sin avisar nada, y
+    // arranca con el primer clic/toque/tecla (ver desbloquearSonido). Cualquier otro fallo
+    // (archivo que ya no existe, pista reemplazada a mitad de carga) se ignora.
+    if (nocheDeseada === n.id && e?.name === 'NotAllowedError') nocheEnEspera = n;
     return;
   }
+  sonidoDesbloqueado = true;
   if (nocheDeseada !== n.id) {
     // El cursor se fue mientras cargaba: que no se quede sonando en silencio de fondo.
     if (nocheDeseada === null) a.pause();
     return;
   }
+  nocheEnEspera = null;
   nocheSonando.value = n.id;
-  sonidoBloqueado.value = null;
   fundirVolumen(VOLUMEN_MUSICA, 400);
 }
 
 function callarNoche(n) {
   if (nocheDeseada === n.id) nocheDeseada = null;
-  if (sonidoBloqueado.value === n.id) sonidoBloqueado.value = null;
+  if (nocheEnEspera?.id === n.id) nocheEnEspera = null;
   if (nocheSonando.value !== n.id) return;
   nocheSonando.value = null;
   fundirVolumen(0, 300, () => obtenerReproductor().pause());
@@ -189,13 +354,70 @@ function callarNoche(n) {
 // Sin fundido: para cuando la música tiene que parar ya (pestaña oculta, pista quitada).
 function callarYa() {
   nocheDeseada = null;
+  nocheEnEspera = null;
   nocheSonando.value = null;
   clearInterval(fundido);
   reproductor?.pause();
 }
 
-// Clic, toque o teclado: la vía de las pantallas táctiles y la que desbloquea el sonido.
-function alternarNoche(n) {
+// Primera interacción en cualquier parte de la página. Si el cursor está sobre una tarjeta que
+// quedó esperando, esa música arranca ahora. Si no, se "ceba" el reproductor con un play/pause
+// en silencio dentro del gesto (Safari lo exige al propio elemento, Chrome no), para que pasar
+// el cursor después ya suene directamente.
+function desbloquearSonido() {
+  if (sonidoDesbloqueado) return;
+  if (nocheEnEspera) {
+    const n = nocheEnEspera;
+    nocheEnEspera = null;
+    sonarNoche(n);
+    return;
+  }
+  const pista = pistaActual || primeraPista();
+  if (!pista || nocheSonando.value !== null) return;
+  const a = obtenerReproductor();
+  if (pistaActual !== pista) {
+    a.src = pista;
+    pistaActual = pista;
+  }
+  // muted y no volume = 0: en iOS el volumen no se puede cambiar desde código.
+  a.muted = true;
+  a.play()
+    .then(() => {
+      sonidoDesbloqueado = true;
+      if (nocheDeseada === null) a.pause();
+    })
+    .catch(() => {})
+    .finally(() => { a.muted = false; });
+}
+
+// Celular o tablet: sin cursor que "pase por encima", la música solo suena tocando la tarjeta.
+// Se decide por el dispositivo (sin hover y con puntero de dedo), no por el ancho de la ventana:
+// una ventana de PC angosta sigue teniendo cursor. Reactivo por si cambia (tablet con ratón).
+const consultaTactil = window.matchMedia('(hover: none) and (pointer: coarse)');
+const esPantallaTactil = ref(consultaTactil.matches);
+function alCambiarTactil(e) {
+  esPantallaTactil.value = e.matches;
+}
+consultaTactil.addEventListener('change', alCambiarTactil);
+onUnmounted(() => consultaTactil.removeEventListener('change', alCambiarTactil));
+const hayMusicaEnNoches = computed(() => nochesFexpo.value.some((n) => n.urlAudio));
+
+function primeraPista() {
+  return nochesFexpo.value.find((x) => x.urlAudio)?.urlAudio || null;
+}
+
+const EVENTOS_DESBLOQUEO = ['pointerdown', 'keydown', 'touchend'];
+
+// Clic, toque o teclado sobre la tarjeta. Con ratón no apaga: la música depende solo de que el
+// cursor esté encima (un clic encima, si faltaba el desbloqueo, la hace sonar). Con dedo o
+// teclado alterna, porque ahí no hay "encima".
+function alPulsarNoche(n) {
+  if (!n.urlAudio) return;
+  if (ultimoPuntero === 'mouse') sonarNoche(n);
+  else if (nocheSonando.value === n.id) callarNoche(n);
+  else sonarNoche(n);
+}
+function alTeclaNoche(n) {
   if (!n.urlAudio) return;
   if (nocheSonando.value === n.id) callarNoche(n);
   else sonarNoche(n);
@@ -208,6 +430,9 @@ function alEntrarNoche(e, n) {
 }
 function alSalirNoche(e, n) {
   if (e.pointerType === 'mouse') callarNoche(n);
+}
+function alPresionar(e) {
+  ultimoPuntero = e.pointerType || 'mouse';
 }
 
 // Si desde el panel quitan o cambian la música de la noche que está sonando (llega en vivo
@@ -223,9 +448,15 @@ watch(nochesFexpo, (lista) => {
 function alCambiarVisibilidad() {
   if (document.hidden) callarYa();
 }
-onMounted(() => document.addEventListener('visibilitychange', alCambiarVisibilidad));
+onMounted(() => {
+  document.addEventListener('visibilitychange', alCambiarVisibilidad);
+  document.addEventListener('pointerdown', alPresionar, true);
+  for (const ev of EVENTOS_DESBLOQUEO) document.addEventListener(ev, desbloquearSonido, true);
+});
 onUnmounted(() => {
   document.removeEventListener('visibilitychange', alCambiarVisibilidad);
+  document.removeEventListener('pointerdown', alPresionar, true);
+  for (const ev of EVENTOS_DESBLOQUEO) document.removeEventListener(ev, desbloquearSonido, true);
   callarYa();
   if (reproductor) {
     reproductor.removeAttribute('src');
@@ -418,9 +649,10 @@ onMounted(() => {
     ahora.value = Date.now();
   }, 1000);
 
-  dejarDeEscucharNoches = escucharNoches((lista) => {
-    nochesEnVivo.value = lista;
-  });
+  dejarDeEscucharPublico = escucharListasPublicas([
+    { ...SUSCRIPCION_NOCHES, onLista: (lista) => { nochesEnVivo.value = lista; } },
+    { ...SUSCRIPCION_NOTICIAS, onLista: (lista) => { noticiasEnVivo.value = lista; } },
+  ]);
 });
 
 // Entrada animada de las tarjetas de stands al hacer scroll. La clase que las oculta
@@ -452,7 +684,7 @@ onUnmounted(() => {
   document.documentElement.classList.remove('fx-scroll-suave', 'fx-revela-js');
   document.documentElement.lang = langAnterior;
   clearInterval(intervaloReloj);
-  dejarDeEscucharNoches?.();
+  dejarDeEscucharPublico?.();
   observadorStands?.disconnect();
 });
 
@@ -578,9 +810,12 @@ const cuentaRegresiva = computed(() => {
       <div class="contenedor">
         <h2 class="titulo-seccion titulo-noches">{{ t.noches.titulo }}</h2>
         <p class="subtitulo-seccion subtitulo-noches">{{ t.noches.subtitulo }}</p>
+        <!-- Solo en pantallas táctiles: ahí no hay cursor, la música suena al tocar la tarjeta. -->
+        <p v-if="esPantallaTactil && hayMusicaEnNoches" class="noches-aviso-tactil">{{ t.noches.tocaParaEscuchar }}</p>
         <div class="grid-noches">
-          <!-- Con música (V38): suena mientras el cursor está encima; clic, toque o
-               Enter/Espacio la encienden o la apagan (ver sonarNoche en el script). -->
+          <!-- Con música (V38): suena mientras el cursor está encima y sigue donde quedó al
+               volver; con toque o Enter/Espacio se enciende o se apaga (ver sonarNoche).
+               Sin botón, ícono ni aviso dentro de la tarjeta. -->
           <article
             class="noche-card"
             :class="{
@@ -596,13 +831,10 @@ const cuentaRegresiva = computed(() => {
             :aria-pressed="n.urlAudio ? nocheSonando === n.id : undefined"
             @pointerenter="alEntrarNoche($event, n)"
             @pointerleave="alSalirNoche($event, n)"
-            @click="alternarNoche(n)"
-            @keydown.enter.prevent="alternarNoche(n)"
-            @keydown.space.prevent="alternarNoche(n)"
+            @click="alPulsarNoche(n)"
+            @keydown.enter.prevent="alTeclaNoche(n)"
+            @keydown.space.prevent="alTeclaNoche(n)"
           >
-            <p v-if="sonidoBloqueado === n.id" class="noche-aviso-sonido" role="status">
-              🔊 {{ t.noches.clicParaEscuchar }}
-            </p>
             <div v-if="n.urlMedio" class="noche-media" aria-hidden="true">
               <!-- Copia borrosa y ampliada de la misma foto: rellena lo que deja libre el
                    "contain" de abajo. Sin esto, una foto apaisada dentro de una tarjeta
@@ -638,6 +870,78 @@ const cuentaRegresiva = computed(() => {
               </div>
             </div>
           </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Noticias (V42): las 10 más recientes, cargadas desde el panel "Noticias" y en vivo por
+         /topic/publico/noticias. Carrusel deslizable (dedo, touchpad o arrastrando con el
+         ratón) que avanza solo cada 4 s. Todas las tarjetas miden lo mismo: el medio se recorta
+         (cover) al rectángulo, sea cual sea la proporción de la foto o el video. Sin noticias,
+         la sección no se muestra. -->
+    <section id="noticias" class="seccion noticias" v-if="noticias.length">
+      <div class="contenedor">
+        <h2 class="titulo-seccion">{{ t.noticias.titulo }}</h2>
+        <p class="subtitulo-seccion">{{ t.noticias.subtitulo }}</p>
+        <div
+          class="noticias-carrusel"
+          role="region"
+          aria-roledescription="carousel"
+          :aria-label="t.noticias.region"
+          @pointerenter="alEntrarNoticias"
+          @pointerleave="alSalirNoticias"
+        >
+          <div class="noticias-marco">
+          <div
+            ref="pistaNoticias"
+            class="noticias-pista"
+            :class="{ arrastrando: arrastrandoNoticias }"
+            @scroll.passive="alDesplazarNoticias"
+            @pointerdown="alPresionarPista"
+          >
+            <article
+              v-for="(n, i) in noticias"
+              :key="n.id"
+              class="noticia"
+              aria-roledescription="slide"
+              :aria-label="t.noticias.irA.replace('{n}', i + 1).replace('{total}', noticias.length)"
+            >
+              <div class="noticia-medio">
+                <video v-if="n.medioTipo === 'VIDEO'" :src="n.urlMedio" muted loop autoplay playsinline draggable="false" />
+                <img v-else :src="n.urlMedio" :alt="n.titulo" draggable="false" loading="lazy" />
+              </div>
+              <div class="noticia-texto">
+                <time class="noticia-fecha" :datetime="n.fecha">{{ n.fechaTexto }}</time>
+                <h3 class="noticia-titulo">{{ n.titulo }}</h3>
+                <p class="noticia-contenido">{{ n.texto }}</p>
+              </div>
+            </article>
+          </div>
+          <!-- Flechas tenues a los lados, solo en PC (en celular se desliza con el dedo). -->
+          <template v-if="noticias.length > 1">
+            <button type="button" class="noticias-flecha noticias-flecha--anterior" :aria-label="t.noticias.anterior" @click="noticiaVecina(-1)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+            </button>
+            <button type="button" class="noticias-flecha noticias-flecha--siguiente" :aria-label="t.noticias.siguiente" @click="noticiaVecina(1)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
+            </button>
+          </template>
+          </div>
+          <div v-if="noticias.length > 1" class="noticias-puntos">
+            <button
+              v-for="(n, i) in noticias"
+              :key="n.id"
+              type="button"
+              class="noticias-punto"
+              :class="{ activo: i === noticiaActual }"
+              :aria-label="t.noticias.irA.replace('{n}', i + 1).replace('{total}', noticias.length)"
+              :aria-current="i === noticiaActual ? 'true' : undefined"
+              @click="irANoticia(i)"
+            ></button>
+          </div>
+          <div class="noticias-ver-todas">
+            <RouterLink to="/feria/noticias" class="btn btn-primario">{{ t.noticias.verTodas }}</RouterLink>
+          </div>
         </div>
       </div>
     </section>
@@ -1489,24 +1793,154 @@ html.fx-scroll-suave {
     0 0 28px color-mix(in srgb, var(--color-noche) 55%, transparent);
 }
 
-/* "Haz clic para escuchar": el navegador frenó el sonido porque nadie hizo clic en la página
-   todavía. Centrado debajo del recuadro de la fecha, sin tapar el texto de abajo. La tarjeta
-   no lleva ningún ícono de música a propósito: solo aparece este aviso cuando hace falta. */
-.noche-aviso-sonido {
-  position: absolute;
-  top: 4.6rem;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 3;
-  margin: 0;
-  padding: 0.35rem 0.8rem;
+/* Aviso de las noches solo en pantallas táctiles: tocar la tarjeta hace sonar la música. */
+.noches-aviso-tactil {
+  display: inline-block;
+  margin: -0.4rem 0 1.4rem;
+  padding: 0.4rem 0.9rem;
   border-radius: 999px;
-  background: rgba(6, 4, 18, 0.82);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   color: #ffffff;
-  font-size: 0.76rem;
+  font-size: 0.85rem;
   font-weight: 600;
-  white-space: nowrap;
+}
+
+/* Noticias (V42). Todas las tarjetas son el mismo rectángulo horizontal: en PC el medio llena la
+   tarjeta entera y el texto va encima, sobre un degradado; en celular el medio es un 16:9 arriba
+   y el texto un bloque de alto fijo abajo, así ninguna noticia mide distinto por tener más texto. */
+.noticias-carrusel { position: relative; }
+
+.noticias-pista {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  border-radius: 18px;
+  cursor: grab;
+  touch-action: pan-x pan-y;
+}
+.noticias-pista::-webkit-scrollbar { display: none; }
+.noticias-pista.arrastrando { scroll-snap-type: none; cursor: grabbing; user-select: none; }
+
+.noticia {
+  position: relative;
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  aspect-ratio: 21 / 9;
+  overflow: hidden;
+  background: #0b0f08;
+  color: #ffffff;
+}
+
+/* overflow + imagen en absoluto: una foto vertical no puede estirar el cuadro (con aspect-ratio,
+   el contenido que sobra agranda la caja en vez de recortarse). */
+.noticia-medio { position: absolute; inset: 0; overflow: hidden; }
+.noticia-medio img, .noticia-medio video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+.noticia-texto {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 4.5rem 2rem 1.8rem;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.6) 55%, transparent 100%);
+}
+.noticia-fecha {
+  display: inline-block;
+  margin-bottom: 0.45rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  background: var(--fx-lima);
+  color: #10280a;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.noticia-titulo {
+  margin: 0 0 0.4rem;
+  font-family: 'Anton', sans-serif;
+  font-weight: 400;
+  font-size: clamp(1.3rem, 2.4vw, 2rem);
+  line-height: 1.15;
+  max-width: 40ch;
+}
+.noticia-contenido {
+  margin: 0;
+  max-width: 75ch;
+  color: rgba(255, 255, 255, 0.88);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.noticias-marco { position: relative; }
+
+/* Flechas: tenues para no tapar la foto; se ven del todo al pasar por encima de ellas. Solo con
+   ratón: en pantallas táctiles no aparecen. */
+.noticias-flecha {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: none;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  color: #ffffff;
+  cursor: pointer;
+  opacity: 0.45;
+  transform: translateY(-50%);
+  transition: opacity 0.2s ease, background 0.2s ease;
+  backdrop-filter: blur(2px);
+}
+.noticias-flecha svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.noticias-flecha--anterior { left: 14px; }
+.noticias-flecha--siguiente { right: 14px; }
+.noticias-marco:hover .noticias-flecha { opacity: 0.7; }
+.noticias-flecha:hover, .noticias-flecha:focus-visible { opacity: 1; background: rgba(0, 0, 0, 0.55); }
+.noticias-flecha:focus-visible { outline: 2px solid var(--fx-lima); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) {
+  .noticias-flecha { display: grid; }
+}
+
+.noticias-ver-todas { display: flex; justify-content: center; margin-top: 1.2rem; }
+
+.noticias-puntos { display: flex; justify-content: center; gap: 0.5rem; margin-top: 1rem; }
+.noticias-punto {
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--fx-borde);
+  cursor: pointer;
+  transition: width 0.25s ease, background 0.25s ease;
+}
+.noticias-punto.activo { width: 28px; background: var(--fx-rojo); }
+.noticias-punto:focus-visible { outline: 2px solid var(--fx-rojo); outline-offset: 2px; }
+
+@media (max-width: 720px) {
+  .noticia { aspect-ratio: auto; display: flex; flex-direction: column; background: var(--fx-panel); color: var(--fx-texto); border: 1px solid var(--fx-borde); border-radius: 18px; }
+  .noticias-pista { gap: 0; }
+  .noticia-medio { position: relative; inset: auto; aspect-ratio: 16 / 9; flex-shrink: 0; }
+  .noticia-texto { position: static; padding: 1rem 1.1rem 1.2rem; background: none; height: 11.5rem; box-sizing: border-box; }
+  .noticia-titulo { font-size: 1.25rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .noticia-contenido { color: var(--fx-muted); font-size: 0.92rem; }
 }
 
 /* Quiero exponer: sección roja a propósito, para que se note que es una acción distinta

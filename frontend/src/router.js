@@ -2,6 +2,15 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { useAuthStore } from './stores/auth';
 import { usePermisosStore } from './stores/permisos';
 
+/*
+ * Título de la pestaña del navegador. La vista pública de la feria lleva el nombre de marca; el
+ * resto del sistema conserva el de index.html. index.html pone el de la feria ANTES de que cargue
+ * Vue (ver su script del <head>), así no se ve "Casetas" ni un instante: si cambias este texto,
+ * cámbialo también allí.
+ */
+const TITULO_PESTANA_FERIA = 'FEXPO UAP V2.0';
+const TITULO_PESTANA_SISTEMA = 'FEXPO UAP — Casetas';
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -20,7 +29,13 @@ const router = createRouter({
       // Vista pública de la feria: sin autenticación, para QR, web pública, APK sin login
       path: '/feria',
       component: () => import('./views/FeriaPublica.vue'),
-      meta: { titulo: 'FEXPO UAP', publico: true }
+      meta: { titulo: 'FEXPO UAP', publico: true, tituloPestana: TITULO_PESTANA_FERIA }
+    },
+    {
+      // Todas las noticias de la edición activa, agrupadas por día (el "Ver todas" del carrusel).
+      path: '/feria/noticias',
+      component: () => import('./views/FeriaNoticias.vue'),
+      meta: { titulo: 'Noticias', publico: true, tituloPestana: TITULO_PESTANA_FERIA }
     },
     {
       // Layout global: AppShell (menu/cabecera fijos) con el router-view dentro.
@@ -49,6 +64,7 @@ const router = createRouter({
         { path: 'direccion', component: () => import('./views/Direccion.vue'), meta: { titulo: 'Tablero de dirección', requiereAuth: true, pantalla: 'direccion'} },
         { path: 'reportes', component: () => import('./views/Reportes.vue'), meta: { titulo: 'Reportes', requiereAuth: true, pantalla: 'reportes'} },
         { path: 'noches-fexpo', component: () => import('./views/NochesFexpo.vue'), meta: { titulo: 'Noches de FEXPO', requiereAuth: true, pantalla: 'noches-fexpo' } },
+        { path: 'noticias', component: () => import('./views/Noticias.vue'), meta: { titulo: 'Noticias', requiereAuth: true, pantalla: 'noticias' } },
         { path: 'inscripciones', component: () => import('./views/Inscripciones.vue'), meta: { titulo: 'Inscripciones', requiereAuth: true, pantalla: 'inscripciones'} },
         { path: 'interesados', component: () => import('./views/Interesados.vue'), meta: { titulo: 'Interesados en exponer', requiereAuth: true, pantalla: 'interesados' } },
         { path: 'notificaciones', component: () => import('./views/Notificaciones.vue'), meta: { titulo: 'Notificaciones', requiereAuth: true, pantalla: 'notificaciones'} },
@@ -93,6 +109,10 @@ router.beforeEach(async (to) => {
     await permisos.asegurar();
     if (!permisos.puedeVer(to.meta.pantalla)) return '/';
   }
+});
+
+router.afterEach((to) => {
+  document.title = to.meta.tituloPestana || TITULO_PESTANA_SISTEMA;
 });
 
 export default router;

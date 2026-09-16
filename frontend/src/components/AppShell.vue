@@ -62,6 +62,7 @@ const TODOS = [
   { a: '/inscripciones', p: 'inscripciones', g: 'Feria', icono: '📋', txt: 'Inscripciones' },
   { a: '/interesados', p: 'interesados', g: 'Feria', icono: '🙋', txt: 'Interesados' },
   { a: '/noches-fexpo', p: 'noches-fexpo', g: 'Feria', icono: '🎤', txt: 'Noches de FEXPO' },
+  { a: '/noticias', p: 'noticias', g: 'Feria', icono: '📰', txt: 'Noticias' },
 
   // --- Acreditacion: la puerta ---
   { a: '/credenciales', p: 'credenciales', g: 'Acreditacion', icono: '🪪', txt: 'Credenciales' },

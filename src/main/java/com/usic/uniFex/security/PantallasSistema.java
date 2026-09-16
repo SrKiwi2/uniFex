@@ -39,6 +39,7 @@ public enum PantallasSistema {
     DIRECCION("direccion", "Tablero de dirección", "Administracion"),
     REPORTES("reportes", "Reportes", "Administracion"),
     NOCHES_FEXPO("noches-fexpo", "Noches de FEXPO", "Feria"),
+    NOTICIAS("noticias", "Noticias", "Feria"),
     CREDENCIALES("credenciales", "Credenciales", "Acreditacion"),
     ESCANER("escaner", "Escanear credencial", "Acreditacion"),
     USUARIOS("usuarios", "Usuarios", "Administracion"),
