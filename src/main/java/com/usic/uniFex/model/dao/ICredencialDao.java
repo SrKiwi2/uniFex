@@ -22,7 +22,7 @@ import com.usic.uniFex.model.entity.Responsable;
  */
 public interface ICredencialDao extends JpaRepository<Responsable, Long> {
 
-    String SELECT = """
+String SELECT = """
             SELECT r.id                                   AS responsableId,
                    p.nombre                               AS nombre,
                    p.paterno                              AS paterno,
@@ -53,25 +53,27 @@ public interface ICredencialDao extends JpaRepository<Responsable, Long> {
                     */
                    COALESCE(SUM(ip.costo), 0)             AS totalVenta,
                    string_agg(DISTINCT c.nombre, ', ')    AS categorias,
-                   string_agg(DISTINCT pu.codigo, ', ')   AS casetas
-              FROM responsable r
-              INNER JOIN persona p    ON p.id = r.id_persona
-              INNER JOIN entidad e    ON e.id = r.id_entidad
-              INNER JOIN inscripcion i ON i.id_entidad = e.id
-                                      AND (i."_estado" IS NULL OR i."_estado" <> 'X')
-              LEFT  JOIN inscripcion_puesto ip ON ip.id_inscripcion = i.id
-                                      AND (ip."_estado" IS NULL OR ip."_estado" <> 'X')
-              LEFT  JOIN puesto pu    ON pu.id = ip.id_puesto
-              LEFT  JOIN categoria c  ON c.id = pu.id_categoria
-             WHERE (r."_estado" IS NULL OR r."_estado" <> 'X')
-               AND (e."_estado" IS NULL OR e."_estado" <> 'X')
+                   string_agg(DISTINCT pu.codigo, ', ')   AS casetas,
+                   MAX(c.id)                              AS categoriaId
+             FROM responsable r
+             INNER JOIN persona p    ON p.id = r.id_persona
+             INNER JOIN entidad e    ON e.id = r.id_entidad
+             INNER JOIN inscripcion i ON i.id_entidad = e.id
+                                       AND (i."_estado" IS NULL OR i."_estado" <> 'X')
+             LEFT  JOIN inscripcion_puesto ip ON ip.id_inscripcion = i.id
+                                       AND (ip."_estado" IS NULL OR ip."_estado" <> 'X')
+             LEFT  JOIN puesto pu    ON pu.id = ip.id_puesto
+             LEFT  JOIN categoria c  ON c.id = pu.id_categoria
+            WHERE (r."_estado" IS NULL OR r."_estado" <> 'X')
+              AND (e."_estado" IS NULL OR e."_estado" <> 'X')
             """;
 
     String GROUP = """
              GROUP BY r.id, p.nombre, p.paterno, p.materno, p.ci, p.foto, r.es_titular,
                       r.es_extra, r.monto_extra, r.comprobante_extra,
-                      e.nombre, e.descripcion, i.id, i.pago_contado, i.img_comprobante
-            """;
+                      e.nombre, e.descripcion, i.id, i.pago_contado, i.img_comprobante,
+                      c.id
+             """;
 
     /**
      * Todos los responsables de la edicion activa, con sus datos y el estado de los requisitos.

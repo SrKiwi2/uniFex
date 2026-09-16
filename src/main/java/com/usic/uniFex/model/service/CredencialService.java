@@ -138,6 +138,7 @@ public class CredencialService {
                 limpio(f.getEntidad()),
                 limpio(f.getRubro()),
                 limpio(f.getCategorias()),
+                f.getCategoriaId(),
                 ordenarCasetas(f.getCasetas()),
                 f.getInscripcionId(),
                 conComprobante,

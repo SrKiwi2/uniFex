@@ -185,6 +185,7 @@ public class CredencialesApiController {
             m.put("entidad", c.entidad());
             m.put("rubro", c.rubro());
             m.put("categoria", c.categoria());
+            m.put("categoriaId", c.categoriaId());
             m.put("casetas", c.casetas());
             m.put("inscripcionId", c.inscripcionId());
             m.put("conComprobante", c.conComprobante());

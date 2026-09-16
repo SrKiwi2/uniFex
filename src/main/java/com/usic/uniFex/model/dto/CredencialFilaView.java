@@ -28,4 +28,5 @@ public interface CredencialFilaView {
     java.math.BigDecimal getTotalVenta();
     String getCategorias();
     String getCasetas();
+    Long getCategoriaId();
 }

@@ -30,6 +30,7 @@ public record CredencialDTO(
         String entidad,
         String rubro,
         String categoria,
+        Long categoriaId,
         /** Los numeros de caseta del expositor, ya ordenados: "14, 15, 16". */
         String casetas,
         Long inscripcionId,
