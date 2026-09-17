@@ -60,6 +60,7 @@ const router = createRouter({
         { path: 'roles', component: () => import('./views/Roles.vue'), meta: { titulo: 'Roles', requiereAuth: true, pantalla: 'roles'} },
         { path: 'mantenimiento', component: () => import('./views/Mantenimiento.vue'), meta: { titulo: 'Mantenimiento', requiereAuth: true, pantalla: 'mantenimiento'} },
         { path: 'errores', component: () => import('./views/Errores.vue'), meta: { titulo: 'Registro de errores', requiereAuth: true, soloAdministracion: true } },
+        { path: 'whatsapp', component: () => import('./views/WhatsApp.vue'), meta: { titulo: 'Instancias de WhatsApp', requiereAuth: true, soloAdministracion: true } },
         { path: 'personas', component: () => import('./views/Personas.vue'), meta: { titulo: 'Personas', requiereAuth: true, pantalla: 'personas'} },
         { path: 'personal-apoyo', component: () => import('./views/PersonalApoyo.vue'), meta: { titulo: 'Personal de apoyo', requiereAuth: true, pantalla: 'personal-apoyo' } },
         { path: 'direccion', component: () => import('./views/Direccion.vue'), meta: { titulo: 'Tablero de dirección', requiereAuth: true, pantalla: 'direccion'} },

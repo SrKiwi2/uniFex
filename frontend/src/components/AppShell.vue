@@ -88,6 +88,7 @@ const TODOS = [
   { a: '/personal-apoyo', p: 'personal-apoyo', g: 'Administracion', icono: '👥', txt: 'Personal de apoyo' },
   { a: '/mantenimiento', p: 'mantenimiento', g: 'Administracion', icono: '⚙️', txt: 'Mantenimiento' },
   { a: '/errores', soloAdministracion: true, g: 'Administracion', icono: '⚠️', txt: 'Registro de errores' },
+  { a: '/whatsapp', soloAdministracion: true, g: 'Administracion', icono: '💬', txt: 'WhatsApp' },
 ];
 
 const anuncios = useAnunciosStore();

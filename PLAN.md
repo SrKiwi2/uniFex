@@ -934,6 +934,11 @@ cuándo y hasta cuándo puede vender un vendedor?) más la notificación de que 
 
 ## Hecho (histórico)
 
+- [x] Instancias de WhatsApp administrables desde la SPA: entidad y SQL V31, alta/edición,
+      primera activa automática, sustitución atómica de la activa y bloqueo de desactivación
+      sin reemplazo. Solo administración; clave no expuesta. Importación inicial de properties
+      y lectura desde BD sin reinicio — 2026-09-16.
+
 - [x] Mensaje postventa de WhatsApp con 10 variantes: ronda mezclada sin repetir ninguna hasta
       usar las diez y sin repetir dos consecutivas, incluso con ventas simultáneas — 2026-09-15
 

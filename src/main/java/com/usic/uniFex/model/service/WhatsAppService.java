@@ -3,7 +3,8 @@ package com.usic.uniFex.model.service;
 import java.io.IOException;
 import java.util.Base64;
 
-import org.springframework.beans.factory.annotation.Value;
+import com.usic.uniFex.model.entity.InstanciaWhatsApp;
+import okhttp3.HttpUrl;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,13 +24,7 @@ import lombok.extern.slf4j.Slf4j;
  * cliente (celular del responsable legal) un mensaje de bienvenida con su credencial
  * virtual y recibo de compra, ambos en PDF adjunto.</p>
  *
- * <p>Configuracion en {@code application.properties}:
- * <ul>
- *   <li>{@code whatsapp.api.url} - endpoint base (sin /sendText), p.ej. {@code http://172.16.21.2:9191/message/}</li>
- *   <li>{@code whatsapp.api.key} - apikey del header</li>
- *   <li>{@code whatsapp.enabled} - {@code true/false}</li>
- *   <li>{@code whatsapp.instance} - nombre de la instancia (p.ej. {@code FEXPO%20UAP%20V2})</li>
- * </ul>
+ * <p>Usa la instancia activa administrada desde la SPA y guardada en la base de datos.
  */
 @Service
 @RequiredArgsConstructor
@@ -41,35 +36,26 @@ public class WhatsAppService {
     private final ObjectMapper mapper = new ObjectMapper();
     private final MensajesWhatsAppVenta mensajesVenta;
 
-    @Value("${whatsapp.api.url:}")
-    private String apiBaseUrl;
-
-    @Value("${whatsapp.api.key:}")
-    private String apiKey;
-
-    @Value("${whatsapp.instance:}")
-    private String instance;
-
-    @Value("${whatsapp.enabled:false}")
-    private boolean enabled;
+    private final InstanciaWhatsAppService instancias;
 
     public boolean habilitado() {
-        boolean ok = enabled && apiBaseUrl != null && !apiBaseUrl.isBlank()
-                && apiKey != null && !apiKey.isBlank()
-                && instance != null && !instance.isBlank();
-        if (!ok) {
-            log.info("[WHATSAPP] No habilitado enabled={} apiUrlConfig={} apiKeyConfig={} instanceConfig={}",
-                    enabled, apiBaseUrl != null && !apiBaseUrl.isBlank(),
-                    apiKey != null && !apiKey.isBlank(), instance != null && !instance.isBlank());
-        }
-        return ok;
+        return instancias.activa().isPresent();
+    }
+
+    private HttpUrl url(InstanciaWhatsApp configuracion, String operacion) {
+        return HttpUrl.get(configuracion.getUrlApi()).newBuilder()
+                .addPathSegment(operacion).addEncodedPathSegment(configuracion.getInstancia()).build();
     }
 
     /**
      * Envía un mensaje de texto simple.
      */
     public boolean enviarTexto(String numero, String mensaje) {
-        if (!habilitado()) {
+        return enviarTexto(instancias.activa().orElse(null), numero, mensaje);
+    }
+
+    private boolean enviarTexto(InstanciaWhatsApp configuracion, String numero, String mensaje) {
+        if (configuracion == null) {
             log.debug("WhatsApp deshabilitado o sin configuración; no se envía a {}", numero);
             return false;
         }
@@ -83,10 +69,9 @@ public class WhatsAppService {
             String json = mapper.writeValueAsString(payload);
 
             RequestBody body = RequestBody.create(json, JSON);
-            String url = apiBaseUrl + "sendText/" + instance;
             Request request = new Request.Builder()
-                    .url(url)
-                    .addHeader("apikey", apiKey)
+                    .url(url(configuracion, "sendText"))
+                    .addHeader("apikey", configuracion.getClaveApi())
                     .post(body)
                     .build();
 
@@ -116,16 +101,16 @@ public class WhatsAppService {
      * @return true si 2xx
      */
     public boolean enviarDocumento(String numero, byte[] pdfBytes, String fileName, String caption) {
-        return enviarMedia(numero, pdfBytes, fileName, caption, "document", "application/pdf");
+        return enviarMedia(instancias.activa().orElse(null), numero, pdfBytes, fileName, caption, "document", "application/pdf");
     }
 
     public boolean enviarImagen(String numero, byte[] imagenBytes, String fileName, String caption) {
-        return enviarMedia(numero, imagenBytes, fileName, caption, "image", "image/png");
+        return enviarMedia(instancias.activa().orElse(null), numero, imagenBytes, fileName, caption, "image", "image/png");
     }
 
-    private boolean enviarMedia(String numero, byte[] bytes, String fileName, String caption,
+    private boolean enviarMedia(InstanciaWhatsApp configuracion, String numero, byte[] bytes, String fileName, String caption,
                                 String mediatype, String mimetype) {
-        if (!habilitado()) {
+        if (configuracion == null) {
             log.debug("WhatsApp deshabilitado o sin configuración; no se envía archivo a {}", numero);
             return false;
         }
@@ -136,15 +121,14 @@ public class WhatsAppService {
 
         try {
             log.info("[WHATSAPP] Enviando archivo numero={} fileName='{}' mediatype={} mimetype={} bytes={} url={}sendMedia/{}",
-                    numero, fileName, mediatype, mimetype, bytes.length, apiBaseUrl, instance);
+                    numero, fileName, mediatype, mimetype, bytes.length, configuracion.getUrlApi(), configuracion.getInstancia());
             var payload = new DocumentoPayload(numero, mediatype, mimetype,
                     caption != null ? caption : "", Base64.getEncoder().encodeToString(bytes), fileName);
             RequestBody requestBody = RequestBody.create(mapper.writeValueAsString(payload), JSON);
 
-            String url = apiBaseUrl + "sendMedia/" + instance;
             Request request = new Request.Builder()
-                    .url(url)
-                    .addHeader("apikey", apiKey)
+                    .url(url(configuracion, "sendMedia"))
+                    .addHeader("apikey", configuracion.getClaveApi())
                     .post(requestBody)
                     .build();
 
@@ -178,7 +162,9 @@ public class WhatsAppService {
     public void enviarBienvenidaVentaConPdfs(String celular, String nombreEntidad, Long inscripcionId,
                                              byte[] reciboPdf, java.util.List<byte[]> credencialesPng,
                                              String baseUrl) {
-        if (!habilitado()) {
+        // Conserva la misma conexion para todo el paquete, aunque cambie la activa durante el envio.
+        InstanciaWhatsApp configuracion = instancias.activa().orElse(null);
+        if (configuracion == null) {
             log.debug("WhatsApp deshabilitado; solo se loguea la intención de envío a {}", celular);
             return;
         }
@@ -191,13 +177,13 @@ public class WhatsAppService {
                 inscripcionId, celular, reciboPdf == null ? 0 : reciboPdf.length,
                 credencialesPng == null ? 0 : credencialesPng.size(), baseUrl);
 
-        boolean textoOk = enviarTexto(celular, mensaje);
+        boolean textoOk = enviarTexto(configuracion, celular, mensaje);
         log.info("[WHATSAPP] Texto bienvenida inscripcion={} enviado={}", inscripcionId, textoOk);
 
         // 2. Recibo PDF
         if (reciboPdf != null && reciboPdf.length > 0) {
-            boolean reciboOk = enviarDocumento(celular, reciboPdf, "recibo-" + inscripcionId + ".pdf",
-                    "📄 Recibo de compra - Inscripción #" + inscripcionId);
+            boolean reciboOk = enviarMedia(configuracion, celular, reciboPdf, "recibo-" + inscripcionId + ".pdf",
+                    "📄 Recibo de compra - Inscripción #" + inscripcionId, "document", "application/pdf");
             log.info("[WHATSAPP] Recibo inscripcion={} enviado={}", inscripcionId, reciboOk);
         }
 
@@ -206,9 +192,9 @@ public class WhatsAppService {
             for (int i = 0; i < credencialesPng.size(); i++) {
                 byte[] credencial = credencialesPng.get(i);
                 if (credencial != null && credencial.length > 0) {
-                    boolean credencialOk = enviarImagen(celular, credencial,
+                    boolean credencialOk = enviarMedia(configuracion, celular, credencial,
                             "credencial-" + inscripcionId + "-" + (i + 1) + ".png",
-                            "🎫 Credencial #" + (i + 1) + " - Inscripción #" + inscripcionId);
+                            "🎫 Credencial #" + (i + 1) + " - Inscripción #" + inscripcionId, "image", "image/png");
                     log.info("[WHATSAPP] Credencial inscripcion={} indice={} bytes={} enviada={}",
                             inscripcionId, i + 1, credencial.length, credencialOk);
                 }

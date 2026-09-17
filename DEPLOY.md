@@ -7,6 +7,31 @@
 
 ## 1. Variables de entorno
 
+### Instancias de WhatsApp
+
+Antes de iniciar esta versión, aplicar `src/main/resources/db/reserva/V31__instancias_whatsapp.sql`.
+La pantalla **Administración → WhatsApp** (`/whatsapp`) permite registrar y editar nombre,
+URL base de mensajes (por ejemplo `https://servidor/message/`), instancia del proveedor y clave API.
+Acceso exclusivo a `SUPER USUARIO` y `ADMINISTRADOR`, también en `/api/app/whatsapp/instancias`.
+
+La primera instancia queda activa; las siguientes se crean inactivas. Activar otra desactiva
+la anterior en la misma transacción. No se permite desactivar la única activa. Los cambios
+se usan sin reiniciar Java; un paquete de bienvenida, recibo y credenciales que ya comenzó
+termina con la configuración con que empezó. El estado «activa» selecciona la conexión:
+no crea ni conecta una sesión en el proveedor de WhatsApp.
+
+Para conservar la configuración anterior, el primer arranque importa `whatsapp.api.url`,
+`whatsapp.api.key` y `whatsapp.instance` **solo si** `whatsapp.enabled=true`, están completos
+y la tabla está vacía. Después, esas propiedades (y sus variables `WHATSAPP_*`) ya no
+controlan los envíos ni sobrescriben la base de datos; pueden retirarse del entorno.
+Sin configuración previa, un administrador registra la primera instancia desde la pantalla.
+La clave no se devuelve al navegador; al editar, dejarla vacía conserva la existente.
+Los respaldos de la tabla contienen las claves API y deben mantenerse privados.
+
+Comprobaciones: `mvnw.cmd test "-Dtest=InstanciaWhatsAppTest,InstanciaWhatsAppApiTest,WhatsAppServiceTest"`.
+Las pruebas de concurrencia usan un esquema temporal en PostgreSQL local y los envíos se
+verifican contra un proveedor simulado local.
+
 ### Registro de errores
 
 El nuevo despliegue guarda los errores de UniFex en `logs/errores.txt`, relativo al directorio
