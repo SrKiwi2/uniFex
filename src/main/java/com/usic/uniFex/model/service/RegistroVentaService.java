@@ -124,7 +124,7 @@ public class RegistroVentaService {
             Long tipoEntidadId,
             LocalDate fechaInicio, LocalDate fechaFin,
             List<DatosPersona> responsables,
-            String entidadBancaria, Long numComprobante, Boolean pagoContado,
+            String entidadBancaria, String numComprobante, Boolean pagoContado,
             List<Long> puestos,
             /**
              * Que opcion de precio se eligio para cada categoria presente en el carrito:
@@ -144,7 +144,7 @@ public class RegistroVentaService {
                           String representanteLegal, String ciRepresentante, String celularRepresentante,
                           Long tipoEntidadId, LocalDate fechaInicio, LocalDate fechaFin,
                           List<DatosPersona> responsables, String entidadBancaria,
-                          Long numComprobante, Boolean pagoContado, List<Long> puestos) {
+                          String numComprobante, Boolean pagoContado, List<Long> puestos) {
             this(entidadNombre, nit, descripcion, objeto, representanteLegal, ciRepresentante,
                  celularRepresentante, tipoEntidadId, fechaInicio, fechaFin, responsables,
                  entidadBancaria, numComprobante, pagoContado, puestos, null);
@@ -168,7 +168,7 @@ public class RegistroVentaService {
 
     /** Una venta y su situacion de pago, para la lista de pendientes del vendedor. */
     public record VentaPendiente(Long id, String entidad, LocalDateTime fechaCompra,
-                                 String entidadBancaria, Long numComprobante,
+                                 String entidadBancaria, String numComprobante,
                                  long diasSinComprobante, BigDecimal total) {
     }
 
@@ -186,7 +186,7 @@ public class RegistroVentaService {
      */
     @Transactional
     public Resultado adjuntarComprobante(Long inscripcionId, MultipartFile archivo,
-                                         String entidadBancaria, Long numComprobante,
+                                         String entidadBancaria, String numComprobante,
                                          Long usuarioId) {
         return adjuntarComprobante(inscripcionId, archivo, entidadBancaria, numComprobante,
                 usuarioId, AuditoriaService.ORIGEN_WEB);
@@ -194,8 +194,11 @@ public class RegistroVentaService {
 
     @Transactional
     public Resultado adjuntarComprobante(Long inscripcionId, MultipartFile archivo,
-                                         String entidadBancaria, Long numComprobante,
+                                         String entidadBancaria, String numComprobante,
                                          Long usuarioId, String origen) {
+        if (numComprobante != null && numComprobante.length() > Inscripcion.MAX_NUM_COMPROBANTE) {
+            return Resultado.error("El numero de comprobante admite hasta 100 caracteres");
+        }
         Inscripcion i = inscripcionService.findById(inscripcionId);
         if (i == null) return Resultado.error("La venta no existe");
         // El dueño de la venta, o quien acredita. Hace falta lo segundo porque el comprobante
@@ -326,6 +329,9 @@ public class RegistroVentaService {
 
     private String validar(NuevaVenta req) {
         if (req == null) return "Faltan los datos de la venta";
+        if (req.numComprobante() != null && req.numComprobante().length() > Inscripcion.MAX_NUM_COMPROBANTE) {
+            return "El numero de comprobante admite hasta 100 caracteres";
+        }
         if (vacio(req.entidadNombre())) return "El nombre de la entidad es obligatorio";
         if (req.tipoEntidadId() == null) return "Falta el tipo de entidad";
         // El responsable legal es el DUEÑO de la caseta. Antes era opcional y se colaban

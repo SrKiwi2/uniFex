@@ -242,7 +242,7 @@ public class CredencialesApiController {
                               Boolean forzar) {
     }
 
-    public record PeticionWhatsApp(Long inscripcionId, List<Long> responsables) {
+    public record PeticionWhatsApp(Long inscripcionId, List<Long> responsables, Boolean incluirRecibo) {
     }
 
     @PostMapping("/pdf")
@@ -376,7 +376,7 @@ public class CredencialesApiController {
     }
 
     /**
-     * Reenvia por WhatsApp el recibo y una o varias credenciales virtuales de una venta.
+     * Reenvia credenciales con sus recibos de cupo extra. El recibo de venta es opcional.
      *
      * Si `responsables` viene vacio, se envian todas las credenciales listas de la inscripcion.
      * Si trae ids, se envia solo esa seleccion. Un vendedor queda limitado a sus propias ventas.
@@ -429,17 +429,29 @@ public class CredencialesApiController {
         }
 
         try {
-            ByteArrayOutputStream recibo = new ByteArrayOutputStream();
-            reciboPdfService.generarRecibo(req.inscripcionId(), recibo);
-            log.info("[WHATSAPP-REENVIO] Recibo generado inscripcion={} bytes={}",
-                    req.inscripcionId(), recibo.size());
+            byte[] recibo = null;
+            if (Boolean.TRUE.equals(req.incluirRecibo())) {
+                ByteArrayOutputStream salida = new ByteArrayOutputStream();
+                reciboPdfService.generarRecibo(req.inscripcionId(), salida);
+                recibo = salida.toByteArray();
+                log.info("[WHATSAPP-REENVIO] Recibo generado inscripcion={} bytes={}",
+                        req.inscripcionId(), recibo.length);
+            }
+            List<WhatsAppService.ReciboExtra> recibosExtra = new java.util.ArrayList<>();
+            for (CredencialDTO credencial : credenciales) {
+                if (!credencial.esExtra()) continue;
+                ByteArrayOutputStream salida = new ByteArrayOutputStream();
+                reciboPdfService.generarReciboResponsableExtra(credencial.responsableId(), salida);
+                recibosExtra.add(new WhatsAppService.ReciboExtra(credencial.responsableId(),
+                        credencial.nombre(), salida.toByteArray()));
+            }
             List<byte[]> imagenes = credenciales.stream()
                     .map(c -> imagenService.generar(c, plantilla, raizPublica()))
                     .toList();
             log.info("[WHATSAPP-REENVIO] Imagenes de credencial generadas inscripcion={} cantidad={}",
                     req.inscripcionId(), imagenes.size());
             whatsApp.enviarBienvenidaVentaConPdfs(celular, inscripcion.getEntidad().getNombre(),
-                    req.inscripcionId(), recibo.toByteArray(), imagenes, raizPublica());
+                    req.inscripcionId(), recibo, imagenes, raizPublica(), recibosExtra);
 
             return ResponseEntity.ok(Map.of("ok", true,
                     "mensaje", "Reenvío enviado por WhatsApp",

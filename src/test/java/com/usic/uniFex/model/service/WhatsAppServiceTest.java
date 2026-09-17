@@ -18,13 +18,15 @@ class WhatsAppServiceTest {
     InstanciaWhatsAppService instancias;
     WhatsAppService servicio;
     List<String> recibidas;
+    List<String> cuerpos;
 
     @BeforeEach void preparar() throws Exception {
         recibidas = new CopyOnWriteArrayList<>();
+        cuerpos = new CopyOnWriteArrayList<>();
         proveedor = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         proveedor.createContext("/message/", intercambio -> {
             recibidas.add(intercambio.getRequestURI().getRawPath() + "|" + intercambio.getRequestHeaders().getFirst("apikey"));
-            intercambio.getRequestBody().readAllBytes();
+            cuerpos.add(new String(intercambio.getRequestBody().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
             intercambio.sendResponseHeaders(200, 2);
             intercambio.getResponseBody().write("{}".getBytes());
             intercambio.close();
@@ -58,6 +60,19 @@ class WhatsAppServiceTest {
         servicio.enviarBienvenidaVentaConPdfs("59170000000", "Entidad de prueba", 1L,
                 new byte[]{1}, List.of(new byte[]{2}), "http://localhost");
         assertThat(recibidas).containsExactly("/message/sendText/Uno|uno", "/message/sendMedia/Uno|uno", "/message/sendMedia/Uno|uno");
+        verify(instancias, times(1)).activa();
+    }
+
+    @Test void adjuntaReciboExtraConNombrePropioSinReciboGeneral() throws Exception {
+        when(instancias.activa()).thenReturn(Optional.of(configuracion("Uno", "uno")));
+        servicio.enviarBienvenidaVentaConPdfs("59170000000", "Entidad", 1L, null,
+                List.of(new byte[]{2}), "http://localhost",
+                List.of(new WhatsAppService.ReciboExtra(7L, "Responsable", new byte[]{30})));
+        assertThat(recibidas).hasSize(3);
+        var documento = new com.fasterxml.jackson.databind.ObjectMapper().readTree(cuerpos.get(1));
+        assertThat(documento.get("fileName").asText()).isEqualTo("recibo-extra-7.pdf");
+        assertThat(documento.get("mediatype").asText()).isEqualTo("document");
+        assertThat(documento.get("media").asText()).isEqualTo("Hg==");
         verify(instancias, times(1)).activa();
     }
 

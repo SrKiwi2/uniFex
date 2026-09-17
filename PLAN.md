@@ -934,6 +934,10 @@ cuándo y hasta cuándo puede vender un vendedor?) más la notificación de que 
 
 ## Hecho (histórico)
 
+- [x] Número de comprobante ampliado a texto de 100 caracteres (V32), con conservación de
+      valores históricos, soporte de códigos y ceros iniciales, límite en SPA y validación
+      antes de registrar ventas o adjuntar comprobantes — 2026-09-16.
+
 - [x] Instancias de WhatsApp administrables desde la SPA: entidad y SQL V31, alta/edición,
       primera activa automática, sustitución atómica de la activa y bloqueo de desactivación
       sin reemplazo. Solo administración; clave no expuesta. Importación inicial de properties

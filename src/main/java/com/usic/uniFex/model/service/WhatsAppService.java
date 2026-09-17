@@ -162,6 +162,15 @@ public class WhatsAppService {
     public void enviarBienvenidaVentaConPdfs(String celular, String nombreEntidad, Long inscripcionId,
                                              byte[] reciboPdf, java.util.List<byte[]> credencialesPng,
                                              String baseUrl) {
+        enviarBienvenidaVentaConPdfs(celular, nombreEntidad, inscripcionId, reciboPdf,
+                credencialesPng, baseUrl, java.util.List.of());
+    }
+
+    public record ReciboExtra(Long responsableId, String nombre, byte[] pdf) {}
+
+    public void enviarBienvenidaVentaConPdfs(String celular, String nombreEntidad, Long inscripcionId,
+                                             byte[] reciboPdf, java.util.List<byte[]> credencialesPng,
+                                             String baseUrl, java.util.List<ReciboExtra> recibosExtra) {
         // Conserva la misma conexion para todo el paquete, aunque cambie la activa durante el envio.
         InstanciaWhatsApp configuracion = instancias.activa().orElse(null);
         if (configuracion == null) {
@@ -185,6 +194,11 @@ public class WhatsAppService {
             boolean reciboOk = enviarMedia(configuracion, celular, reciboPdf, "recibo-" + inscripcionId + ".pdf",
                     "📄 Recibo de compra - Inscripción #" + inscripcionId, "document", "application/pdf");
             log.info("[WHATSAPP] Recibo inscripcion={} enviado={}", inscripcionId, reciboOk);
+        }
+
+        for (ReciboExtra extra : recibosExtra) {
+            enviarMedia(configuracion, celular, extra.pdf(), "recibo-extra-" + extra.responsableId() + ".pdf",
+                    "Recibo de compra de credencial extra - " + extra.nombre(), "document", "application/pdf");
         }
 
         // 3. Credenciales virtuales (una por responsable), iguales a las descargables.

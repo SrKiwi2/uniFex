@@ -10,7 +10,7 @@ public record InscripcionListadoDTO(
     String entidad,
     String tipoEntidad,
     String nit,
-    Long nroComprobante,
+    String nroComprobante,
     Integer cantidadPuestos,
     List<String> categorias,   // para chips/badges
     BigDecimal total,
@@ -24,6 +24,6 @@ public record InscripcionListadoDTO(
     String canceladaPor,
     String origenCancelacion
 ) {
-    public Long getNroComprobante() { return nroComprobante; }
+    public String getNroComprobante() { return nroComprobante; }
     public String getPromotor() { return promotor; }
 }

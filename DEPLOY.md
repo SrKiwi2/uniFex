@@ -7,6 +7,23 @@
 
 ## 1. Variables de entorno
 
+### Número de comprobante (V32)
+
+`inscripcion.num_comprobante` pasa de `BIGINT` a `VARCHAR(100)` y Java lo maneja como
+`String`. Admite códigos de hasta 100 caracteres, incluidos letras y ceros iniciales.
+Los valores históricos se convierten con `num_comprobante::text`, sin cambiar su valor;
+los nulos siguen siendo nulos. Los ceros iniciales que el tipo numérico ya hubiera perdido
+no se pueden reconstruir con esta migración.
+
+Para desplegar: respaldar la BD, detener el servicio Java, aplicar
+`src/main/resources/db/reserva/V32__numero_comprobante_texto.sql` y arrancar el backend
+actualizado junto con la SPA. No ejecutar el backend antiguo contra la columna nueva.
+El cambio toma un bloqueo de tabla; si no puede obtenerlo en 5 segundos, falla sin aplicar
+la conversión. Es idempotente y rechaza datos preexistentes mayores a 100 caracteres para
+evitar truncarlos. No modifica importes, relaciones, recibos adjuntos ni otras columnas.
+Las respuestas del API entregan el número como texto; los clientes anteriores pueden
+seguir enviando números JSON, que se aceptan como texto.
+
 ### Instancias de WhatsApp
 
 Antes de iniciar esta versión, aplicar `src/main/resources/db/reserva/V31__instancias_whatsapp.sql`.

@@ -214,7 +214,7 @@ public class InscripcionApiController {
             @PathVariable Long id,
             @RequestPart("archivo") MultipartFile archivo,
             @RequestParam(value = "entidadBancaria", required = false) String entidadBancaria,
-            @RequestParam(value = "numComprobante", required = false) Long numComprobante,
+            @RequestParam(value = "numComprobante", required = false) String numComprobante,
             @RequestHeader(value = "X-Origen", required = false) String origen) {
         Long usuarioId = usuarioActual();
         if (usuarioId == null) {

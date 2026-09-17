@@ -7,6 +7,7 @@ import { mostrarCarga, ocultarCarga } from '../ui/cargando';
 import { toast } from '../ui/toast';
 import { alerta } from '../ui/alerta';
 import { asegurarCategorias, categorias } from '../ui/catalogoCategorias';
+import UiModal from '../components/UiModal.vue';
 
 /*
  * Acreditacion: preparar y emitir las credenciales de la feria.
@@ -100,13 +101,23 @@ async function bajarVirtual(lista) {
   }
 }
 
-async function reenviarWhatsApp(lista) {
+const reenvio = ref(null);
+const incluirRecibo = ref(false);
+
+function reenviarWhatsApp(lista) {
   if (generando.value) return;
   const aptas = lista.filter((x) => x.listo?.[ID_VIRTUAL]);
   if (!aptas.length) {
     alerta(`Todavía no se puede reenviar: ${loQueFalta(lista)}.`, 'advertencia');
     return;
   }
+  incluirRecibo.value = false;
+  reenvio.value = aptas;
+}
+
+async function confirmarReenvio() {
+  if (generando.value || !reenvio.value) return;
+  const aptas = reenvio.value;
   generando.value = true;
   mostrarCarga(aptas.length === 1 ? 'Reenviando por WhatsApp…'
                                   : `Reenviando ${aptas.length} credenciales por WhatsApp…`);
@@ -116,11 +127,13 @@ async function reenviarWhatsApp(lista) {
       body: JSON.stringify({
         inscripcionId: aptas[0].inscripcionId,
         responsables: aptas.map((c) => c.responsableId),
+        incluirRecibo: incluirRecibo.value,
       }),
     });
     const d = await r.json().catch(() => ({}));
     if (!r.ok || d.ok === false) throw new Error(d.mensaje || 'No se pudo reenviar por WhatsApp');
     toast(d.mensaje || 'Reenviado por WhatsApp', 'ok');
+    reenvio.value = null;
   } catch (e) {
     alerta(e.message, 'error', 0);
   } finally {
@@ -251,6 +264,8 @@ const porEntidad = computed(() => {
     // El titular primero: es quien firma y por quien se pregunta.
     g.responsables.sort((a, b) => (b.esTitular ? 1 : 0) - (a.esTitular ? 1 : 0));
     g.listasVirtual = g.responsables.filter((x) => x.listo?.[ID_VIRTUAL]).length;
+    g.seleccionadasVirtual = g.responsables.filter((c) =>
+      seleccion.value.has(c.responsableId) && c.listo?.[ID_VIRTUAL]);
   }
   return [...m.values()];
 });
@@ -549,12 +564,12 @@ onMounted(() => {
               📱 Las {{ g.listasVirtual }}
             </button>
             <button v-if="g.responsables.length > 1" class="btn btn-sm"
-                    :disabled="generando || !g.listasVirtual"
-                    :title="g.listasVirtual
-                      ? `Reenviar por WhatsApp las ${g.listasVirtual} credenciales de ${g.entidad}`
-                      : 'Ninguna está lista todavía'"
-                    @click="reenviarWhatsApp(g.responsables)">
-              WhatsApp {{ g.listasVirtual }}
+                    :disabled="generando || !g.seleccionadasVirtual.length"
+                    :title="g.seleccionadasVirtual.length
+                      ? `Reenviar por WhatsApp las ${g.seleccionadasVirtual.length} credenciales seleccionadas de ${g.entidad}`
+                      : 'Marca las credenciales listas que quieras reenviar de esta empresa'"
+                    @click="reenviarWhatsApp(g.seleccionadasVirtual)">
+              Reenviar seleccionados
             </button>
           </div>
         </header>
@@ -658,6 +673,19 @@ onMounted(() => {
         </ul>
       </li>
     </ul>
+
+    <UiModal v-if="reenvio" titulo="Reenviar credenciales por WhatsApp" @cerrar="!generando && (reenvio = null)">
+      <p>Se reenviarán {{ reenvio.length }} credencial(es) de <strong>{{ reenvio[0].entidad }}</strong> al celular del cliente registrado en la venta.</p>
+      <p v-if="reenvio.some(c => c.esExtra)">Las credenciales extra seleccionadas incluirán automáticamente su propio recibo de compra.</p>
+      <label class="fila">
+        <input v-model="incluirRecibo" type="checkbox" :disabled="generando" />
+        Incluir recibo de venta
+      </label>
+      <template #pie>
+        <button class="btn" :disabled="generando" @click="reenvio = null">Cancelar</button>
+        <button class="btn btn-primario" :disabled="generando" @click="confirmarReenvio">{{ generando ? 'Enviando…' : 'Reenviar' }}</button>
+      </template>
+    </UiModal>
 
     <!-- Historial de impresiones de una credencial -->
     <div v-if="historial" class="velo" @click.self="historial = null">
