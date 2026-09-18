@@ -69,6 +69,7 @@ const TODOS = [
   { a: '/credenciales-apoyo', p: 'credenciales-apoyo', g: 'Acreditacion', icono: '🎫', txt: 'Credenciales personal apoyo' },
   { a: '/impresion-masiva', p: 'impresion-masiva', g: 'Acreditacion', icono: '🖨️', txt: 'Impresión Masiva' },
   { a: '/escaner', p: 'escaner', g: 'Acreditacion', icono: '📷', txt: 'Escanear credencial' },
+  { a: '/control-acceso', p: 'control-acceso', g: 'Acreditacion', icono: '📊', txt: 'Control de acceso' },
 
   // --- Plano y precios: como esta armada la feria ---
   { a: '/editor', p: 'editor', g: 'Plano y precios', icono: '✏️', txt: 'Editor del plano' },

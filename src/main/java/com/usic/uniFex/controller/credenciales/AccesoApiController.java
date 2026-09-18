@@ -1,10 +1,12 @@
 package com.usic.uniFex.controller.credenciales;
 
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.usic.uniFex.model.dao.ApoyoAccesoDao;
@@ -50,12 +53,15 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class AccesoApiController {
 
+    public static final String TOPIC_ACCESOS = "/topic/accesos";
+
     private final CredencialCodigoService codigos;
     private final CredencialService credenciales;
     private final CredencialAccesoDao accesos;
     private final ApoyoCodigoService codigosApoyo;
     private final IPersonalApoyoService apoyo;
     private final ApoyoAccesoDao accesosApoyo;
+    private final SimpMessagingTemplate messaging;
 
     /** `codigo` es el del QR; `sentido` es "E" o "S". */
     public record Movimiento(String codigo, String sentido) {}
@@ -103,7 +109,12 @@ public class AccesoApiController {
         accesos.registrar(c.responsableId(), sentido, usuarioActual(),
                 "APK".equalsIgnoreCase(origen) ? "APK" : "WEB");
 
+        // Calcular conteo ANTES de difundir
         int[] conteo = accesos.conteo(c.responsableId());
+
+        // Difundir el movimiento en tiempo real
+        difundirMovimiento(c, sentido, conteo[0], conteo[1], repetido);
+
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("ok", true);
         m.put("valida", true);
@@ -168,6 +179,69 @@ public class AccesoApiController {
         return ResponseEntity.ok(m);
     }
 
+    /**
+     * Lista movimientos de acceso con filtros y paginacion.
+     *
+     * Filtros: categoriaId, desde, hasta, sentido (E/S), limite, offset.
+     * Requiere permiso CONTROLA_ACCESO.
+     */
+    @GetMapping("/movimientos")
+    @PreAuthorize(Roles.CONTROLA_ACCESO)
+    public Map<String, Object> movimientos(
+            @RequestParam(required = false) Long categoriaId,
+            @RequestParam(required = false) String desde,
+            @RequestParam(required = false) String hasta,
+            @RequestParam(required = false) String sentido,
+            @RequestParam(defaultValue = "50") int limite,
+            @RequestParam(defaultValue = "0") int offset) {
+
+        LocalDateTime d = (desde != null && !desde.isBlank()) ? LocalDateTime.parse(desde) : null;
+        LocalDateTime h = (hasta != null && !hasta.isBlank()) ? LocalDateTime.parse(hasta) : null;
+
+        var filtros = new CredencialAccesoDao.Filtros(categoriaId, d, h, sentido, limite, offset);
+        List<Map<String, Object>> datos = accesos.listarConFiltros(filtros);
+        int total = accesos.contarConFiltros(filtros);
+
+        return Map.of("datos", datos, "total", total, "limite", limite, "offset", offset);
+    }
+
+    /**
+     * Resumen de movimientos por categoria.
+     */
+    @GetMapping("/resumen/categoria")
+    @PreAuthorize(Roles.CONTROLA_ACCESO)
+    public List<Map<String, Object>> resumenPorCategoria(
+            @RequestParam(required = false) String desde,
+            @RequestParam(required = false) String hasta) {
+
+        LocalDateTime d = (desde != null && !desde.isBlank()) ? LocalDateTime.parse(desde) : null;
+        LocalDateTime h = (hasta != null && !hasta.isBlank()) ? LocalDateTime.parse(hasta) : null;
+        return accesos.resumenPorCategoria(d, h);
+    }
+
+    /**
+     * Resumen de movimientos por usuario (quien escaneo).
+     */
+    @GetMapping("/resumen/usuario")
+    @PreAuthorize(Roles.CONTROLA_ACCESO)
+    public List<Map<String, Object>> resumenPorUsuario(
+            @RequestParam(required = false) String desde,
+            @RequestParam(required = false) String hasta) {
+
+        LocalDateTime d = (desde != null && !desde.isBlank()) ? LocalDateTime.parse(desde) : null;
+        LocalDateTime h = (hasta != null && !hasta.isBlank()) ? LocalDateTime.parse(hasta) : null;
+        return accesos.resumenPorUsuario(d, h);
+    }
+
+    /**
+     * Personas que estan DENTRO ahora, con su categoria.
+     */
+    @GetMapping("/dentro/detalle")
+    @PreAuthorize(Roles.CONTROLA_ACCESO)
+    public List<Map<String, Object>> quienesEstanDentro() {
+        return accesos.quienesEstanDentro();
+    }
+
     private List<Map<String, Object>> historial(Long responsableId) {
         return accesos.historial(responsableId, 8).stream().map(f -> {
             Map<String, Object> h = new LinkedHashMap<>();
@@ -193,5 +267,29 @@ public class AccesoApiController {
     private Long usuarioActual() {
         Authentication a = SecurityContextHolder.getContext().getAuthentication();
         return (a != null && a.getPrincipal() instanceof JwtUser u) ? u.id() : null;
+    }
+
+    private void difundirMovimiento(CredencialDTO c, String sentido, int entradas, int salidas, boolean repetido) {
+        try {
+            Map<String, Object> evento = new LinkedHashMap<>();
+            evento.put("tipo", "MOVIMIENTO");
+            evento.put("responsableId", c.responsableId());
+            evento.put("nombre", c.nombre());
+            evento.put("ci", c.ci());
+            evento.put("fotoUrl", c.fotoUrl());
+            evento.put("entidad", c.entidad());
+            evento.put("categoria", c.categoria());
+            evento.put("casetas", c.casetas());
+            evento.put("sentido", sentido);
+            evento.put("entradas", entradas);
+            evento.put("salidas", salidas);
+            evento.put("dentro", CredencialAccesoDao.ENTRADA.equals(sentido));
+            evento.put("repetido", repetido);
+            evento.put("cuando", java.time.LocalDateTime.now().toString());
+            messaging.convertAndSend(TOPIC_ACCESOS, evento);
+            log.debug("Difundido movimiento acceso: {} {}", sentido, c.nombre());
+        } catch (Exception e) {
+            log.error("No se pudo difundir movimiento de acceso", e);
+        }
     }
 }

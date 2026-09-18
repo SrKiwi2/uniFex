@@ -2,6 +2,8 @@
 import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue';
 import { url as urlApi } from '../config.js';
 import { apiFetch } from '../api';
+import { alerta } from '../ui/alerta.js';
+import UiModal from '../components/UiModal.vue';
 
 /*
  * Verificar una credencial en la puerta.
@@ -26,6 +28,10 @@ const codigo = ref('');
 const buscando = ref(false);
 const resultado = ref(null);
 const error = ref('');
+
+// Modal para aviso de entrada/salida repetida
+const modalRepetido = ref(false);
+const datosRepetido = ref(null);
 
 /*
  * Entrada o salida: LO ELIGE QUIEN ESCANEA, y se queda elegido.
@@ -192,7 +198,12 @@ function leido(c) {
 // Salir de la pantalla sin esto deja la camara encendida: se nota en la bateria y el LED
 // del telefono se queda prendido, que es lo que hace pensar que la aplicacion espia.
 onBeforeUnmount(apagar);
-onMounted(cuantosDentro);
+onMounted(() => {
+  // Asegurar estado limpio al entrar (el componente puede ser reutilizado por Vue Router)
+  modalRepetido.value = false;
+  datosRepetido.value = null;
+  cuantosDentro();
+});
 
 // ------------------------------------------------------------------ consulta
 /**
@@ -217,6 +228,11 @@ async function verificar() {
     if (r.ok && d.ok) {
       resultado.value = d;
       cuantosDentro();
+      // Si es un movimiento repetido, mostrar modal de confirmación
+      if (d.repetido) {
+        datosRepetido.value = d;
+        modalRepetido.value = true;
+      }
     } else {
       error.value = d.mensaje || 'Esta credencial no es válida';
     }
@@ -234,6 +250,8 @@ function limpiar() {
   resultado.value = null;
   error.value = '';
   ultimoLeido = '';
+  modalRepetido.value = false;
+  datosRepetido.value = null;
 }
 
 /** Volver a escanear: lo normal es una fila de gente, no una credencial suelta. */
@@ -241,6 +259,18 @@ function siguiente() {
   limpiar();
   encender();
 }
+
+const tituloRepetido = computed(() =>
+  datosRepetido.value?.sentido === 'E'
+    ? '⚠️ Entrada repetida — Verificar'
+    : '⚠️ Salida repetida — Verificar'
+);
+
+const mensajeRepetido = computed(() =>
+  datosRepetido.value?.sentido === 'E'
+    ? 'Esta persona YA FIGURABA COMO DENTRO. Se registró una NUEVA ENTRADA sin haber salido.'
+    : 'Esta persona YA FIGURABA COMO FUERA. Se registró una NUEVA SALIDA sin haber entrado.'
+);
 </script>
 
 <template>
@@ -314,12 +344,8 @@ function siguiente() {
         <h3>{{ resultado.sentido === 'E' ? 'Entrada registrada' : 'Salida registrada' }}</h3>
       </header>
 
-      <!-- Dos movimientos iguales seguidos no se rechazan, se avisan: en la puerta pasa por
-           motivos razonables —alguien salio por otro lado sin escanear— y bloquear dejaria a
-           una persona fuera por un fallo de registro. Decide quien esta viendo lo que pasa. -->
-      <p v-if="resultado.repetido" class="repetido">
-        Ojo: ya figuraba {{ resultado.sentido === 'E' ? 'dentro' : 'fuera' }}. Se registró igual.
-      </p>
+<!-- El aviso de movimiento repetido se muestra en un MODAL, no en texto pequeño.
+            Así el controlador lo ve GRANDE y debe confirmar que vio el aviso antes de seguir. -->
       <div class="persona">
         <img v-if="resultado.fotoUrl" :src="urlApi(resultado.fotoUrl)" :alt="resultado.nombre" class="foto" />
         <div v-else class="foto sinfoto">Sin foto</div>
@@ -362,6 +388,33 @@ function siguiente() {
         <button class="btn btn-fantasma" @click="limpiar">Limpiar</button>
       </div>
     </section>
+
+    <!-- Modal para aviso de movimiento repetido -->
+    <UiModal v-if="modalRepetido" :titulo="tituloRepetido" :ancho="480" @cerrar="modalRepetido = false">
+      <div class="modal-repetido">
+        <div class="icono-advertencia">⚠️</div>
+        <h3>{{ mensajeRepetido }}</h3>
+        <div class="persona-modal">
+          <img v-if="datosRepetido?.fotoUrl" :src="urlApi(datosRepetido.fotoUrl)" :alt="datosRepetido.nombre" class="foto" />
+          <div v-else class="foto sinfoto">Sin foto</div>
+          <div>
+            <strong>{{ datosRepetido?.nombre }}</strong>
+            <p class="ci">C.I. {{ datosRepetido?.ci || '—' }}</p>
+            <p class="muted">{{ datosRepetido?.entidad }}</p>
+          </div>
+        </div>
+        <dl class="datos-modal">
+          <div><dt>Categoría</dt><dd>{{ datosRepetido?.categoria || '—' }}</dd></div>
+          <div><dt>Caseta(s)</dt><dd class="casetas">{{ datosRepetido?.casetas || '—' }}</dd></div>
+          <div><dt>Entradas totales</dt><dd>{{ datosRepetido?.entradas }}</dd></div>
+          <div><dt>Salidas totales</dt><dd>{{ datosRepetido?.salidas }}</dd></div>
+        </dl>
+        <p class="ayuda-modal">Verifique la identidad de la persona antes de permitir el paso.</p>
+      </div>
+      <template #pie>
+        <button class="btn btn-primario" @click="modalRepetido = false">Entendido, continuar</button>
+      </template>
+    </UiModal>
   </div>
 </template>
 
@@ -453,4 +506,20 @@ function siguiente() {
 .datos dt { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 700; }
 .datos dd { margin: 0.15rem 0 0; font-size: 0.95rem; }
 .datos .casetas { font-size: 1.4rem; font-weight: 800; color: var(--acento); font-variant-numeric: tabular-nums; }
+
+/* Modal repetido */
+.modal-repetido { display: flex; flex-direction: column; gap: 1rem; }
+.icono-advertencia { font-size: 3rem; text-align: center; line-height: 1; }
+.modal-repetido h3 { margin: 0; text-align: center; font-size: 1.1rem; color: var(--tramite); }
+.persona-modal { display: flex; gap: 0.9rem; align-items: center; padding: 0.8rem; background: var(--panel-2); border-radius: var(--radio-sm); }
+.persona-modal .foto { width: 72px; height: 72px; flex: none; object-fit: cover; border-radius: var(--radio-sm); border: 1px solid var(--border); }
+.persona-modal .foto.sinfoto { display: grid; place-items: center; background: var(--panel); color: var(--muted); font-size: 0.7rem; width: 72px; height: 72px; }
+.persona-modal strong { font-size: 1.05rem; }
+.persona-modal .ci { margin: 0.15rem 0; font-variant-numeric: tabular-nums; font-size: 0.85rem; }
+.persona-modal .muted { margin: 0; font-size: 0.8rem; }
+.datos-modal { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin: 0; padding: 0.5rem; background: var(--panel-2); border-radius: var(--radio-sm); }
+.datos-modal dt { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 700; }
+.datos-modal dd { margin: 0.1rem 0 0; font-size: 0.85rem; }
+.datos-modal .casetas { font-size: 1.2rem; font-weight: 800; color: var(--acento); font-variant-numeric: tabular-nums; }
+.ayuda-modal { margin: 0; font-size: 0.8rem; color: var(--muted); text-align: center; font-style: italic; }
 </style>
