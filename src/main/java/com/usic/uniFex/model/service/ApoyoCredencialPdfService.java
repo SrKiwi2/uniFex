@@ -57,6 +57,8 @@ public class ApoyoCredencialPdfService {
     private static final String PLANTILLA_FUL = "static/assets/CREDENCIAL_FUL.png";
     /** Fondo amarillo para Prensa (misma diagramacion alta que la FUL). */
     private static final String PLANTILLA_PRENSA = "static/assets/CREDENCIAL_PRENSA.png";
+    /** Nuevo diseño Prensa: solo nombre completo + QR. */
+    private static final String PLANTILLA_PRENSA_NUEVO = "static/assets/CREDENCIAL_PRENSA_NUEVO.png";
     /** Ancho de hoja; el alto sale de la proporcion de la plantilla (10 x 13). */
     private static final float ANCHO = 10 * CM;
 
@@ -72,31 +74,37 @@ public class ApoyoCredencialPdfService {
      */
     private record Disposicion(String fondo, double[] nombre, double[] dependencia,
                                double[] ci, double avatarCx, double avatarCy,
-                               double avatarRadio) {
+                               double avatarRadio, double qrX, double qrY, double qrLado) {
     }
 
     private static final Disposicion NORMAL = new Disposicion(PLANTILLA,
             new double[]{0.105, 0.329, 0.755, 0.072},
             new double[]{0.105, 0.410, 0.755, 0.088},
             new double[]{0.105, 0.508, 0.755, 0.070},
-            0.500, 0.2085, 0.134);
+            0.500, 0.2085, 0.134,
+            0.370, 0.620, 0.260);
 
     private static final Disposicion FUL = new Disposicion(PLANTILLA_FUL,
             new double[]{0.105, 0.336, 0.760, 0.094},
             new double[]{0.105, 0.437, 0.760, 0.092},
             new double[]{0.105, 0.533, 0.760, 0.061},
-            0.502, 0.2135, 0.134);
+            0.502, 0.2135, 0.134,
+            0.370, 0.620, 0.260);
 
     private static final Disposicion PRENSA = new Disposicion(PLANTILLA_PRENSA,
             new double[]{0.105, 0.336, 0.760, 0.090},
             new double[]{0.105, 0.435, 0.760, 0.083},
             new double[]{0.105, 0.527, 0.760, 0.065},
-            0.500, 0.2130, 0.134);
+            0.500, 0.2130, 0.134,
+            0.370, 0.620, 0.260);
 
-    /** Cuadrado interior del recuadro del QR (igual en los dos fondos). */
-    private static final double QR_X = 0.370;
-    private static final double QR_Y = 0.620;
-    private static final double QR_LADO_ANCHO = 0.260;
+    /** Solo nombre + QR (sin C.I., sin dependencia, sin avatar). */
+    private static final Disposicion PRENSA_NUEVO = new Disposicion(PLANTILLA_PRENSA_NUEVO,
+            new double[]{196.0 / 1102, 728.0 / 1427, 817.0 / 1102, 112.0 / 1427},  // nombre
+            null,  // sin dependencia
+            null,  // sin C.I.
+            0, 0, 0,  // sin avatar
+            414.0 / 1102, 861.0 / 1427, 274.0 / 1102);  // QR
 
     /**
      * Aire extra a la izquierda dentro de las dos primeras barras (fraccion del ancho).
@@ -154,7 +162,7 @@ public class ApoyoCredencialPdfService {
     static Disposicion disposicionDe(ApoyoCredencialDTO c) {
         String dep = c.dependenciaNombre() == null ? "" : c.dependenciaNombre().trim();
         if (DEPENDENCIA_FUL.equalsIgnoreCase(dep)) return FUL;
-        if (DEPENDENCIA_PRENSA.equalsIgnoreCase(dep)) return PRENSA;
+        if (DEPENDENCIA_PRENSA.equalsIgnoreCase(dep)) return PRENSA_NUEVO;
         return NORMAL;
     }
 
@@ -173,17 +181,23 @@ public class ApoyoCredencialPdfService {
 
         textoEnCaja(lienzo, fuente, d.nombre(), mayus(c.nombreCompleto()), w, h,
                 MARGEN_IZQ_PRIMERAS);
-        textoEnCaja(lienzo, fuente, d.dependencia(), mayus(dependenciaDe(c)), w, h,
-                MARGEN_IZQ_PRIMERAS);
-        textoEnCaja(lienzo, fuente, d.ci(), "C.I. " + orVacio(c.ci()), w, h, 0);
+        if (d.dependencia() != null) {
+            textoEnCaja(lienzo, fuente, d.dependencia(), mayus(dependenciaDe(c)), w, h,
+                    MARGEN_IZQ_PRIMERAS);
+        }
+        if (d.ci() != null) {
+            textoEnCaja(lienzo, fuente, d.ci(), "C.I. " + orVacio(c.ci()), w, h, 0);
+        }
 
-        dibujarFotoCircular(lienzo, c, d, w, h);
+        if (d.avatarRadio() > 0) {
+            dibujarFotoCircular(lienzo, c, d, w, h);
+        }
 
-        // QR dentro del recuadro rojo. El eje Y del PDF crece hacia ARRIBA y el de la
+        // QR dentro del recuadro. El eje Y del PDF crece hacia ARRIBA y el de la
         // plantilla hacia abajo, asi que se invierte una sola vez aqui.
-        float lado = (float) (QR_LADO_ANCHO * w);
-        float qrX = (float) (QR_X * w);
-        float qrY = h - (float) (QR_Y * h) - lado;
+        float lado = (float) (d.qrLado() * w);
+        float qrX = (float) (d.qrX() * w);
+        float qrY = h - (float) (d.qrY() * h) - lado;
         BarcodeQRCode qr = new BarcodeQRCode(
                 codigos.urlPublica(urlBase, c.codigo()), 1000, 1000, null);
         Image imgQr = qr.getImage();
