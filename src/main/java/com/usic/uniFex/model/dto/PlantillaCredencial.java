@@ -113,34 +113,34 @@ public record PlantillaCredencial(
             null);
 
     /**
-     * Plantilla EXPOSITOR: para credenciales de expositores con la plantilla CREDENCIAL_EXPOSITOR.png.
+     * Plantilla EXPOSITOR: para credenciales de expositores con la plantilla CREDENCIAL_EXPOSITOR_NUEVO.png.
      * La plantilla trae un circulo azul a la izquierda (foto), un recuadro blanco arriba a la
      * derecha (QR), y tarjetas blancas para datos (nombre, entidad, C.I., caseta/zona).
-     * Las cajas estan MEDIDAS sobre la plantilla 1024x1536 (proporcion 2:3 = 10x15 cm):
-     * cada valor va en la franja blanca INFERIOR de su tarjeta (debajo de la barra azul),
-     * con un margen interno para no tocar los bordes redondeados.
+     * Las cajas estan MEDIDAS sobre la plantilla 1102x1427 (proporcion 1,295 ~ 10:13, asi que
+     * a 10x13 cm casi no se deforma): cada valor va en la franja blanca INFERIOR de su tarjeta
+     * (debajo de la barra azul), con un margen interno para no tocar los bordes redondeados.
      */
     public static final PlantillaCredencial EXPOSITOR = new PlantillaCredencial(
             "EXPOSITOR", "Expositor", "Plantilla para expositores (foto izq, QR der, datos abajo)",
-            "static/assets/CREDENCIAL_EXPOSITOR.png",
+            "static/assets/CREDENCIAL_EXPOSITOR_NUEVO.png",
             true,    // imprime nombre y C.I.: sin foto no se emite
             false,   // alineado a la izquierda, debajo de cada etiqueta impresa
             true,
-            // Caja blanca del QR: x 480..920, y 88..430. El QR es cuadrado y cabe por el alto
-            // (342 px): lado 302 px con 20 px de zona de silencio arriba/abajo y centrado.
-            new Caja(549.0 / 1024, 108.0 / 1536, 302.0 / 1024, 302.0 / 1536),
-            // Franja blanca bajo la barra azul "NOMBRE COMPLETO": x 113..913, y 678..766.
-            new Caja(125.0 / 1024, 686.0 / 1536, 776.0 / 1024, 72.0 / 1536),
-            // Franja blanca bajo "EMPRESA / SERVICIO": x 112..914, y 844..933.
-            new Caja(124.0 / 1024, 852.0 / 1536, 778.0 / 1024, 73.0 / 1536),
-            // Franja blanca bajo "# CEDULA DE IDENTIDAD": x 112..914, y 1009..1083.
-            new Caja(124.0 / 1024, 1017.0 / 1536, 778.0 / 1024, 58.0 / 1536),
-            // Tarjeta "COD. PUESTO": x 111..501, y 1162..1248.
-            new Caja(123.0 / 1024, 1170.0 / 1536, 366.0 / 1024, 70.0 / 1536),
-            // Tarjeta "ZONA": x 520..913, y 1162..1248.
-            new Caja(532.0 / 1024, 1170.0 / 1536, 369.0 / 1024, 70.0 / 1536),
-            // Interior del aro azul (x 75..415, y 260..600): con margen para no tapar el borde.
-            new Caja(85.0 / 1024, 270.0 / 1536, 320.0 / 1024, 320.0 / 1536)
+            // Caja blanca del QR: x 527..994, y 103..448. El QR es cuadrado y cabe por el alto
+            // (345 px): lado 309 px con 18 px de zona de silencio arriba/abajo y centrado.
+            new Caja(606.0 / 1102, 121.0 / 1427, 309.0 / 1102, 309.0 / 1427),
+            // Franja blanca bajo la barra azul "NOMBRE COMPLETO": x 124..977, y 652..710.
+            new Caja(136.0 / 1102, 657.0 / 1427, 829.0 / 1102, 48.0 / 1427),
+            // Franja blanca bajo "EMPRESA / SERVICIO": x 124..980, y 789..856.
+            new Caja(136.0 / 1102, 794.0 / 1427, 832.0 / 1102, 57.0 / 1427),
+            // Franja blanca bajo "# CEDULA DE IDENTIDAD": x 123..979, y 931..990.
+            new Caja(135.0 / 1102, 936.0 / 1427, 832.0 / 1102, 49.0 / 1427),
+            // Tarjeta "COD. PUESTO": x 123..541, y 1066..1133.
+            new Caja(135.0 / 1102, 1071.0 / 1427, 394.0 / 1102, 57.0 / 1427),
+            // Tarjeta "ZONA": x 559..979, y 1065..1132.
+            new Caja(571.0 / 1102, 1070.0 / 1427, 396.0 / 1102, 57.0 / 1427),
+            // Interior del aro azul (centro 306,416, radio ~165): con margen para no tapar el borde.
+            new Caja(146.0 / 1102, 257.0 / 1427, 320.0 / 1102, 318.0 / 1427)
     );
 
     /**

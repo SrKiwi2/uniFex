@@ -332,10 +332,10 @@ public class CredencialesApiController {
     }
 
     /**
-     * Genera PDF 2-up (2 credenciales por hoja carta, con reverso).
+     * Genera PDF duplex 2x2 (4 credenciales por hoja A4, con reversos espejados).
      *
-     * Cada hoja carta rinde 2 credenciales completas (frente + reverso) al imprimir a doble cara.
-     * Usa la plantilla EXPOSITOR (hoja 10x15 cm proporcion 2:3).
+     * Cada hoja A4 rinde 4 credenciales completas (frente + reverso) al imprimir a doble
+     * cara por borde largo. Usa la plantilla EXPOSITOR (10x13 cm).
      *
      * @param responsables ids concretos; si viene vacio, TODAS las aptas de la edicion activa
      * @param plantilla    "EXPOSITOR" (por defecto)
@@ -360,10 +360,13 @@ public class CredencialesApiController {
                             .getBytes(java.nio.charset.StandardCharsets.UTF_8));
         }
 
-        byte[] pdf = pdfService.generarDosPorHoja(
+        byte[] pdf = pdfService.generarDuplex4(
                 elegidas,
                 PlantillaCredencial.EXPOSITOR,
-                req == null || req.anchoCm() == null ? 10.0 : req.anchoCm(),
+                req == null || req.anchoCm() == null
+                        ? com.usic.uniFex.model.service.CredencialPdfService.CRED_ANCHO_CM
+                        : req.anchoCm(),
+                com.usic.uniFex.model.service.CredencialPdfService.CRED_ALTO_CM,
                 raizPublica(),
                 codigos);
 

@@ -36,7 +36,7 @@ import lombok.RequiredArgsConstructor;
  * <ul>
  *   <li>GET /impresion-masiva          -> lista todas las credenciales de expositores</li>
  *   <li>GET /impresion-masiva/vendedor?{vendedorId} -> filtrado por vendedor</li>
- *   <li>POST /impresion-masiva/pdf    -> genera PDF con plantilla EXPOSITOR (hoja carta, 10x15)</li>
+ *   <li>POST /impresion-masiva/pdf    -> PDF duplex 2x2 (4 por hoja oficio, frentes + reversos)</li>
  * </ul>
  */
 @RestController
@@ -58,7 +58,14 @@ public class ImpresionMasivaApiController {
         return impresion.listarTodas();
     }
 
-    /** Dos credenciales de 10x15 cm por hoja oficio: frentes arriba, reversos abajo, para cortar y doblar. */
+    /**
+     * PDF duplex con las credenciales en lotes de 4 (10x13 cm, hoja A4 2x2).
+     *
+     * Cada lote ocupa 2 paginas seguidas: los frentes en cuadricula 2x2 y sus reversos
+     * espejados para impresora doble cara por borde largo. Para imprimir de a pocos se
+     * eligen rangos de paginas (cada lote son 2 paginas seguidas); el boton "marcadas"
+     * genera solo esos ids.
+     */
     @PostMapping(value = "/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<byte[]> pdf(
             @RequestBody(required = false) PeticionPdf req) {
@@ -84,16 +91,15 @@ public class ImpresionMasivaApiController {
                     c.esExtra(), c.montoExtra(), c.comprobanteExtraUrl(), c.sinCosto());
         }).toList();
 
-        byte[] pdf = pdfService.generarDosPorHoja(
+        byte[] pdf = pdfService.generarDuplex4(
                 conCodigo,
                 PlantillaCredencial.EXPOSITOR,
-                10.0, // ancho 10 cm -> alto 15 cm
+                CredencialPdfService.CRED_ANCHO_CM, // 10 cm de ancho
+                CredencialPdfService.CRED_ALTO_CM, // 14,85 cm de alto (llena la A4 a lo alto)
                 "https://fexpo-uapv2.uap.edu.bo/app", // URL base para QR
                 credencialService.codigos()); // CredencialCodigoService para QR
 
-        String nombre = credenciales.size() == 1
-                ? "credencial-expositor.pdf"
-                : "credenciales-expositor-" + credenciales.size() + ".pdf";
+        String nombre = "credenciales-duplex-a4-" + credenciales.size() + ".pdf";
 
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)

@@ -1,6 +1,7 @@
 package com.usic.uniFex;
 
 import static org.assertj.core.api.Assertions.*;
+import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -18,6 +19,12 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 class ImpresionOficioTest {
     private static final float CM = 72f / 2.54f;
+    private static final float ANCHO = 21f * CM;
+    private static final float ALTO = 29.7f * CM;
+    private static final float CRED_W = 10f * CM;
+    private static final float CRED_H = 13f * CM;
+    private static final float X0 = (21f * CM - 2 * CRED_W) / 2;
+    private static final float Y0 = (29.7f * CM - 2 * CRED_H) / 2;
     private final CredencialPdfService pdf = new CredencialPdfService();
     private final CredencialCodigoService codigos = new CredencialCodigoService();
 
@@ -30,78 +37,99 @@ class ImpresionOficioTest {
                 "14, 15, 16", 1L, true, false, false, null, null, false);
     }
 
+    /** Origen del hueco i (0: arriba-izq, 1: arriba-der, 2: abajo-izq, 3: abajo-der). */
+    private static float[] hueco(int i) {
+        return new float[]{X0 + (i % 2) * CRED_W, i < 2 ? Y0 + CRED_H : Y0};
+    }
+
     @ParameterizedTest
     @ValueSource(ints = {1, 2, 3, 4})
-    void oficioDosCredencialesLadoALadoConReversoParaDoblar(int cantidad) throws Exception {
+    void loteDe4ConFrentesYReversosDuplex(int cantidad) throws Exception {
         var lote = java.util.stream.LongStream.rangeClosed(1, cantidad).mapToObj(this::credencial).toList();
-        byte[] contenido = pdf.generarDosPorHoja(lote, PlantillaCredencial.EXPOSITOR, 10,
+        byte[] contenido = pdf.generarGrupoDe4(lote, PlantillaCredencial.EXPOSITOR, 10, 13,
                 "https://ejemplo.test", codigos);
         PdfReader lector = new PdfReader(contenido);
         try {
-            // Una sola cara: cada hoja lleva 2 frentes arriba y sus 2 reversos abajo.
-            assertThat(lector.getNumberOfPages()).isEqualTo((cantidad + 1) / 2);
-            float xIzq = (21.6f * CM - 2 * 10 * CM) / 2;
-            float yAlta = (33f * CM - 2 * 15 * CM) / 2 + 15 * CM;
-            for (int pagina = 1; pagina <= lector.getNumberOfPages(); pagina++) {
+            assertThat(lector.getNumberOfPages()).isEqualTo(2);
+            for (int pagina = 1; pagina <= 2; pagina++) {
                 var hoja = lector.getPageSize(pagina);
-                assertThat(hoja.getWidth()).isCloseTo(21.6f * CM, within(.02f));
-                assertThat(hoja.getHeight()).isCloseTo(33f * CM, within(.02f));
-                var lectura = leer(lector, pagina);
-                int esperadas = Math.min(2, cantidad - (pagina - 1) * 2);
-                var fondos = lectura.imagenes.stream()
-                        .filter(m -> m.get(Matrix.I11) > 0 && Math.abs(m.get(Matrix.I11) - 10 * CM) < .02f)
-                        .toList();
-                // El reverso es mas ancho (cover de 1183x1535 sobre 10x15): la unica imagen
-                // grande que no es un frente.
-                var reversos = lectura.imagenes.stream()
-                        .filter(m -> m.get(Matrix.I11) > 10 * CM + .5f)
-                        .toList();
-                assertThat(fondos).hasSize(esperadas);
-                assertThat(reversos).hasSize(esperadas);
-                for (int i = 0; i < esperadas; i++) {
-                    Matrix fondo = fondos.get(i), dorso = reversos.get(i);
-                    // Frente de 10x15 arriba, en su columna.
-                    assertThat(fondo.get(Matrix.I22)).isCloseTo(15 * CM, within(.02f));
-                    assertThat(fondo.get(Matrix.I31)).isCloseTo(xIzq + i * 10 * CM, within(.02f));
-                    assertThat(fondo.get(Matrix.I32)).isCloseTo(yAlta, within(.02f));
-                    // Reverso cubriendo el mismo 10x15 abajo, con los pixeles ya girados 180°
-                    // para que al doblar quede derecho: comparte el centro X con su frente
-                    // y es simetrico en Y respecto a la doblez (mitad de la hoja).
-                    assertThat(dorso.get(Matrix.I11)).isGreaterThanOrEqualTo(10 * CM - .02f);
-                    assertThat(dorso.get(Matrix.I22)).isCloseTo(15 * CM, within(.02f));
-                    assertThat(dorso.get(Matrix.I31) + dorso.get(Matrix.I11) / 2)
-                            .isCloseTo(fondo.get(Matrix.I31) + fondo.get(Matrix.I11) / 2, within(.02f));
-                    float centroFrente = fondo.get(Matrix.I32) + fondo.get(Matrix.I22) / 2;
-                    float centroDorso = dorso.get(Matrix.I32) + dorso.get(Matrix.I22) / 2;
-                    assertThat((centroFrente + centroDorso) / 2)
-                            .isCloseTo(hoja.getHeight() / 2, within(.02f));
-                }
-                // Todo texto es del frente (mitad superior) o el rotulo de doblez del margen.
-                boolean conRotulo = false;
-                for (TextRenderInfo texto : lectura.textos) {
-                    if (texto.getText().trim().equals("DOBLAR")) {
-                        assertThat(texto.getBaseline().getStartPoint().get(Vector.I1))
-                                .isCloseTo(xIzq, within(30f));
-                        conRotulo = true;
-                        continue;
-                    }
-                    assertThat(texto.getBaseline().getStartPoint().get(Vector.I2))
-                            .isGreaterThan(hoja.getHeight() / 2);
-                    assertThat(fondos.stream().anyMatch(fondo -> enUnaCaja(texto, fondo))).isTrue();
-                }
-                assertThat(conRotulo).isTrue();
+                assertThat(hoja.getWidth()).isCloseTo(ANCHO, within(.02f));
+                assertThat(hoja.getHeight()).isCloseTo(ALTO, within(.02f));
+            }
+            // Pagina 1: los frentes en cuadricula 2x2, cada uno de 10x14,85.
+            var frente = leer(lector, 1);
+            var fondos = frente.imagenes.stream()
+                    .filter(m -> m.get(Matrix.I11) > 0 && Math.abs(m.get(Matrix.I11) - CRED_W) < .02f)
+                    .toList();
+            assertThat(fondos).hasSize(cantidad);
+            for (int i = 0; i < cantidad; i++) {
+                float[] h = hueco(i);
+                assertThat(fondos.get(i).get(Matrix.I22)).isCloseTo(CRED_H, within(.02f));
+                assertThat(fondos.get(i).get(Matrix.I31)).isCloseTo(h[0], within(.02f));
+                assertThat(fondos.get(i).get(Matrix.I32)).isCloseTo(h[1], within(.02f));
+            }
+            for (TextRenderInfo texto : frente.textos) {
+                assertThat(fondos.stream().anyMatch(fondo -> enUnaCaja(texto, fondo))).isTrue();
+            }
+            // Pagina 2: los reversos espejados en X (columna contraria, misma fila) para que
+            // el duplex por borde largo deje cada reverso detras de su frente.
+            var dorso = leer(lector, 2);
+            var reversos = dorso.imagenes.stream()
+                    .filter(m -> m.get(Matrix.I11) > CRED_W + .5f)
+                    .toList();
+            assertThat(reversos).hasSize(cantidad);
+            assertThat(dorso.textos).isEmpty(); // el reverso es la imagen fija
+            for (int i = 0; i < cantidad; i++) {
+                Matrix fondo = fondos.get(i), reverso = reversos.get(i);
+                assertThat(reverso.get(Matrix.I22)).isCloseTo(CRED_H, within(.02f));
+                float centroFrenteX = fondo.get(Matrix.I31) + fondo.get(Matrix.I11) / 2;
+                float centroReversoX = reverso.get(Matrix.I31) + reverso.get(Matrix.I11) / 2;
+                assertThat(centroReversoX).isCloseTo(ANCHO - centroFrenteX, within(.02f));
+                float centroFrenteY = fondo.get(Matrix.I32) + fondo.get(Matrix.I22) / 2;
+                float centroReversoY = reverso.get(Matrix.I32) + reverso.get(Matrix.I22) / 2;
+                assertThat(centroReversoY).isCloseTo(centroFrenteY, within(.02f));
             }
         } finally { lector.close(); }
-        if (cantidad == 3) Files.write(Path.of("target/credenciales-oficio-muestra.pdf"), contenido);
+        if (cantidad == 4) Files.write(Path.of("target/credenciales-oficio-muestra.pdf"), contenido);
+    }
+
+    @Test void duplexConcatenaLotesDe4EnUnSoloPdf() throws Exception {
+        var lote = java.util.stream.LongStream.rangeClosed(1, 5).mapToObj(this::credencial).toList();
+        byte[] contenido = pdf.generarDuplex4(lote, PlantillaCredencial.EXPOSITOR, 10, 13,
+                "https://ejemplo.test", codigos);
+        PdfReader lector = new PdfReader(contenido);
+        try {
+            // 5 credenciales = lote de 4 (pags 1-2) + lote de 1 (pags 3-4).
+            assertThat(lector.getNumberOfPages()).isEqualTo(4);
+            var fondos1 = leer(lector, 1).imagenes.stream()
+                    .filter(m -> m.get(Matrix.I11) > 0 && Math.abs(m.get(Matrix.I11) - CRED_W) < .02f)
+                    .toList();
+            var fondos3 = leer(lector, 3).imagenes.stream()
+                    .filter(m -> m.get(Matrix.I11) > 0 && Math.abs(m.get(Matrix.I11) - CRED_W) < .02f)
+                    .toList();
+            assertThat(fondos1).hasSize(4);
+            assertThat(fondos3).hasSize(1);
+            // El lote incompleto ocupa el primer hueco (arriba-izq) y su reverso el espejo.
+            float[] h = hueco(0);
+            assertThat(fondos3.get(0).get(Matrix.I31)).isCloseTo(h[0], within(.02f));
+            assertThat(fondos3.get(0).get(Matrix.I32)).isCloseTo(h[1], within(.02f));
+            var reversos4 = leer(lector, 4).imagenes.stream()
+                    .filter(m -> m.get(Matrix.I11) > CRED_W + .5f)
+                    .toList();
+            assertThat(reversos4).hasSize(1);
+            float centroFrenteX = fondos3.get(0).get(Matrix.I31) + fondos3.get(0).get(Matrix.I11) / 2;
+            float centroReversoX = reversos4.get(0).get(Matrix.I31) + reversos4.get(0).get(Matrix.I11) / 2;
+            assertThat(centroReversoX).isCloseTo(ANCHO - centroFrenteX, within(.02f));
+        } finally { lector.close(); }
     }
 
     private boolean enUnaCaja(TextRenderInfo texto, Matrix fondo) {
         var d = PlantillaCredencial.EXPOSITOR;
         for (var caja : List.of(d.nombre(), d.empresa(), d.ci(), d.codigo(), d.zona())) {
-            float x = fondo.get(Matrix.I31) + (float) caja.x() * 10 * CM;
-            float y = fondo.get(Matrix.I32) + (1 - (float) caja.y() - (float) caja.alto()) * 15 * CM;
-            float derecha = x + (float) caja.ancho() * 10 * CM;
-            float arriba = y + (float) caja.alto() * 15 * CM;
+            float x = fondo.get(Matrix.I31) + (float) caja.x() * CRED_W;
+            float y = fondo.get(Matrix.I32) + (1 - (float) caja.y() - (float) caja.alto()) * CRED_H;
+            float derecha = x + (float) caja.ancho() * CRED_W;
+            float arriba = y + (float) caja.alto() * CRED_H;
             if (texto.getBaseline().getStartPoint().get(Vector.I1) >= x - .02f
                     && texto.getBaseline().getEndPoint().get(Vector.I1) <= derecha + .02f
                     && texto.getDescentLine().getStartPoint().get(Vector.I2) >= y - .02f
@@ -143,12 +171,12 @@ class ImpresionOficioTest {
                 base.responsableId(), base.codigo(), base.nombre(), base.ci(), "/files/" + archivo,
                 true, base.entidad(), base.rubro(), base.categoria(), 1L, base.casetas(), 1L,
                 true, true, false, null, null, false)).toList();
-        byte[] contenido = pdf.generarDosPorHoja(lote, PlantillaCredencial.EXPOSITOR, 10, "https://ejemplo.test", codigos);
+        byte[] contenido = pdf.generarGrupoDe4(lote, PlantillaCredencial.EXPOSITOR, 10, 13, "https://ejemplo.test", codigos);
         var lector = new PdfReader(contenido);
         try {
-            assertThat(lector.getNumberOfPages()).isEqualTo(1);
-            // 2 fondos + 2 QR + 1 foto (la rota se salta) + 2 reversos.
-            assertThat(leer(lector, 1).imagenes).hasSize(7);
+            assertThat(lector.getNumberOfPages()).isEqualTo(2);
+            // Pagina 1: 2 fondos + 2 QR + 1 foto (la rota se salta).
+            assertThat(leer(lector, 1).imagenes).hasSize(5);
         } finally { lector.close(); }
         Files.write(Path.of("target/credenciales-oficio-foto.pdf"), contenido);
     }

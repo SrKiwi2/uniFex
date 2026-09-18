@@ -50,14 +50,15 @@ function marcarTodas(marcar) {
 }
 
 /**
- * Lanza la impresion masiva con la plantilla EXPOSITOR (10x15 cm).
+ * Lanza la impresion masiva con la plantilla EXPOSITOR (10x13 cm).
  * `ids` vacio = todas las credenciales cargadas.
+ * El servidor devuelve un solo PDF duplex: 2 paginas por lote de 2 (frentes + reversos).
  */
 async function imprimir(ids, etiqueta) {
   if (generando.value) return;
   generando.value = true;
   try {
-    const nombre = ids.length === 1 ? 'credencial-expositor.pdf' : `credenciales-expositor-${etiqueta}.pdf`;
+    const nombre = `credenciales-duplex-a4-${etiqueta}.pdf`;
     await descargarPdf('/api/app/impresion-masiva/pdf', nombre, {
       method: 'POST',
       body: JSON.stringify({ responsables: ids }),
@@ -97,12 +98,13 @@ onMounted(cargar);
     </header>
 
     <p class="muted nota">
-      Imprime credenciales de expositores con la plantilla <strong>EXPOSITOR</strong> (10×15 cm, foto izq, QR der).
+      Imprime credenciales de expositores con la plantilla <strong>EXPOSITOR</strong> (10×13 cm, foto izq, QR der).
       No exige comprobante ni foto: imprime TODOS los expositores de la edición activa.
-      Cada hoja oficio de <strong>21,6 × 33 cm</strong> lleva dos credenciales de <strong>10 × 15 cm</strong> a tamaño real,
-      lado a lado: los frentes van arriba y sus reversos fijos abajo, pegados por el borde.
-      Solo hay que cortar por la línea vertical del medio y <strong>doblar por la línea punteada</strong>: una sola cara, sin doble cara.
-      Imprime a <strong>tamaño real (100 %)</strong>.
+      Se descarga <strong>un solo PDF duplex</strong>: cada lote de 4 ocupa 2 páginas seguidas en hoja A4 de
+      <strong>21 × 29,7 cm</strong> — la primera con los 4 frentes en cuadrícula 2×2 y la segunda con sus 4 reversos fijos,
+      ya espejados para que caigan detrás de su frente. Las credenciales llenan la hoja hasta el borde a lo alto.
+      Imprime a <strong>tamaño real (100 %)</strong>, a <strong>doble cara volteando por el borde largo</strong>,
+      y corta por las guías. Para imprimir de a pocos, elegí rangos de páginas (cada lote son 2 páginas seguidas).
     </p>
 
     <div v-if="cargando" class="vacio">Cargando…</div>

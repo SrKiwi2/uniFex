@@ -56,8 +56,11 @@ public class CredencialPdfService {
     /** Ancho impreso por defecto. Con la proporcion de la plantilla da unos 13 cm de alto. */
     public static final double ANCHO_CM_POR_DEFECTO = 10.0;
     private static final float CM = 72f / 2.54f;   // puntos PostScript por centimetro
-    public static final float OFICIO_ANCHO_CM = 21.6f;
-    public static final float OFICIO_ALTO_CM = 33f;
+    public static final float A4_ANCHO_CM = 21f;
+    public static final float A4_ALTO_CM = 29.7f;
+    /** Medida impresa de la credencial EXPOSITOR: ocupa la hoja al maximo. */
+    public static final float CRED_ANCHO_CM = 10f;
+    public static final float CRED_ALTO_CM = 13f;
 
     /**
      * Los bytes de cada plantilla, leidos del jar una sola vez.
@@ -459,91 +462,206 @@ public class CredencialPdfService {
     }
 
     /**
-     * Dos credenciales de 10x15 cm por hoja oficio, listas para cortar y doblar.
+     * Lotes de 4 credenciales de 10x13 cm para impresora doble cara.
      *
-     * <h2>Disposicion: una sola cara, sin doble cara</h2>
-     * La hoja oficio (21,6x33 cm) lleva dos columnas de 10 cm de ancho con 0,8 cm de aire a
-     * los lados. En cada columna el FRENTE va arriba y su REVERSO fijo abajo, pegados por el
-     * borde: 15 + 15 = 30 cm, con 1,5 cm de aire arriba y abajo. El operario solo corta por
-     * la linea vertical del medio y dobla cada tira por la linea punteada: al doblar la mitad
-     * inferior detras de la superior, el reverso queda justo detras de su frente.
+     * <h2>Disposicion: cuadricula 2x2 sobre A4, todo en UN solo PDF</h2>
+     * Cada grupo de hasta 4 ocupa 2 paginas sobre hoja A4 (21x29,7 cm): la primera con los
+     * FRENTES en cuadricula 2x2 y la segunda con sus REVERSOS fijos. El bloque mide 20x26:
+     * 0,5 cm de aire a los lados y 1,85 arriba/abajo. Las medidas son reales: nunca se
+     * agranda o encoge. Imprimir a doble cara volteando por el <b>borde largo</b> y al 100 %.
+     * Para imprimir de a pocos, se eligen rangos de paginas (cada lote son 2 paginas seguidas).
      *
-     * <h2>El reverso va rotado 180°</h2>
-     * Al doblar hacia arriba, lo de abajo termina arriba y espejado: es una rotacion de media
-     * vuelta. Por eso el reverso se imprime girado 180°, para que al doblar quede derecho.
-     * Ocupa el MISMO rectangulo de 10x15 que su frente (recortado centrado, sin deformar,
-     * porque el reverso no tiene la misma proporcion), asi el mismo corte sirve para ambos.
+     * <h2>La credencial se imprime a 10x13 y la plantilla ya trae esa proporcion</h2>
+     * La imagen de fondo (1102x1427, proporcion 1,295 ~ 10:13) se ajusta al rectangulo casi
+     * sin deformar (0,4 %); como textos, QR y foto van en fracciones del mismo rectangulo,
+     * todo coincide con su tarjeta. El QR sale cuadrado perfecto.
      *
-     * Las medidas son reales: nunca se agranda o encoge. Imprimir al 100 %, una sola cara.
+     * <h2>Un solo PDF y no un ZIP con un PDF por lote, a proposito</h2>
+     * Cada PDF tendria que incrustar de nuevo los ~3 MB de frente+reverso: 800 credenciales
+     * en 400 PDFs pesaban mas de 1 GB (medido con lotes de 4: 567 MB). Concatenados en un
+     * solo documento los fondos se incrustan UNA vez y las 800 pesan ~5 MB. El resultado
+     * impreso es el mismo.
+     *
+     * <h2>Los reversos van espejados en X</h2>
+     * Al voltear la hoja por el borde largo (eje vertical), lo impreso en (x, y) del reverso
+     * cae detras de (anchoHoja - x, y) del frente. Por eso el reverso de cada credencial va
+     * en la columna contraria a su frente (misma fila). Como el reverso es la misma imagen
+     * fija para todos, con el lote completo la pagina queda igual —pero con lotes
+     * incompletos (1 a 3) el espejado es lo que deja cada reverso detras de su frente—.
+     * Ocupa el mismo rectangulo de 10x13 recortado centrado, sin deformar.
+     *
+     * <h2>Memoria</h2>
+     * Frente y reverso se incrustan UNA vez por documento como plantillas reutilizables y las
+     * fotos se reducen a miniatura: "imprimir todas" ya no agota la memoria.
      */
-    public byte[] generarDosPorHoja(List<CredencialDTO> credenciales, PlantillaCredencial plantilla,
-                                     double anchoCm, String urlBase, CredencialCodigoService codigos) {
-        if (credenciales == null || credenciales.isEmpty()) {
-            throw new IllegalArgumentException("No hay credenciales que imprimir");
+    public static final int GRUPO_DUPLEX = 4;
+
+    /**
+     * Un lote de hasta 4 credenciales: pagina 1 con los frentes 2x2, pagina 2 con los reversos.
+     */
+    public byte[] generarGrupoDe4(List<CredencialDTO> grupo, PlantillaCredencial plantilla,
+                                  double anchoCm, double altoCm,
+                                  String urlBase, CredencialCodigoService codigos) {
+        if (grupo == null || grupo.isEmpty() || grupo.size() > GRUPO_DUPLEX) {
+            throw new IllegalArgumentException("El lote debe tener entre 1 y 4 credenciales");
         }
-        if (!Double.isFinite(anchoCm) || anchoCm <= 0) {
-            throw new IllegalArgumentException("El ancho de la credencial debe ser positivo");
-        }
-        Rectangle hoja = new Rectangle(OFICIO_ANCHO_CM * CM, OFICIO_ALTO_CM * CM);
+        float[] medidas = medidasImpresas(plantilla, anchoCm, altoCm);
+        Rectangle hoja = new Rectangle(A4_ANCHO_CM * CM, A4_ALTO_CM * CM);
         Document doc = new Document(hoja, 0, 0, 0, 0);
         ByteArrayOutputStream salida = new ByteArrayOutputStream();
         try {
             Image frente = Image.getInstance(bytes(plantilla.imagen()));
-            float w = (float) (anchoCm * CM);
-            float h = w * frente.getHeight() / frente.getWidth();
-            if (2 * w > hoja.getWidth() - CM || 2 * h > hoja.getHeight() - CM) {
-                throw new IllegalArgumentException("Dos credenciales de ese tamano no caben en oficio");
-            }
-            // Dos columnas centradas (0,8 cm de aire por lado) y bloque de 30 cm centrado
-            // verticalmente (1,5 cm de aire arriba y abajo). La doblez queda en la mitad.
-            float xIzq = (hoja.getWidth() - 2 * w) / 2;
-            float yBaja = (hoja.getHeight() - 2 * h) / 2;
-            float yAlta = yBaja + h;
+            float w = medidas[0], h = medidas[1];
+            validarCuadricula(hoja, w, h);
+            // Cuadricula 2x2 centrada. Hueco 0: arriba-izq, 1: arriba-der, 2: abajo-izq, 3: abajo-der.
+            float x0 = (hoja.getWidth() - 2 * w) / 2;
+            float y0 = (hoja.getHeight() - 2 * h) / 2;
             PdfWriter writer = PdfWriter.getInstance(doc, salida);
-            writer.addViewerPreference(com.itextpdf.text.pdf.PdfName.PRINTSCALING,
-                    com.itextpdf.text.pdf.PdfName.NONE);
+            preferenciaTamanoReal(writer);
             doc.open();
             PdfContentByte lienzo = writer.getDirectContent();
             BaseFont fuente = BaseFont.createFont(BaseFont.HELVETICA_BOLD, BaseFont.CP1252, BaseFont.NOT_EMBEDDED);
-            // Frente y reverso UNA sola vez como plantillas reutilizables: cada pagina solo
-            // guarda la referencia, no los ~3 MB de imagenes. Sin esto, "imprimir todas"
-            // incrustaba frente+reverso+fotos en cada pagina y agotaba la memoria.
-            com.itextpdf.text.pdf.PdfTemplate tplFrente = lienzo.createTemplate(w, h);
-            Image f = Image.getInstance(frente);
-            f.scaleAbsolute(w, h);
-            f.setAbsolutePosition(0, 0);
-            tplFrente.addImage(f);
+            com.itextpdf.text.pdf.PdfTemplate tplFrente = plantillaFrente(lienzo, frente, w, h);
             com.itextpdf.text.pdf.PdfTemplate tplReverso = plantillaReverso(lienzo, w, h);
-            for (int i = 0; i < credenciales.size(); i += 2) {
-                if (i > 0) doc.newPage();
-                int cantidad = Math.min(2, credenciales.size() - i);
-                for (int posicion = 0; posicion < cantidad; posicion++) {
-                    float x = xIzq + posicion * w;
-                    lienzo.addTemplate(tplFrente, x, yAlta);
-                    pintarContenido(lienzo, fuente, plantilla, credenciales.get(i + posicion),
-                            x, yAlta, w, h, urlBase, codigos);
-                    lienzo.addTemplate(tplReverso, x, yBaja);
-                    marcasDeCorte(lienzo, x, yBaja, w, 2 * h);
-                }
-                // Guia de corte entre columnas y de doblez por la mitad de cada tira.
-                if (cantidad == 2) lineaDeCorte(lienzo, xIzq + w, yBaja, yBaja + 2 * h);
-                lineaDeDoblez(lienzo, fuente, xIzq, xIzq + cantidad * w, yAlta);
-            }
+
+            pintarGrupo(lienzo, fuente, tplFrente, tplReverso, grupo, plantilla,
+                    x0, y0, w, h, urlBase, codigos, false);
+            doc.newPage();
+            pintarGrupo(lienzo, fuente, tplFrente, tplReverso, grupo, plantilla,
+                    x0, y0, w, h, urlBase, codigos, true);
             doc.close();
-            log.info("Credenciales impresas en oficio: {}, hojas: {}",
-                    credenciales.size(), (credenciales.size() + 1) / 2);
             return salida.toByteArray();
         } catch (Exception e) {
-            throw new IllegalStateException("No se pudo generar el PDF por pares: " + e.getMessage(), e);
+            throw new IllegalStateException("No se pudo generar el PDF del lote: " + e.getMessage(), e);
         } finally {
             if (doc.isOpen()) doc.close();
         }
     }
 
     /**
-     * El reverso fijo como plantilla reutilizable de 10x15, con los pixeles ya girados 180°
-     * para que quede derecho al doblar.
+     * Todas las credenciales en UN solo PDF duplex: 2 paginas por cada grupo de hasta 4.
      *
+     * Es el mismo formato por lotes (cuadricula 2x2, reversos espejados), pero concatenado.
+     */
+    public byte[] generarDuplex4(List<CredencialDTO> credenciales, PlantillaCredencial plantilla,
+                                 double anchoCm, double altoCm,
+                                 String urlBase, CredencialCodigoService codigos) {
+        if (credenciales == null || credenciales.isEmpty()) {
+            throw new IllegalArgumentException("No hay credenciales que imprimir");
+        }
+        float[] medidas = medidasImpresas(plantilla, anchoCm, altoCm);
+        Rectangle hoja = new Rectangle(A4_ANCHO_CM * CM, A4_ALTO_CM * CM);
+        Document doc = new Document(hoja, 0, 0, 0, 0);
+        ByteArrayOutputStream salida = new ByteArrayOutputStream();
+        try {
+            Image frente = Image.getInstance(bytes(plantilla.imagen()));
+            float w = medidas[0], h = medidas[1];
+            validarCuadricula(hoja, w, h);
+            // Cuadricula 2x2 centrada. Hueco 0: arriba-izq, 1: arriba-der, 2: abajo-izq, 3: abajo-der.
+            float x0 = (hoja.getWidth() - 2 * w) / 2;
+            float y0 = (hoja.getHeight() - 2 * h) / 2;
+            PdfWriter writer = PdfWriter.getInstance(doc, salida);
+            preferenciaTamanoReal(writer);
+            doc.open();
+            PdfContentByte lienzo = writer.getDirectContent();
+            BaseFont fuente = BaseFont.createFont(BaseFont.HELVETICA_BOLD, BaseFont.CP1252, BaseFont.NOT_EMBEDDED);
+            com.itextpdf.text.pdf.PdfTemplate tplFrente = plantillaFrente(lienzo, frente, w, h);
+            com.itextpdf.text.pdf.PdfTemplate tplReverso = plantillaReverso(lienzo, w, h);
+
+            int total = (credenciales.size() + GRUPO_DUPLEX - 1) / GRUPO_DUPLEX;
+            for (int lote = 0; lote < total; lote++) {
+                List<CredencialDTO> grupo = credenciales.subList(
+                        lote * GRUPO_DUPLEX, Math.min(credenciales.size(), (lote + 1) * GRUPO_DUPLEX));
+                if (lote > 0) doc.newPage();
+                pintarGrupo(lienzo, fuente, tplFrente, tplReverso, grupo, plantilla,
+                        x0, y0, w, h, urlBase, codigos, false);
+                doc.newPage();
+                pintarGrupo(lienzo, fuente, tplFrente, tplReverso, grupo, plantilla,
+                        x0, y0, w, h, urlBase, codigos, true);
+            }
+            doc.close();
+            log.info("Credenciales duplex 2x2: {}, hojas: {}", credenciales.size(), 2 * total);
+            return salida.toByteArray();
+        } catch (Exception e) {
+            throw new IllegalStateException("No se pudo generar el PDF duplex: " + e.getMessage(), e);
+        } finally {
+            if (doc.isOpen()) doc.close();
+        }
+    }
+
+    /** Medidas impresas en puntos; el alto se pide explicito para no depender de la plantilla. */
+    private float[] medidasImpresas(PlantillaCredencial plantilla, double anchoCm, double altoCm) {
+        if (!Double.isFinite(anchoCm) || anchoCm <= 0 || !Double.isFinite(altoCm) || altoCm <= 0) {
+            throw new IllegalArgumentException("Las medidas de la credencial deben ser positivas");
+        }
+        if (plantilla == null || plantilla.qr() == null) {
+            throw new IllegalArgumentException("La plantilla no trae disposicion del QR");
+        }
+        return new float[]{(float) (anchoCm * CM), (float) (altoCm * CM)};
+    }
+
+    private void validarCuadricula(Rectangle hoja, float w, float h) {
+        if (2 * w > hoja.getWidth() || 2 * h > hoja.getHeight()) {
+            throw new IllegalArgumentException("Cuatro credenciales de ese tamano no caben en la hoja");
+        }
+    }
+
+    private void preferenciaTamanoReal(PdfWriter writer) {
+        writer.addViewerPreference(com.itextpdf.text.pdf.PdfName.PRINTSCALING,
+                com.itextpdf.text.pdf.PdfName.NONE);
+        writer.addViewerPreference(com.itextpdf.text.pdf.PdfName.DUPLEX,
+                com.itextpdf.text.pdf.PdfName.DUPLEXFLIPLONGEDGE);
+    }
+
+    private com.itextpdf.text.pdf.PdfTemplate plantillaFrente(
+            PdfContentByte lienzo, Image frente, float w, float h) throws Exception {
+        com.itextpdf.text.pdf.PdfTemplate tpl = lienzo.createTemplate(w, h);
+        Image f = Image.getInstance(frente);
+        f.scaleAbsolute(w, h);
+        f.setAbsolutePosition(0, 0);
+        tpl.addImage(f);
+        return tpl;
+    }
+
+    /**
+     * Una pagina del lote: frentes en sus huecos o reversos en los huecos espejados en X.
+     *
+     * Hueco i: columna i%2, fila arriba si i&lt;2. En reversos la columna es la contraria
+     * (1 - i%2) para que el duplex por borde largo deje cada reverso detras de su frente.
+     */
+    private void pintarGrupo(PdfContentByte lienzo, BaseFont fuente,
+                             com.itextpdf.text.pdf.PdfTemplate tplFrente,
+                             com.itextpdf.text.pdf.PdfTemplate tplReverso,
+                             List<CredencialDTO> grupo, PlantillaCredencial plantilla,
+                             float x0, float y0, float w, float h,
+                             String urlBase, CredencialCodigoService codigos,
+                             boolean reversos) throws Exception {
+        boolean[] columna = new boolean[2];
+        boolean[] fila = new boolean[2];
+        for (int i = 0; i < grupo.size(); i++) {
+            int col = reversos ? 1 - (i % 2) : i % 2;
+            boolean arriba = i < 2;
+            float x = x0 + col * w, y = arriba ? y0 + h : y0;
+            if (reversos) {
+                lienzo.addTemplate(tplReverso, x, y);
+            } else {
+                lienzo.addTemplate(tplFrente, x, y);
+                pintarContenido(lienzo, fuente, plantilla, grupo.get(i),
+                        x, y, w, h, urlBase, codigos);
+            }
+            marcasDeCorte(lienzo, x, y, w, h);
+            columna[col] = true;
+            fila[arriba ? 1 : 0] = true;
+        }
+        if (columna[0] && columna[1]) lineaDeCorte(lienzo, x0 + w, y0, y0 + 2 * h);
+        if (fila[0] && fila[1]) lineaDeCorte(lienzo, y0 + h, x0, x0 + 2 * w, true);
+    }
+
+    /**
+     * El reverso fijo como plantilla reutilizable de 10x15, derecho (sin girar).
+     *
+     * En duplex por borde largo la hoja voltea sobre el eje vertical: la Y se mantiene y la
+     * X se espeja sola al voltear, asi el reverso se imprime derecho y solo cambia de columna.
      * El reverso (1183x1535) es mas ancho que el frente (1024x1536): encajarlo entero
      * dejaria franjas blancas y el corte del frente no serviria para el dorso. Se escala
      * en modo cover —lo justo para cubrir los 10x15— y se recorta lo que sobre por los
@@ -551,7 +669,7 @@ public class CredencialPdfService {
      */
     private com.itextpdf.text.pdf.PdfTemplate plantillaReverso(
             PdfContentByte lienzo, float w, float h) throws Exception {
-        Image base = Image.getInstance(reverso180());
+        Image base = Image.getInstance(bytes("static/assets/CREDENCIAL_REVERSO.png"));
         float escala = Math.max(w / base.getWidth(), h / base.getHeight());
         float ancho = base.getWidth() * escala;
         float alto = base.getHeight() * escala;
@@ -571,65 +689,25 @@ public class CredencialPdfService {
         return tpl;
     }
 
-    /**
-     * El reverso girado media vuelta, en bytes y cacheado como las plantillas.
-     *
-     * Se gira la IMAGEN y no el dibujo del PDF a proposito: la rotacion de iText gira
-     * sobre la esquina y el desplazamiento resultante depende de la version, mientras que
-     * girar los pixeles deja el posicionamiento igual que el del frente —el centro del
-     * reverso coincide exactamente con el de su frente— y el test lo comprueba.
-     */
-    private byte[] reverso180() {
-        return cache.computeIfAbsent("static/assets/CREDENCIAL_REVERSO.png#180", k -> {
-            try (InputStream in = new ClassPathResource(
-                    "static/assets/CREDENCIAL_REVERSO.png").getInputStream()) {
-                BufferedImage original = ImageIO.read(in);
-                if (original == null) throw new IllegalStateException("No se pudo leer el reverso");
-                BufferedImage girada = new BufferedImage(
-                        original.getWidth(), original.getHeight(), BufferedImage.TYPE_INT_RGB);
-                Graphics2D g = girada.createGraphics();
-                try {
-                    g.rotate(Math.PI, original.getWidth() / 2.0, original.getHeight() / 2.0);
-                    g.drawImage(original, 0, 0, null);
-                } finally {
-                    g.dispose();
-                }
-                ByteArrayOutputStream bos = new ByteArrayOutputStream();
-                ImageIO.write(girada, "png", bos);
-                return bos.toByteArray();
-            } catch (Exception e) {
-                throw new IllegalStateException("No se pudo girar el reverso: " + e.getMessage(), e);
-            }
-        });
-    }
-
-    /** Linea de corte entre las dos columnas: un solo tajo vertical las separa. */
+    /** Linea de corte entre huecos: un tajo vertical (u horizontal) los separa. */
     private void lineaDeCorte(PdfContentByte lienzo, float x, float y0, float y1) {
-        lienzo.saveState();
-        lienzo.setColorStroke(new BaseColor(150, 150, 150));
-        lienzo.setLineWidth(.5f);
-        lienzo.moveTo(x, y0);
-        lienzo.lineTo(x, y1);
-        lienzo.stroke();
-        lienzo.restoreState();
+        lineaDeCorte(lienzo, x, y0, y1, false);
     }
 
-    /** Linea de doblez a trazos por la mitad de cada tira, con su rotulo al margen. */
-    private void lineaDeDoblez(PdfContentByte lienzo, BaseFont fuente,
-                               float x0, float x1, float y) {
+    private void lineaDeCorte(PdfContentByte lienzo, float pos, float desde, float hasta,
+                              boolean horizontal) {
         lienzo.saveState();
         lienzo.setColorStroke(new BaseColor(150, 150, 150));
         lienzo.setLineWidth(.5f);
-        lienzo.setLineDash(4f, 3f);
-        lienzo.moveTo(x0, y);
-        lienzo.lineTo(x1, y);
+        if (horizontal) {
+            lienzo.moveTo(desde, pos);
+            lienzo.lineTo(hasta, pos);
+        } else {
+            lienzo.moveTo(pos, desde);
+            lienzo.lineTo(pos, hasta);
+        }
         lienzo.stroke();
         lienzo.restoreState();
-        lienzo.beginText();
-        lienzo.setFontAndSize(fuente, 7f);
-        lienzo.setColorFill(new BaseColor(150, 150, 150));
-        lienzo.showTextAligned(Element.ALIGN_CENTER, "DOBLAR", x0 - 9f, y, 90);
-        lienzo.endText();
     }
 
     private void marcasDeCorte(PdfContentByte lienzo, float x, float y, float w, float h) {
