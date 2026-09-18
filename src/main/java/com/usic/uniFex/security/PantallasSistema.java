@@ -43,6 +43,7 @@ public enum PantallasSistema {
     NOTICIAS("noticias", "Noticias", "Feria"),
     CREDENCIALES("credenciales", "Credenciales", "Acreditacion"),
     ESCANER("escaner", "Escanear credencial", "Acreditacion"),
+    CONTROL_ACCESO("control-acceso", "Control de acceso", "Acreditacion"),
     USUARIOS("usuarios", "Usuarios", "Administracion"),
     ROLES("roles", "Roles", "Administracion"),
     MANTENIMIENTO("mantenimiento", "Mantenimiento", "Administracion"),

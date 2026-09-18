@@ -1,6 +1,8 @@
 package com.usic.uniFex.model.dao;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -81,5 +83,200 @@ public class CredencialAccesoDao {
                 ) ultimo WHERE sentido = 'E'
                 """, Integer.class);
         return n == null ? 0 : n;
+    }
+
+    /**
+     * Filtros para listar movimientos de acceso.
+     */
+    public record Filtros(
+            Long categoriaId,
+            LocalDateTime desde,
+            LocalDateTime hasta,
+            String sentido,
+            int limite,
+            int offset
+    ) {}
+
+    /**
+     * Lista movimientos de acceso con filtros.
+     *
+     * Une credencial_acceso con responsable, persona, entidad, inscripcion, puesto y categoria
+     * para poder filtrar por categoria y mostrar datos enriquecidos.
+     */
+    public List<Map<String, Object>> listarConFiltros(Filtros f) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT ca.id, ca.sentido, ca.cuando, ca.origen, u.username AS registrado_por,
+                       r.id AS responsable_id, p.nombre, p.paterno, p.materno, p.ci,
+                       e.nombre AS entidad, c.nombre AS categoria, c.id AS categoria_id,
+                       string_agg(DISTINCT pu.codigo, ', ' ORDER BY pu.codigo) AS casetas
+                FROM credencial_acceso ca
+                INNER JOIN responsable r ON r.id = ca.id_responsable
+                INNER JOIN persona p ON p.id = r.id_persona
+                INNER JOIN entidad e ON e.id = r.id_entidad
+                INNER JOIN inscripcion i ON i.id_entidad = e.id
+                    AND (i."_estado" IS NULL OR i."_estado" <> 'X')
+                LEFT JOIN inscripcion_puesto ip ON ip.id_inscripcion = i.id
+                    AND (ip."_estado" IS NULL OR ip."_estado" <> 'X')
+                LEFT JOIN puesto pu ON pu.id = ip.id_puesto
+                LEFT JOIN categoria c ON c.id = pu.id_categoria
+                LEFT JOIN usuario u ON u.id = ca.registrado_por
+                WHERE 1=1
+                """);
+
+        if (f.categoriaId() != null) {
+            sql.append(" AND c.id = ").append(f.categoriaId());
+        }
+        if (f.desde() != null) {
+            sql.append(" AND ca.cuando >= '").append(f.desde()).append("'");
+        }
+        if (f.hasta() != null) {
+            sql.append(" AND ca.cuando <= '").append(f.hasta()).append("'");
+        }
+        if (f.sentido() != null && !f.sentido().isBlank()) {
+            sql.append(" AND ca.sentido = '").append(f.sentido().toUpperCase()).append("'");
+        }
+
+        sql.append("""
+                GROUP BY ca.id, ca.sentido, ca.cuando, ca.origen, u.username,
+                         r.id, p.nombre, p.paterno, p.materno, p.ci,
+                         e.nombre, c.nombre, c.id
+                ORDER BY ca.cuando DESC, ca.id DESC
+                LIMIT ? OFFSET ?
+                """);
+
+        return jdbc.queryForList(sql.toString(), f.limite(), f.offset());
+    }
+
+    /**
+     * Cuenta total de movimientos con los mismos filtros (para paginacion).
+     */
+    public int contarConFiltros(Filtros f) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT COUNT(DISTINCT ca.id)
+                FROM credencial_acceso ca
+                INNER JOIN responsable r ON r.id = ca.id_responsable
+                INNER JOIN persona p ON p.id = r.id_persona
+                INNER JOIN entidad e ON e.id = r.id_entidad
+                INNER JOIN inscripcion i ON i.id_entidad = e.id
+                    AND (i."_estado" IS NULL OR i."_estado" <> 'X')
+                LEFT JOIN inscripcion_puesto ip ON ip.id_inscripcion = i.id
+                    AND (ip."_estado" IS NULL OR ip."_estado" <> 'X')
+                LEFT JOIN puesto pu ON pu.id = ip.id_puesto
+                LEFT JOIN categoria c ON c.id = pu.id_categoria
+                WHERE 1=1
+                """);
+
+        if (f.categoriaId() != null) {
+            sql.append(" AND c.id = ").append(f.categoriaId());
+        }
+        if (f.desde() != null) {
+            sql.append(" AND ca.cuando >= '").append(f.desde()).append("'");
+        }
+        if (f.hasta() != null) {
+            sql.append(" AND ca.cuando <= '").append(f.hasta()).append("'");
+        }
+        if (f.sentido() != null && !f.sentido().isBlank()) {
+            sql.append(" AND ca.sentido = '").append(f.sentido().toUpperCase()).append("'");
+        }
+
+        return jdbc.queryForObject(sql.toString(), Integer.class);
+    }
+
+    /**
+     * Resumen por categoria: cuantas entradas/salidas por categoria.
+     */
+    public List<Map<String, Object>> resumenPorCategoria(LocalDateTime desde, LocalDateTime hasta) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT c.id AS categoria_id, c.nombre AS categoria,
+                       COUNT(*) FILTER (WHERE ca.sentido = 'E') AS entradas,
+                       COUNT(*) FILTER (WHERE ca.sentido = 'S') AS salidas,
+                       COUNT(DISTINCT r.id) AS personas_unicas
+                FROM credencial_acceso ca
+                INNER JOIN responsable r ON r.id = ca.id_responsable
+                INNER JOIN persona p ON p.id = r.id_persona
+                INNER JOIN entidad e ON e.id = r.id_entidad
+                INNER JOIN inscripcion i ON i.id_entidad = e.id
+                    AND (i."_estado" IS NULL OR i."_estado" <> 'X')
+                LEFT JOIN inscripcion_puesto ip ON ip.id_inscripcion = i.id
+                    AND (ip."_estado" IS NULL OR ip."_estado" <> 'X')
+                LEFT JOIN puesto pu ON pu.id = ip.id_puesto
+                LEFT JOIN categoria c ON c.id = pu.id_categoria
+                WHERE 1=1
+                """);
+
+        if (desde != null) {
+            sql.append(" AND ca.cuando >= '").append(desde).append("'");
+        }
+        if (hasta != null) {
+            sql.append(" AND ca.cuando <= '").append(hasta).append("'");
+        }
+
+        sql.append("""
+                GROUP BY c.id, c.nombre
+                ORDER BY c.nombre
+                """);
+
+        return jdbc.queryForList(sql.toString());
+    }
+
+    /**
+     * Resumen por usuario (quien escaneo): cuantas entradas/salidas registro cada uno.
+     */
+    public List<Map<String, Object>> resumenPorUsuario(LocalDateTime desde, LocalDateTime hasta) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT u.username, u.id AS usuario_id,
+                       COUNT(*) FILTER (WHERE ca.sentido = 'E') AS entradas,
+                       COUNT(*) FILTER (WHERE ca.sentido = 'S') AS salidas,
+                       COUNT(DISTINCT ca.id_responsable) AS personas_unicas
+                FROM credencial_acceso ca
+                LEFT JOIN usuario u ON u.id = ca.registrado_por
+                WHERE 1=1
+                """);
+
+        if (desde != null) {
+            sql.append(" AND ca.cuando >= '").append(desde).append("'");
+        }
+        if (hasta != null) {
+            sql.append(" AND ca.cuando <= '").append(hasta).append("'");
+        }
+
+        sql.append("""
+                GROUP BY u.id, u.username
+                ORDER BY (COUNT(*) FILTER (WHERE ca.sentido = 'E') + COUNT(*) FILTER (WHERE ca.sentido = 'S')) DESC
+                """);
+
+        return jdbc.queryForList(sql.toString());
+    }
+
+    /**
+     * Personas que estan DENTRO ahora, con su categoria.
+     */
+    public List<Map<String, Object>> quienesEstanDentro() {
+        return jdbc.queryForList("""
+                SELECT r.id AS responsable_id, p.nombre, p.paterno, p.materno, p.ci,
+                       e.nombre AS entidad, c.nombre AS categoria,
+                       string_agg(DISTINCT pu.codigo, ', ' ORDER BY pu.codigo) AS casetas,
+                       ca.cuando AS ultima_entrada
+                FROM (
+                    SELECT DISTINCT ON (ca.id_responsable) ca.id_responsable, ca.cuando
+                    FROM credencial_acceso ca
+                    ORDER BY ca.id_responsable, ca.cuando DESC, ca.id DESC
+                ) ca
+                INNER JOIN responsable r ON r.id = ca.id_responsable
+                INNER JOIN persona p ON p.id = r.id_persona
+                INNER JOIN entidad e ON e.id = r.id_entidad
+                INNER JOIN inscripcion i ON i.id_entidad = e.id
+                    AND (i."_estado" IS NULL OR i."_estado" <> 'X')
+                LEFT JOIN inscripcion_puesto ip ON ip.id_inscripcion = i.id
+                    AND (ip."_estado" IS NULL OR ip."_estado" <> 'X')
+                LEFT JOIN puesto pu ON pu.id = ip.id_puesto
+                LEFT JOIN categoria c ON c.id = pu.id_categoria
+                WHERE (
+                    SELECT sentido FROM credencial_acceso ca2
+                    WHERE ca2.id_responsable = ca.id_responsable
+                    ORDER BY ca2.cuando DESC, ca2.id DESC LIMIT 1
+                ) = 'E'
+                ORDER BY p.nombre
+                """);
     }
 }

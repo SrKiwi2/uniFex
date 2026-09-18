@@ -67,6 +67,7 @@ const TODOS = [
   // --- Acreditacion: la puerta ---
   { a: '/credenciales', p: 'credenciales', g: 'Acreditacion', icono: '🪪', txt: 'Credenciales' },
   { a: '/escaner', p: 'escaner', g: 'Acreditacion', icono: '📷', txt: 'Escanear credencial' },
+  { a: '/control-acceso', p: 'control-acceso', g: 'Acreditacion', icono: '📊', txt: 'Control de acceso' },
 
   // --- Plano y precios: como esta armada la feria ---
   { a: '/editor', p: 'editor', g: 'Plano y precios', icono: '✏️', txt: 'Editor del plano' },
