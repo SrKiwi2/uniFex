@@ -496,6 +496,9 @@ public class InscripcionApiController {
      *
      * La foto se sube despues, con el endpoint de siempre: hasta que no existe el responsable
      * no hay id al que asociarla.
+     *
+     * <p>Si quien agrega es SUPER_USUARIO, el responsable se registra con el ID del vendedor
+     * original de la venta (quien la registro), no con el ID del super usuario.
      */
     @PostMapping(value = "/{id}/responsables", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, Object>> agregarResponsable(
@@ -509,7 +512,15 @@ public class InscripcionApiController {
             @RequestPart(value = "comprobante", required = false) MultipartFile comprobante) {
         ResponseEntity<Map<String, Object>> veto = comprobarAcceso(id);
         if (veto != null) return veto;
+
+        Inscripcion i = inscripcionService.findById(id);
         Long usuarioId = usuarioActual();
+
+        // Si es SUPER_USUARIO, usar el ID del vendedor original de la venta
+        if (esSuperUsuario() && i != null && i.getRegistroIdUsuario() != null) {
+            usuarioId = i.getRegistroIdUsuario();
+        }
+
         ResponsableExtraService.Resultado r = responsableExtra.agregar(id,
                 new ResponsableExtraService.NuevoResponsable(nombre, paterno, materno, ci, correo, celular),
                 comprobante, usuarioId);
@@ -520,6 +531,12 @@ public class InscripcionApiController {
         cuerpo.put("cobrado", r.cobrado());
         cuerpo.put("monto", r.monto());
         return r.ok() ? ResponseEntity.ok(cuerpo) : ResponseEntity.badRequest().body(cuerpo);
+    }
+
+    private boolean esSuperUsuario() {
+        Authentication a = SecurityContextHolder.getContext().getAuthentication();
+        return a != null && a.getAuthorities().stream()
+                .anyMatch(auth -> "ROLE_SUPER_USUARIO".equals(auth.getAuthority()));
     }
 
     /**

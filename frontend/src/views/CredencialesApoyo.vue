@@ -72,22 +72,21 @@ function alternarGrupo(g) {
 }
 
 /*
- * Lanza la impresion. `ids` vacio = TODO el personal activo (el servidor lo resuelve).
- * Cada credencial sale en su hoja de 10x15 con su QR de apoyo (FXA-...), que la puerta
- * ya sabe leer y anotar.
+ * Lanza la impresion duplex 4-up A4. `ids` vacio = TODO el personal activo (el servidor lo resuelve).
+ * 4 credenciales por cara (2x2), reversos espejados para imprimir a doble cara por borde largo.
  */
 async function imprimir(ids, etiqueta) {
   if (generando.value) return;
   generando.value = true;
   try {
-    const nombre = ids.length === 1 ? 'credencial-apoyo.pdf' : `credenciales-apoyo-${etiqueta}.pdf`;
-    await descargarPdf('/api/app/personal-apoyo/credenciales/pdf', nombre, {
+    const nombre = `credenciales-apoyo-duplex-${etiqueta}.pdf`;
+    await descargarPdf('/api/app/personal-apoyo/credenciales/pdf/duplex', nombre, {
       method: 'POST',
       body: JSON.stringify({ ids }),
     });
-    toast('Credenciales generadas', 'ok');
+    toast('Credenciales duplex generadas', 'ok');
   } catch (e) {
-    alerta(e.message, 'error', 0);   // 0 = no se cierra solo: hay que leerlo
+    alerta(e.message, 'error', 0);
   } finally {
     generando.value = false;
   }
@@ -111,8 +110,8 @@ onMounted(async () => {
 <template>
   <div class="cred-apoyo">
     <p class="muted nota">
-      Credenciales del personal de apoyo en su plantilla (hoja 10 × 13), con QR para
-      el control de puerta. Agrupadas por dependencia.
+      Credenciales del personal de apoyo en A4 duplex 4-up: 4 por cara, reversos espejados.
+      Imprimir a doble cara por borde largo. Agrupadas por dependencia.
     </p>
 
     <div class="barra">

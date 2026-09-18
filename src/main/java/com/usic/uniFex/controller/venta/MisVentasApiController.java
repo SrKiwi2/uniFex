@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.usic.uniFex.model.repository.FuncionesInscripcion;
 import com.usic.uniFex.security.JwtUser;
+import com.usic.uniFex.security.Roles;
 
 import lombok.RequiredArgsConstructor;
 
@@ -28,6 +29,8 @@ import lombok.RequiredArgsConstructor;
  * ACTIVA; con el, se ve el historico (p. ej. FEXPO 2025). El aislamiento es por diseño: el id
  * de usuario sale del JWT, nunca de un parametro, asi que un vendedor no puede pedir las ventas
  * de otro. Cualquier usuario autenticado ve las suyas (no necesita rol especial).
+ *
+ * <p>SUPER_USUARIO y ADMINISTRADOR ven TODAS las ventas (se pasa uid = null a la funcion).
  */
 @RestController
 @RequestMapping("/api/app/mis-ventas")
@@ -44,7 +47,11 @@ public class MisVentasApiController {
         Long uid = usuarioActual();
         if (uid == null) return noAutenticado();
 
-        List<Map<String, Object>> items = funciones.fn_get_inscripciones(uid, edicion);
+        // Solo SUPER_USUARIO ve todo: pasa null a la funcion
+        boolean esSuper = esSuperUsuario();
+        Long uidParaFuncion = esSuper ? null : uid;
+
+        List<Map<String, Object>> items = funciones.fn_get_inscripciones(uidParaFuncion, edicion);
         if (items == null) items = List.of();
 
         BigDecimal total = items.stream()
@@ -64,7 +71,7 @@ public class MisVentasApiController {
          * trabajo que nadie hace. Va en una sola consulta, no una por fila.
          */
         List<Map<String, Object>> pendientes = new java.util.ArrayList<>();
-        for (Object[] f : inscripcionDao.pendientesPorVenta(uid)) {
+        for (Object[] f : inscripcionDao.pendientesPorVenta(esSuper ? null : uid)) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", ((Number) f[0]).longValue());
             m.put("conComprobante", Boolean.TRUE.equals(f[1]));
@@ -103,6 +110,12 @@ public class MisVentasApiController {
     private Long usuarioActual() {
         Authentication a = SecurityContextHolder.getContext().getAuthentication();
         return (a != null && a.getPrincipal() instanceof JwtUser ju) ? ju.id() : null;
+    }
+
+    private boolean esSuperUsuario() {
+        Authentication a = SecurityContextHolder.getContext().getAuthentication();
+        return a != null && a.getAuthorities().stream()
+                .anyMatch(auth -> "ROLE_SUPER_USUARIO".equals(auth.getAuthority()));
     }
 
     private ResponseEntity<Map<String, Object>> noAutenticado() {

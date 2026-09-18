@@ -178,20 +178,20 @@ public interface IInscripcionDao extends JpaRepository <Inscripcion, Long> {
        *
        * Devuelve (id, tieneComprobante, responsablesSinFoto).
        */
-      @Query(value = """
-              SELECT i.id                                                         AS id,
-                     (i.img_comprobante IS NOT NULL AND i.img_comprobante <> '')  AS con_comprobante,
-                     COALESCE(SUM(CASE WHEN r.id IS NOT NULL
+@Query(value = """
+            SELECT i.id                                                         AS id,
+                   (i.img_comprobante IS NOT NULL AND i.img_comprobante <> '')  AS con_comprobante,
+                   COALESCE(SUM(CASE WHEN r.id IS NOT NULL
                                         AND (p.foto IS NULL OR p.foto = '')
-                                       THEN 1 ELSE 0 END), 0)                     AS sin_foto
-                FROM inscripcion i
-                LEFT JOIN responsable r ON r.id_entidad = i.id_entidad
-                                       AND (r."_estado" IS NULL OR r."_estado" <> 'X')
-                LEFT JOIN persona p     ON p.id = r.id_persona
-               WHERE i."_registro_id_usuario" = :usuarioId
-                 AND (i."_estado" IS NULL OR i."_estado" <> 'X')
-               GROUP BY i.id, i.img_comprobante
-              """, nativeQuery = true)
-      List<Object[]> pendientesPorVenta(@Param("usuarioId") Long usuarioId);
+                                   THEN 1 ELSE 0 END), 0)                     AS sin_foto
+             FROM inscripcion i
+             LEFT JOIN responsable r ON r.id_entidad = i.id_entidad
+                                        AND (r."_estado" IS NULL OR r."_estado" <> 'X')
+             LEFT JOIN persona p     ON p.id = r.id_persona
+            WHERE (:usuarioId IS NULL OR i."_registro_id_usuario" = :usuarioId)
+              AND (i."_estado" IS NULL OR i."_estado" <> 'X')
+            GROUP BY i.id, i.img_comprobante
+           """, nativeQuery = true)
+    List<Object[]> pendientesPorVenta(@Param("usuarioId") Long usuarioId);
 
 }
