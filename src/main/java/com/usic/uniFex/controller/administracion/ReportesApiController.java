@@ -15,10 +15,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.usic.uniFex.model.IService.IInscripcionService;
+import com.usic.uniFex.model.IService.IResponsableService;
 import com.usic.uniFex.model.dto.ResumenCategoriaView;
 import com.usic.uniFex.model.dto.ResumenEntidadView;
 import com.usic.uniFex.model.dto.ResumenGeneralView;
 import com.usic.uniFex.model.dto.ReporteVentaDTO;
+import com.usic.uniFex.model.dto.ResponsableReporteView;
+import com.usic.uniFex.model.service.ReporteResponsablesExcelService;
 import com.usic.uniFex.model.service.ReporteVentasExcelService;
 import com.usic.uniFex.model.service.ReporteVentasPdfService;
 import com.usic.uniFex.model.service.ReporteVentasService;
@@ -46,9 +49,11 @@ import lombok.RequiredArgsConstructor;
 public class ReportesApiController {
 
     private final IInscripcionService inscripcionService;
+    private final IResponsableService responsableService;
     private final ReporteVentasService reporteVentas;
     private final ReporteVentasPdfService reporteVentasPdf;
     private final ReporteVentasExcelService reporteVentasExcel;
+    private final ReporteResponsablesExcelService reporteResponsablesExcel;
 
     /** KPIs generales: nº de inscripciones, nº de puestos y total en Bs. */
     @GetMapping("/resumen")
@@ -128,6 +133,28 @@ public class ReportesApiController {
             return ResponseEntity.status(500)
                     .contentType(MediaType.TEXT_PLAIN)
                     .body(("No se pudo generar el Excel de ventas: " + e.getMessage()).getBytes());
+        }
+    }
+
+    /** Listado de todos los responsables de la edición activa con estado de credencial y foto. */
+    @GetMapping("/responsables")
+    public List<ResponsableReporteView> responsables() {
+        return responsableService.listarParaReporte();
+    }
+
+    /** Excel del reporte de responsables. */
+    @GetMapping("/responsables/excel")
+    public ResponseEntity<byte[]> responsablesExcel() {
+        try (ByteArrayOutputStream salida = new ByteArrayOutputStream()) {
+            reporteResponsablesExcel.generar(responsableService.listarParaReporte(), salida);
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=reporte-responsables.xlsx")
+                    .body(salida.toByteArray());
+        } catch (Exception e) {
+            return ResponseEntity.status(500)
+                    .contentType(MediaType.TEXT_PLAIN)
+                    .body(("No se pudo generar el Excel de responsables: " + e.getMessage()).getBytes());
         }
     }
 }

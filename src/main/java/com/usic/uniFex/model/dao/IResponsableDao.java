@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 
 import com.usic.uniFex.model.dto.ResponsableListadoExplodeView;
 import com.usic.uniFex.model.dto.ResponsableListadoView;
+import com.usic.uniFex.model.dto.ResponsableReporteView;
 import com.usic.uniFex.model.entity.Responsable;
 import com.usic.uniFex.model.service.ResponsableDetalleRow;
 
@@ -127,6 +128,67 @@ public interface IResponsableDao extends JpaRepository<Responsable, Long> {
                 order by e.nombre asc, c.nombre asc, p.paterno asc, p.nombre asc
             """)
     List<ResponsableListadoExplodeView> listarVistaExplode();
+
+    /**
+     * Reporte completo de responsables con estado de impresión de credencial y foto.
+     *
+     * Incluye todos los responsables de la edición activa (inscripciones no anuladas),
+     * con su entidad, categoría, puesto, si es titular/extra, y el estado de impresión
+     * de su credencial (veces impresa, última impresión, si alguna fue incompleta).
+     * Ordenado por entidad, categoría, puesto y nombre.
+     */
+    @Query(value = """
+            SELECT
+                r.id                                              AS id,
+                e.id                                              AS entidadId,
+                e.nombre                                          AS entidadNombre,
+                te.nombre                                         AS tipoEntidadNombre,
+                e.objeto                                          AS entidadObjeto,
+                p.id                                              AS personaId,
+                p.nombre                                          AS nombre,
+                p.paterno                                         AS paterno,
+                p.materno                                         AS materno,
+                p.ci                                              AS ci,
+                p.celular                                         AS celular,
+                p.foto                                            AS foto,
+                c.id                                              AS categoriaId,
+                c.nombre                                          AS categoriaNombre,
+                pu.codigo                                         AS puestoCodigo,
+                r.es_titular                                      AS esTitular,
+                r.es_extra                                        AS esExtra,
+                COALESCE(ci_resumen.veces, 0)                     AS vecesImpreso,
+                ci_resumen.ultima                                 AS ultimaImpresion,
+                ci_resumen.alguna_incompleta                      AS algunaIncompleta
+            FROM responsable r
+            INNER JOIN persona p       ON p.id = r.id_persona
+            INNER JOIN entidad e       ON e.id = r.id_entidad
+            LEFT JOIN tipo_entidad te  ON te.id = e.id_tipo_entidad
+            LEFT JOIN inscripcion i    ON i.id_entidad = e.id
+                                       AND (i._estado IS NULL OR i._estado <> 'X')
+            LEFT JOIN inscripcion_puesto ip ON ip.id_inscripcion = i.id
+                                       AND (ip._estado IS NULL OR ip._estado <> 'X')
+            LEFT JOIN puesto pu        ON pu.id = ip.id_puesto
+                                       AND (pu._estado IS NULL OR pu._estado <> 'X')
+            LEFT JOIN categoria c      ON c.id = pu.id_categoria
+                                       AND (c._estado IS NULL OR c._estado <> 'X')
+            LEFT JOIN (
+                SELECT id_responsable,
+                       COUNT(*) AS veces,
+                       MAX(impreso_en) AS ultima,
+                       BOOL_OR(faltantes IS NOT NULL) AS alguna_incompleta
+                FROM credencial_impresion
+                GROUP BY id_responsable
+            ) ci_resumen ON ci_resumen.id_responsable = r.id
+            WHERE (r._estado IS NULL OR r._estado <> 'X')
+              AND (p._estado IS NULL OR p._estado <> 'X')
+              AND i.id_edicion = (SELECT ed.id FROM edicion ed WHERE ed.activa LIMIT 1)
+            ORDER BY e.nombre ASC, c.nombre ASC,
+                     NULLIF(REGEXP_REPLACE(pu.codigo, '\\D', '', 'g'), '')::INT NULLS LAST,
+                     pu.codigo ASC,
+                     r.es_titular DESC,
+                     p.paterno ASC, p.materno ASC, p.nombre ASC
+            """, nativeQuery = true)
+    List<ResponsableReporteView> listarParaReporte();
 
     // PARA BUSCAR POR CI A LOS RESPONSABLES
     @Query(value = """
