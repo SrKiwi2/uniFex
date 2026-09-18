@@ -171,7 +171,7 @@ public class AdminController {
             @RequestParam(value = "fotoResponsable2", required = false) MultipartFile fotoResponsable2,
             @RequestParam(value = "puestosSeleccionados", required = false) List<Long> puestosSeleccionados,
             @RequestParam(value = "entidadBancaria", required = false) String entidadBancaria,
-            @RequestParam(value = "numComprobante", required = false) Long numComprobante,
+            @RequestParam(value = "numComprobante", required = false) String numComprobante,
             @RequestParam(value = "comprobante", required = false) MultipartFile comprobante,
             @RequestParam(value = "pagoContado", defaultValue = "false") boolean pagoContado,
 

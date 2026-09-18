@@ -42,6 +42,8 @@ public enum PantallasSistema {
     NOCHES_FEXPO("noches-fexpo", "Noches de FEXPO", "Feria"),
     NOTICIAS("noticias", "Noticias", "Feria"),
     CREDENCIALES("credenciales", "Credenciales", "Acreditacion"),
+    CREDENCIALES_APOYO("credenciales-apoyo", "Credenciales personal apoyo", "Acreditacion"),
+    IMPRESION_MASIVA("impresion-masiva", "Impresión Masiva", "Acreditacion"),
     ESCANER("escaner", "Escanear credencial", "Acreditacion"),
     CONTROL_ACCESO("control-acceso", "Control de acceso", "Acreditacion"),
     USUARIOS("usuarios", "Usuarios", "Administracion"),

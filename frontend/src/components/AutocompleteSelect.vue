@@ -21,6 +21,10 @@ const search = ref('');
 const highlightedIndex = ref(-1);
 const inputRef = ref(null);
 const dropdownRef = ref(null);
+const wrapperRef = ref(null);
+const menuRef = ref(null);
+/** Posicion fija del menu (vive teletransportado al body, ver abajo). */
+const posMenu = ref({ top: 0, left: 0, width: 0 });
 
 const filteredOptions = computed(() => {
   const q = search.value.trim().toLowerCase();
@@ -40,23 +44,53 @@ function toggleOpen() {
   if (isOpen.value) {
     search.value = '';
     highlightedIndex.value = -1;
-    nextTick(() => inputRef.value?.focus());
+    nextTick(() => {
+      actualizarPosMenu();
+      inputRef.value?.focus();
+    });
+    window.addEventListener('scroll', actualizarPosMenu, true);
+    window.addEventListener('resize', actualizarPosMenu);
+  } else {
+    soltarMenu();
   }
+}
+
+/** El menu flota sobre el body: calcula donde cae el campo y lo pone debajo (o encima). */
+function actualizarPosMenu() {
+  const r = wrapperRef.value?.getBoundingClientRect();
+  if (!r) return;
+  const altoMenu = 280;
+  const cabeAbajo = r.bottom + 4 + altoMenu <= window.innerHeight;
+  posMenu.value = {
+    top: cabeAbajo ? r.bottom + 4 : Math.max(8, window.innerHeight - altoMenu - 8),
+    left: Math.max(8, Math.min(r.left, window.innerWidth - r.width - 8)),
+    width: r.width,
+  };
+}
+
+function soltarMenu() {
+  window.removeEventListener('scroll', actualizarPosMenu, true);
+  window.removeEventListener('resize', actualizarPosMenu);
+}
+
+function cerrar() {
+  isOpen.value = false;
+  search.value = '';
+  highlightedIndex.value = -1;
+  soltarMenu();
 }
 
 function selectOption(opt) {
   const val = opt[props.valueKey];
   emit('update:modelValue', val);
   emit('change', val);
-  isOpen.value = false;
-  search.value = '';
-  highlightedIndex.value = -1;
+  cerrar();
 }
 
 function clearSelection() {
   emit('update:modelValue', '');
   emit('change', '');
-  isOpen.value = false;
+  cerrar();
 }
 
 function handleKeydown(e) {
@@ -82,27 +116,32 @@ function handleKeydown(e) {
       e.preventDefault();
       if (highlightedIndex.value >= 0 && opts[highlightedIndex.value]) {
         selectOption(opts[highlightedIndex.value]);
+      } else if (opts.length === 1) {
+        // Escribio algo que deja una sola opcion y pulso Enter: es esa, sin pedirle flechas.
+        selectOption(opts[0]);
       }
       break;
     case 'Escape':
-      isOpen.value = false;
-      search.value = '';
-      highlightedIndex.value = -1;
+      cerrar();
       break;
     case 'Tab':
-      isOpen.value = false;
+      cerrar();
       break;
   }
 }
 
 function handleClickOutside(e) {
-  if (dropdownRef.value && !dropdownRef.value.contains(e.target)) {
-    isOpen.value = false;
-  }
+  const t = e.target;
+  const dentroCampo = dropdownRef.value && dropdownRef.value.contains(t);
+  const dentroMenu = menuRef.value && menuRef.value.contains(t);
+  if (!dentroCampo && !dentroMenu) cerrar();
 }
 
 onMounted(() => document.addEventListener('click', handleClickOutside));
-onUnmounted(() => document.removeEventListener('click', handleClickOutside));
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside);
+  soltarMenu();
+});
 
 watch(() => props.modelValue, () => {
   highlightedIndex.value = -1;
@@ -112,7 +151,7 @@ watch(() => props.modelValue, () => {
 <template>
   <div class="autocomplete-select" ref="dropdownRef" :class="{ open: isOpen, disabled: disabled }">
     <label v-if="label" class="campo-label">{{ label }}</label>
-    <div class="select-wrapper" @click="toggleOpen" @keydown="handleKeydown" tabindex="0">
+    <div class="select-wrapper" ref="wrapperRef" @click="toggleOpen" @keydown="handleKeydown" tabindex="0">
       <div class="selected-value">
         <span v-if="selectedOption" class="selected-text">{{ selectedOption[labelKey] }}</span>
         <span v-else class="placeholder">{{ placeholder }}</span>
@@ -126,7 +165,15 @@ watch(() => props.modelValue, () => {
       <span class="chevron" :class="{ rotated: isOpen }">▼</span>
     </div>
 
-    <div v-if="isOpen" class="dropdown">
+    <!-- El menu vive en el body: dentro de un modal quedaria recortado por el
+         overflow del dialogo y el pie lo taparia. Con posicion fija flota por encima. -->
+    <Teleport to="body">
+      <div
+        v-if="isOpen"
+        ref="menuRef"
+        class="dropdown dropdown-flotante"
+        :style="{ top: posMenu.top + 'px', left: posMenu.left + 'px', width: posMenu.width + 'px' }"
+      >
       <input
         ref="inputRef"
         type="text"
@@ -155,6 +202,7 @@ watch(() => props.modelValue, () => {
         </li>
       </ul>
     </div>
+    </Teleport>
   </div>
 </template>
 
@@ -223,11 +271,6 @@ watch(() => props.modelValue, () => {
 }
 .chevron.rotated { transform: rotate(180deg); }
 .dropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  z-index: 100;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radio-sm);
@@ -236,6 +279,11 @@ watch(() => props.modelValue, () => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+/* Flotante (teleport al body): por encima del modal (overlay en 900). */
+.dropdown-flotante {
+  position: fixed;
+  z-index: 1300;
 }
 .search-input {
   width: 100%;

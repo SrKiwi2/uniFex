@@ -93,7 +93,7 @@ class ResponsableFotoTest {
                 LocalDate.now(), LocalDate.now().plusDays(3),
                 List.of(new DatosPersona("TITULAR", "Perez", "Lopez", "111", "t@x.com", "700"),
                         new DatosPersona("AYUDANTE", "Gomez", "Ruiz", "222", "a@x.com", "701")),
-                "Banco X", 1L, true, List.of(puestoId));
+                "Banco X", "1", true, List.of(puestoId));
         RegistroVentaService.Resultado r = registro.registrar(v, 1L);
         assertThat(r.ok()).as(r.mensaje()).isTrue();
         return r.inscripcionId();

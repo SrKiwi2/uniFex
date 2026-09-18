@@ -51,6 +51,11 @@ public class PersonalApoyoServiceImpl implements IPersonalApoyoService {
     }
 
     @Override
+    public List<PersonalApoyo> buscarActivosPorCi(String ci) {
+        return personalApoyoDao.buscarActivosPorCi(ci);
+    }
+
+    @Override
     public List<PersonalApoyo> buscarPorNombreCompleto(String nombre, String paterno, String materno) {
         return personalApoyoDao.buscarPorNombreCompleto(nombre, paterno, materno);
     }

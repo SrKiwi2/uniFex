@@ -34,6 +34,8 @@ UniFex: Spring Boot 3.5.5 / **Java 21** app for the UAP institutional fair (FEXP
 
 ## Structure
 
+- WhatsApp: `InstanciaWhatsApp` (V31) almacena conexiones administrables en `/whatsapp` y `/api/app/whatsapp/instancias`, solo `Roles.ADMINISTRA`. Primera instancia activa; activar otra reemplaza la anterior atómicamente y no se permite desactivar la única activa. `WhatsAppService` consulta la BD sin reinicio y conserva la misma configuración durante cada paquete de venta. Las propiedades `whatsapp.*` solo sirven para la importación inicial si están completas, habilitadas y la tabla está vacía. La API no devuelve claves; una clave vacía al editar conserva la anterior. Ver `DEPLOY.md`.
+
 - Errores: `logback-spring.xml` guarda ERROR y fallos HTTP en `logs/errores.txt` (UTF-8, JSON por línea), configurable con `UNIFEX_LOGS_DIR`. Rotación diaria/10 MB, hasta 30 días/300 MB de históricos. Vista SPA `/errores` y GET `/api/app/errores` exclusivos de `Roles.ADMINISTRA`, independientes de la matriz de pantallas; POST `/api/app/errores/cliente` admite informes del usuario autenticado. Identidad por MDC desde JWT/sesión; `ContextoRegistro.conservar` la propaga al envío asíncrono de WhatsApp. No requiere SQL. Ver `DEPLOY.md`.
 
 - `src/main/resources/templates/` — legacy Thymeleaf site (still sells booths); `static/assets/` is a huge purchased theme only it uses.

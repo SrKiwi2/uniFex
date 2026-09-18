@@ -11,21 +11,25 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.usic.uniFex.model.IService.IUsuarioService;
 import com.usic.uniFex.model.entity.Usuario;
+import com.usic.uniFex.model.service.GestionPersonalApoyoService;
 import com.usic.uniFex.model.service.MantenimientoService;
 import com.usic.uniFex.security.JwtService;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /** Autenticacion stateless del API movil/SPA: devuelve un JWT (Fase 2). */
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
+@Slf4j
 public class AuthController {
 
     private final IUsuarioService usuarioService;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final MantenimientoService mantenimientoService;
+    private final GestionPersonalApoyoService personalApoyo;
 
     public record LoginRequest(String usuario, String contrasena) {
     }
@@ -54,6 +58,14 @@ public class AuthController {
                     "ok", false,
                     "codigo", "MANTENIMIENTO",
                     "mensaje", mantenimiento.mensaje()));
+        }
+        // Si su persona tiene carrera, esa carrera ya es su dependencia y el ya es su
+        // coordinador: el modulo de personal de apoyo lo encuentra por su CI. Va en try/catch
+        // a proposito: esto es cortesia, y un fallo aqui nunca puede impedir entrar.
+        try {
+            personalApoyo.asegurarFichaAlIngresar(u.getId());
+        } catch (Exception e) {
+            log.warn("No se pudo asegurar la ficha de apoyo al ingresar (usuario {})", u.getId(), e);
         }
         // Se devuelve el id porque el mapa necesita saber cuales de las casetas en tramite
         // son de este vendedor: las compara con el `reservadoPor` que difunde el WebSocket.

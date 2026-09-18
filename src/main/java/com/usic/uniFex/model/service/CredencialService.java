@@ -39,6 +39,11 @@ public class CredencialService {
     private final ICredencialDao dao;
     private final CredencialCodigoService codigos;
 
+    /** Acceso al servicio de códigos QR. */
+    public CredencialCodigoService codigos() {
+        return codigos;
+    }
+
     /** Todas las credenciales de la edicion activa, aptas y no aptas. */
     @Transactional(readOnly = true)
     public List<CredencialDTO> listar() {
@@ -184,7 +189,7 @@ public class CredencialService {
                 .orElse("");
     }
 
-    private static String limpio(String s) {
+public static String limpio(String s) {
         return s == null ? "" : s.trim();
     }
 }

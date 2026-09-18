@@ -18,8 +18,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.usic.uniFex.model.dao.ApoyoAccesoDao;
 import com.usic.uniFex.model.dao.CredencialAccesoDao;
 import com.usic.uniFex.model.dto.CredencialDTO;
+import com.usic.uniFex.model.entity.PersonalApoyo;
+import com.usic.uniFex.model.IService.IPersonalApoyoService;
+import com.usic.uniFex.model.service.ApoyoCodigoService;
 import com.usic.uniFex.model.service.CredencialCodigoService;
 import com.usic.uniFex.model.service.CredencialService;
 import com.usic.uniFex.security.JwtUser;
@@ -54,6 +58,9 @@ public class AccesoApiController {
     private final CredencialCodigoService codigos;
     private final CredencialService credenciales;
     private final CredencialAccesoDao accesos;
+    private final ApoyoCodigoService codigosApoyo;
+    private final IPersonalApoyoService apoyo;
+    private final ApoyoAccesoDao accesosApoyo;
     private final SimpMessagingTemplate messaging;
 
     /** `codigo` es el del QR; `sentido` es "E" o "S". */
@@ -69,6 +76,13 @@ public class AccesoApiController {
         if (!CredencialAccesoDao.ENTRADA.equals(sentido) && !CredencialAccesoDao.SALIDA.equals(sentido)) {
             return ResponseEntity.badRequest().body(Map.of(
                     "ok", false, "mensaje", "Hay que decir si es entrada o salida"));
+        }
+
+        // Los QR de apoyo (FXA-...) van por su propia tabla: sus ids viven en
+        // personal_apoyo, no en responsable, y mezclarlos rompería los conteos de expositores.
+        if (req.codigo() != null && req.codigo().trim().toUpperCase().startsWith("FXA")) {
+            return registrarApoyo(req.codigo(), sentido,
+                    "APK".equalsIgnoreCase(origen) ? "APK" : "WEB");
         }
 
         // Se valida la FIRMA antes de tocar la base: un codigo inventado no llega a consultar
@@ -124,6 +138,45 @@ public class AccesoApiController {
     @PreAuthorize(Roles.CONTROLA_ACCESO)
     public Map<String, Object> dentro() {
         return Map.of("dentro", accesos.dentroAhora());
+    }
+
+    /**
+     * Movimiento de personal de apoyo. Misma regla que expositores —se avisa el repetido
+     * pero no se bloquea— y misma forma de respuesta, con los campos del apoyo
+     * (dependencia, rol, tarea) en vez de los de la venta.
+     */
+    private ResponseEntity<Map<String, Object>> registrarApoyo(
+            String codigo, String sentido, String origen) {
+        Long apoyoId = codigosApoyo.apoyoDe(codigo);
+        PersonalApoyo p = apoyoId == null ? null : apoyo.findById(apoyoId);
+        if (p == null || "X".equalsIgnoreCase(p.getEstado())) {
+            log.info("Acceso de apoyo rechazado, codigo no valido: {}", codigo);
+            return ResponseEntity.status(404).body(Map.of(
+                    "ok", false, "valida", false, "mensaje", "Esta credencial no es válida"));
+        }
+
+        String previo = accesosApoyo.ultimoSentido(p.getId());
+        boolean repetido = sentido.equals(previo);
+
+        accesosApoyo.registrar(p.getId(), sentido, usuarioActual(), origen);
+
+        int[] conteo = accesosApoyo.conteo(p.getId());
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("ok", true);
+        m.put("valida", true);
+        m.put("tipo", "apoyo");
+        m.put("sentido", sentido);
+        m.put("repetido", repetido);
+        m.put("nombre", p.getNombreCompleto());
+        m.put("ci", p.getCi());
+        m.put("dependencia", p.getDependencia() != null ? p.getDependencia().getNombre() : null);
+        m.put("rol", p.getRol());
+        m.put("tarea", p.getDescripcionTarea());
+        m.put("entradas", conteo[0]);
+        m.put("salidas", conteo[1]);
+        m.put("dentro", ApoyoAccesoDao.ENTRADA.equals(sentido));
+        m.put("historial", historialApoyo(p.getId()));
+        return ResponseEntity.ok(m);
     }
 
     /**
@@ -191,6 +244,17 @@ public class AccesoApiController {
 
     private List<Map<String, Object>> historial(Long responsableId) {
         return accesos.historial(responsableId, 8).stream().map(f -> {
+            Map<String, Object> h = new LinkedHashMap<>();
+            h.put("sentido", f[0]);
+            h.put("cuando", String.valueOf(f[1]));
+            h.put("usuario", f[2]);
+            h.put("origen", f[3]);
+            return h;
+        }).toList();
+    }
+
+    private List<Map<String, Object>> historialApoyo(Long apoyoId) {
+        return accesosApoyo.historial(apoyoId, 8).stream().map(f -> {
             Map<String, Object> h = new LinkedHashMap<>();
             h.put("sentido", f[0]);
             h.put("cuando", String.valueOf(f[1]));

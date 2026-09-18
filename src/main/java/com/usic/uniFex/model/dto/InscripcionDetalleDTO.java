@@ -29,7 +29,7 @@ public record InscripcionDetalleDTO(
     LocalDateTime fechaCompra,
     boolean pagoContado,
     String entidadBancaria,
-    Long numComprobante,
+    String numComprobante,
     String imgComprobante,
     String inscripcionEstado,
     String edicion,

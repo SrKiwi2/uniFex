@@ -66,6 +66,8 @@ const TODOS = [
 
   // --- Acreditacion: la puerta ---
   { a: '/credenciales', p: 'credenciales', g: 'Acreditacion', icono: '🪪', txt: 'Credenciales' },
+  { a: '/credenciales-apoyo', p: 'credenciales-apoyo', g: 'Acreditacion', icono: '🎫', txt: 'Credenciales personal apoyo' },
+  { a: '/impresion-masiva', p: 'impresion-masiva', g: 'Acreditacion', icono: '🖨️', txt: 'Impresión Masiva' },
   { a: '/escaner', p: 'escaner', g: 'Acreditacion', icono: '📷', txt: 'Escanear credencial' },
   { a: '/control-acceso', p: 'control-acceso', g: 'Acreditacion', icono: '📊', txt: 'Control de acceso' },
 
@@ -89,6 +91,7 @@ const TODOS = [
   { a: '/personal-apoyo', p: 'personal-apoyo', g: 'Administracion', icono: '👥', txt: 'Personal de apoyo' },
   { a: '/mantenimiento', p: 'mantenimiento', g: 'Administracion', icono: '⚙️', txt: 'Mantenimiento' },
   { a: '/errores', soloAdministracion: true, g: 'Administracion', icono: '⚠️', txt: 'Registro de errores' },
+  { a: '/whatsapp', soloAdministracion: true, g: 'Administracion', icono: '💬', txt: 'WhatsApp' },
 ];
 
 const anuncios = useAnunciosStore();

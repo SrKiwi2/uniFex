@@ -695,7 +695,7 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
               <label class="campo"><span>Entidad bancaria</span>
                 <input class="control mayus" v-model="borrador.entidadBancaria" placeholder="Ej. Banco Unión" /></label>
               <label class="campo"><span>N.º de comprobante</span>
-                <input class="control" type="text" inputmode="text" v-model="borrador.numComprobante" placeholder="Número o código del comprobante" /></label>
+                <input class="control" type="text" inputmode="text" v-model="borrador.numComprobante" maxlength="100" placeholder="Número o código del comprobante" /></label>
               <div class="acciones-form">
                 <button class="btn btn-fantasma" @click="editando = null">Cancelar</button>
                 <button class="btn btn-primario" :disabled="guardando" @click="guardarEdicion">

@@ -81,7 +81,7 @@ const puedeLinterna = computed(() => {
  */
 function codigoDe(texto) {
   const t = (texto || '').trim();
-  const m = t.match(/FXC-[0-9A-Z]+-[0-9A-Za-z_-]{12}/i);
+  const m = t.match(/FX[CA]-[0-9A-Z]+-[0-9A-Za-z_-]{12}/i);
   return m ? m[0].toUpperCase() : t.toUpperCase();
 }
 
@@ -320,7 +320,7 @@ const mensajeRepetido = computed(() =>
         Si el QR no se deja leer, escribe el código impreso debajo.
       </p>
       <form class="fila" @submit.prevent="verificar">
-        <input v-model="codigo" class="control codigo" placeholder="FXC-1A-XXXXXXXXXXXX"
+        <input v-model="codigo" class="control codigo" placeholder="FXC-1A-XXXXXXXXXXXX o FXA-1A-XXXXXXXXXXXX"
                autocapitalize="characters" autocomplete="off" spellcheck="false" />
         <button class="btn btn-primario" :disabled="buscando || !codigo.trim()">
           {{ buscando ? 'Verificando…' : 'Verificar' }}
@@ -352,12 +352,21 @@ const mensajeRepetido = computed(() =>
         <div>
           <strong>{{ resultado.nombre }}</strong>
           <p class="ci">C.I. {{ resultado.ci || '—' }}</p>
-          <p class="muted">{{ resultado.entidad }}</p>
+          <!-- El apoyo no tiene entidad: muestra su dependencia y su rol. -->
+          <p v-if="resultado.tipo === 'apoyo'" class="muted">
+            {{ resultado.dependencia || '—' }} · {{ resultado.rol || '—' }}
+          </p>
+          <p v-else class="muted">{{ resultado.entidad }}</p>
         </div>
       </div>
       <dl class="datos">
-        <div><dt>Categoría</dt><dd>{{ resultado.categoria || '—' }}</dd></div>
-        <div><dt>Caseta</dt><dd class="casetas">{{ resultado.casetas || '—' }}</dd></div>
+        <template v-if="resultado.tipo === 'apoyo'">
+          <div><dt>Tarea</dt><dd>{{ resultado.tarea || '—' }}</dd></div>
+        </template>
+        <template v-else>
+          <div><dt>Categoría</dt><dd>{{ resultado.categoria || '—' }}</dd></div>
+          <div><dt>Caseta</dt><dd class="casetas">{{ resultado.casetas || '—' }}</dd></div>
+        </template>
         <div><dt>Entradas</dt><dd>{{ resultado.entradas }}</dd></div>
         <div><dt>Salidas</dt><dd>{{ resultado.salidas }}</dd></div>
       </dl>

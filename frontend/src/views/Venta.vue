@@ -1112,7 +1112,8 @@ onUnmounted(() => {
             <label class="campo">
               <span>N.º de comprobante</span>
               <input class="control" type="text" inputmode="text"
-                     v-model="form.numComprobante" placeholder="Número o código del comprobante" />
+                     v-model="form.numComprobante" maxlength="100" placeholder="Número o código del comprobante" />
+              <small class="muted">Hasta 100 caracteres. Admite letras, números y ceros iniciales.</small>
             </label>
           </div>
         </template>

@@ -145,7 +145,7 @@ class RegistroVentaTest {
                 LocalDate.now(), LocalDate.now().plusDays(5),
                 List.of(new DatosPersona("TITULAR", "Perez", "Lopez", "111", "t@x.com", "700"),
                         new DatosPersona("ACOMPANIANTE", "Gomez", "Ruiz", "222", "a@x.com", "701")),
-                "Banco X", 555L, false,
+                "Banco X", "555", false,
                 puestos);
     }
 
@@ -225,7 +225,7 @@ class RegistroVentaTest {
 
         // Otro vendedor no puede tocar una venta ajena.
         RegistroVentaService.Resultado ajeno =
-                registro.adjuntarComprobante(venta.inscripcionId(), archivo, "Banco Y", 9L, intruso);
+                registro.adjuntarComprobante(venta.inscripcionId(), archivo, "Banco Y", "9", intruso);
         assertThat(ajeno.ok()).isFalse();
         assertThat(ajeno.mensaje()).contains("no es tuya");
 
@@ -235,7 +235,7 @@ class RegistroVentaTest {
                 .anyMatch(p -> p.id().equals(venta.inscripcionId()));
 
         RegistroVentaService.Resultado ok =
-                registro.adjuntarComprobante(venta.inscripcionId(), archivo, "Banco Y", 9L, vendedor);
+                registro.adjuntarComprobante(venta.inscripcionId(), archivo, "Banco Y", "9", vendedor);
         assertThat(ok.ok()).as(ok.mensaje()).isTrue();
 
         assertThat(registro.pendientesDe(vendedor))

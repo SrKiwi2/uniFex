@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.usic.uniFex.model.dto.PersonalApoyoDTO;
 import com.usic.uniFex.model.entity.Dependencia;
@@ -37,14 +38,15 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/app/personal-apoyo")
 @RequiredArgsConstructor
-@PreAuthorize(Roles.GESTIONA_USUARIOS)
+@PreAuthorize(Roles.USA_PERSONAL_APOYO)
 public class PersonalApoyoApiController {
 
     private final GestionPersonalApoyoService gestion;
 
-    // ===== DEPENDENCIAS =====
+    // ===== DEPENDENCIAS (solo SUPER USUARIO) =====
 
     @GetMapping("/dependencias")
+    @PreAuthorize(Roles.SOLO_SUPER_USUARIO)
     public List<Map<String, Object>> listarDependencias() {
         return gestion.listarDependencias().stream()
                 .map(d -> {
@@ -58,47 +60,88 @@ public class PersonalApoyoApiController {
     }
 
     @PostMapping("/dependencias")
+    @PreAuthorize(Roles.SOLO_SUPER_USUARIO)
     public ResponseEntity<Map<String, Object>> crearDependencia(@RequestBody DependenciaDatos req) {
         return responderDependencia(gestion.crearDependencia(req, actorId()));
     }
 
     @PatchMapping("/dependencias/{id}")
+    @PreAuthorize(Roles.SOLO_SUPER_USUARIO)
     public ResponseEntity<Map<String, Object>> editarDependencia(@PathVariable Long id, @RequestBody DependenciaDatos req) {
         return responderDependencia(gestion.editarDependencia(id, req, actorId()));
     }
 
     @DeleteMapping("/dependencias/{id}")
+    @PreAuthorize(Roles.SOLO_SUPER_USUARIO)
     public ResponseEntity<Map<String, Object>> eliminarDependencia(@PathVariable Long id) {
         return responderDependencia(gestion.eliminarDependencia(id, actorId()));
     }
 
-    // ===== PERSONAL =====
+    // ===== PERSONAL (recortado a la dependencia propia salvo super usuario) =====
+
+    /**
+     * Lo que la vista necesita para pintarse: si eres super usuario ves todo; si no, tu
+     * dependencia (o nada, si tu usuario no tiene ficha de apoyo con tu CI).
+     */
+    @GetMapping("/mi-dependencia")
+    public Map<String, Object> miDependencia() {
+        Map<String, Object> m = new HashMap<>();
+        boolean superUsuario = esSuperUsuario();
+        m.put("esSuper", superUsuario);
+        if (!superUsuario) {
+            gestion.miDependencia(actorId()).ifPresent(d -> {
+                m.put("idDependencia", d.getId());
+                m.put("dependenciaNombre", d.getNombre());
+            });
+        }
+        return m;
+    }
 
     @GetMapping
     public List<PersonalApoyoDTO> listar(@RequestParam(required = false) Long dependencia) {
-        if (dependencia != null) {
-            return gestion.listarPorDependencia(dependencia).stream()
+        if (esSuperUsuario()) {
+            if (dependencia != null) {
+                return gestion.listarPorDependencia(dependencia).stream()
+                        .map(PersonalApoyoDTO::de)
+                        .toList();
+            }
+            return gestion.listarPersonal().stream()
                     .map(PersonalApoyoDTO::de)
                     .toList();
         }
-        return gestion.listarPersonal().stream()
-                .map(PersonalApoyoDTO::de)
-                .toList();
+        // Sin super: solo la propia, aunque el cliente pida otra en el parametro.
+        return gestion.miDependencia(actorId())
+                .map(d -> gestion.listarPorDependencia(d.getId()).stream()
+                        .map(PersonalApoyoDTO::de)
+                        .toList())
+                .orElse(List.of());
     }
 
     @PostMapping
     public ResponseEntity<Map<String, Object>> crear(@RequestBody Datos req) {
-        return responder(gestion.crearPersonal(req, actorId()));
+        return responder(gestion.crearPersonal(req, actorId(), alcance()));
     }
 
     @PatchMapping("/{id}")
     public ResponseEntity<Map<String, Object>> editar(@PathVariable Long id, @RequestBody Datos req) {
-        return responder(gestion.editarPersonal(id, req, actorId()));
+        return responder(gestion.editarPersonal(id, req, actorId(), alcance()));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Map<String, Object>> eliminar(@PathVariable Long id) {
-        return responder(gestion.eliminarPersonal(id, actorId()));
+        return responder(gestion.eliminarPersonal(id, actorId(), alcance()));
+    }
+
+    @PostMapping(value = "/{id}/foto",
+            consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, Object>> subirFoto(
+            @PathVariable Long id, @RequestParam("foto") MultipartFile foto) {
+        return responder(gestion.guardarFoto(id, foto, actorId(), alcance()));
+    }
+
+    @DeleteMapping("/{id}/foto")
+    public ResponseEntity<Map<String, Object>> quitarFoto(@PathVariable Long id) {
+        return responder(gestion.quitarFoto(id, actorId(), alcance()));
     }
 
     // ===== helpers =====
@@ -130,5 +173,21 @@ public class PersonalApoyoApiController {
     private Long actorId() {
         Authentication a = SecurityContextHolder.getContext().getAuthentication();
         return (a != null && a.getPrincipal() instanceof JwtUser ju) ? ju.id() : null;
+    }
+
+    /** true si quien llama es SUPER USUARIO (sin recorte de dependencia). */
+    private boolean esSuperUsuario() {
+        Authentication a = SecurityContextHolder.getContext().getAuthentication();
+        return a != null && a.getPrincipal() instanceof JwtUser ju
+                && "SUPER_USUARIO".equals(ju.rolNormalizado());
+    }
+
+    /**
+     * El recorte para este actor: null = ve y toca todo; si no, solo su dependencia (o nada,
+     * si no tiene ficha: el servicio rechaza la escritura y el listado sale vacio).
+     */
+    private Long alcance() {
+        if (esSuperUsuario()) return null;
+        return gestion.miDependencia(actorId()).map(Dependencia::getId).orElse(-1L);
     }
 }

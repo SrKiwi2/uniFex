@@ -142,6 +142,13 @@ Authorities arrive as `ROLE_<rol uppercased, spaces → underscores>`, so `SUPER
 - **WhatsApp post-sale message** → `MensajesWhatsAppVenta` contains ten welcome-message variants.
   It shuffles them in rounds, uses all ten before repeating one, and never repeats the previous
   variant at a round boundary. `WhatsAppService` still sends the same receipt and credentials.
+  Connection settings now come from the active `InstanciaWhatsApp` entity (V31), administered
+  at `/whatsapp` and `/api/app/whatsapp/instancias`, restricted to `Roles.ADMINISTRA`.
+  The first instance is active automatically; activating another replaces it atomically.
+  A partial unique index and serialized writes prevent concurrent activations; deactivating
+  the active instance is rejected. Each sale package keeps one configuration snapshot.
+  `ImportarInstanciaWhatsApp` imports the old enabled properties only when the table is empty.
+  API responses never expose the stored API key; an empty edit value preserves it.
 
 ## Frontend
 

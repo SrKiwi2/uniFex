@@ -18,6 +18,14 @@ public interface IPersonalApoyoDao extends JpaRepository<PersonalApoyo, Long> {
 
     Optional<PersonalApoyo> findByCi(String ci);
 
+    /**
+     * Fichas activas con ese CI. En lista y no en Optional a proposito: si algun dia hay
+     * duplicados historicos, el que busca "mi dependencia" toma la primera en vez de reventar
+     * con IncorrectResultSizeDataAccessException y tumbar el login del modulo.
+     */
+    @Query("SELECT p FROM PersonalApoyo p WHERE p.ci = :ci AND p.estado = 'A' ORDER BY p.id")
+    List<PersonalApoyo> buscarActivosPorCi(@Param("ci") String ci);
+
     @Query("SELECT p FROM PersonalApoyo p WHERE p.nombre = ?1 AND p.paterno = ?2 AND p.materno = ?3 AND p.estado = 'A'")
     List<PersonalApoyo> buscarPorNombreCompleto(String nombre, String paterno, String materno);
 }

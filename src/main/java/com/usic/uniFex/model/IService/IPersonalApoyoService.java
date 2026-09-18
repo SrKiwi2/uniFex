@@ -13,5 +13,6 @@ public interface IPersonalApoyoService extends IServiceGenerico<PersonalApoyo, L
     List<PersonalApoyo> listarPersonalApoyo();
     List<PersonalApoyo> buscarPorDependencia(Long idDependencia);
     Optional<PersonalApoyo> findByCi(String ci);
+    List<PersonalApoyo> buscarActivosPorCi(@Param("ci") String ci);
     List<PersonalApoyo> buscarPorNombreCompleto(String nombre, String paterno, String materno);
 }

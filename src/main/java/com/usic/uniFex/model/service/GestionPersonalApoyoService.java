@@ -6,13 +6,17 @@ import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.usic.uniFex.model.IService.IDependenciaService;
 import com.usic.uniFex.model.IService.IPersonalApoyoService;
+import com.usic.uniFex.model.IService.IUsuarioService;
 import com.usic.uniFex.model.entity.Dependencia;
 import com.usic.uniFex.model.entity.PersonalApoyo;
+import com.usic.uniFex.model.entity.Usuario;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Gestión del personal de apoyo de la feria (fotógrafos, azafatas, logística, etc.).
@@ -20,16 +24,32 @@ import lombok.RequiredArgsConstructor;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class GestionPersonalApoyoService {
 
     public static final String ACTIVO = "A";
     public static final String ELIMINADO = "X";
 
+    /**
+     * Con que oficio se registra al responsable de una dependencia creada sola (ver
+     * {@link #asegurarFichaAlIngresar}). Es el mismo "coordinador" que ofrece el formulario.
+     */
+    public static final String ROL_RESPONSABLE_DEPENDENCIA = "coordinador";
+
     private final IPersonalApoyoService personalApoyoService;
     private final IDependenciaService dependenciaService;
+    private final IUsuarioService usuarioService;
+    private final FileStorageService almacen;
 
     public record Datos(Long idDependencia, String nombre, String paterno, String materno,
-                        String ci, String correo, String celular, String rol) {
+                        String ci, String correo, String celular, String rol,
+                        String descripcionTarea) {
+
+        /** Compatibilidad: los clientes que aun no mandan tarea. */
+        public Datos(Long idDependencia, String nombre, String paterno, String materno,
+                     String ci, String correo, String celular, String rol) {
+            this(idDependencia, nombre, paterno, materno, ci, correo, celular, rol, null);
+        }
     }
 
     public record Resultado(boolean ok, String mensaje, PersonalApoyo personal) {
@@ -58,6 +78,78 @@ public class GestionPersonalApoyoService {
     /** Lista personal de una dependencia específica. */
     public List<PersonalApoyo> listarPorDependencia(Long idDependencia) {
         return personalApoyoService.buscarPorDependencia(idDependencia);
+    }
+
+    /**
+     * La dependencia a la que pertenece quien opera, o vacio si no tiene ficha.
+     *
+     * El unico puente entre el login y este modulo es el CI: se busca la ficha de
+     * personal_apoyo cuyo CI coincida con el de la persona del usuario. Si no hay ficha
+     * (un admin que nunca fue registrado como apoyo), no hay dependencia propia.
+     */
+    public Optional<Dependencia> miDependencia(Long usuarioId) {
+        if (usuarioId == null) return Optional.empty();
+        Usuario u = usuarioService.findById(usuarioId);
+        if (u == null || u.getPersona() == null || u.getPersona().getCi() == null) return Optional.empty();
+        return personalApoyoService.buscarActivosPorCi(u.getPersona().getCi().trim()).stream()
+                .map(PersonalApoyo::getDependencia)
+                .filter(d -> d != null && !ELIMINADO.equalsIgnoreCase(d.getEstado()))
+                .findFirst();
+    }
+
+    /**
+     * Lista lo que ese usuario puede ver: todo si su alcance es nulo (super usuario), o solo
+     * su dependencia. El recorte vive aqui y no en el cliente: los ids los manda el navegador.
+     *
+     * @param idDependenciaAlcance null = sin recorte; si no, solo esa dependencia.
+     */
+    public List<PersonalApoyo> listarConAlcance(Long idDependenciaAlcance) {
+        if (idDependenciaAlcance == null) return listarPersonal();
+        return listarPorDependencia(idDependenciaAlcance);
+    }
+
+    /**
+     * Deja al usuario listo para el modulo al momento de ingresar: si su persona tiene carrera
+     * asignada, esa carrera existe como dependencia (se crea si falta, con su mismo nombre) y
+     * el queda registrado en ella como coordinador —su responsable—.
+     *
+     * Es idempotente y conservador: si ya tiene ficha activa en cualquier dependencia, no se
+     * toca nada (pudo asignarsela alguien a mano en otra); si no tiene carrera, tampoco. Se
+     * llama desde el login dentro de try/catch: un fallo aqui nunca puede impedir entrar.
+     */
+    @Transactional
+    public void asegurarFichaAlIngresar(Long usuarioId) {
+        if (usuarioId == null) return;
+        Usuario u = usuarioService.findById(usuarioId);
+        if (u == null || u.getPersona() == null) return;
+        var persona = u.getPersona();
+        if (persona.getCarrera() == null || persona.getCarrera().getNombre() == null
+                || persona.getCarrera().getNombre().isBlank()) return;
+        String nombreDep = persona.getCarrera().getNombre().trim();
+
+        Dependencia dep = dependenciaService.findByNombre(nombreDep).filter(d ->
+                !ELIMINADO.equalsIgnoreCase(d.getEstado())).orElse(null);
+        if (dep == null) {
+            DependenciaResultado creado = crearDependencia(
+                    new DependenciaDatos(nombreDep,
+                            "Creada automáticamente desde la carrera al ingresar."),
+                    usuarioId);
+            if (!creado.ok() || creado.dependencia() == null) {
+                // Otro ingreso simultaneo pudo crearla: se reintenta leer una vez.
+                dep = dependenciaService.findByNombre(nombreDep).filter(d ->
+                        !ELIMINADO.equalsIgnoreCase(d.getEstado())).orElse(null);
+                if (dep == null) return;
+            } else {
+                dep = creado.dependencia();
+            }
+        }
+
+        if (persona.getCi() == null || persona.getCi().isBlank()) return;
+        if (!personalApoyoService.buscarActivosPorCi(persona.getCi().trim()).isEmpty()) return;
+
+        crearPersonal(new Datos(dep.getId(), persona.getNombre(), persona.getPaterno(),
+                persona.getMaterno(), persona.getCi().trim(), persona.getCorreo(),
+                persona.getCelular(), ROL_RESPONSABLE_DEPENDENCIA), usuarioId, dep.getId());
     }
 
     @Transactional
@@ -120,19 +212,36 @@ public class GestionPersonalApoyoService {
 
     @Transactional
     public Resultado crearPersonal(Datos d, Long actorId) {
-        String falta = validarPersonal(d);
+        return crearPersonal(d, actorId, null);
+    }
+
+    /**
+     * Crea con alcance: si {@code idDependenciaAlcance} no es nulo, el registro queda
+     * forzado a esa dependencia aunque el cliente mande otra (el selector del formulario
+     * se oculta, pero el body se puede falsificar).
+     */
+    @Transactional
+    public Resultado crearPersonal(Datos d, Long actorId, Long idDependenciaAlcance) {
+        Long idDep = (idDependenciaAlcance != null) ? idDependenciaAlcance : d.idDependencia();
+        if (idDependenciaAlcance != null && d.idDependencia() != null
+                && !idDependenciaAlcance.equals(d.idDependencia())) {
+            return Resultado.error("Solo puedes registrar personal de tu dependencia.");
+        }
+        Datos efectivo = new Datos(idDep, d.nombre(), d.paterno(), d.materno(),
+                d.ci(), d.correo(), d.celular(), d.rol(), d.descripcionTarea());
+        String falta = validarPersonal(efectivo);
         if (falta != null) return Resultado.error(falta);
 
-        Dependencia dep = dependenciaService.findById(d.idDependencia());
+        Dependencia dep = dependenciaService.findById(efectivo.idDependencia());
         if (dep == null || ELIMINADO.equalsIgnoreCase(dep.getEstado())) {
             return Resultado.error("Dependencia no encontrada.");
         }
-        if (personalApoyoService.findByCi(d.ci()).isPresent()) {
+        if (personalApoyoService.findByCi(efectivo.ci()).isPresent()) {
             return Resultado.error("Ya existe personal con ese C.I.");
         }
 
         PersonalApoyo p = new PersonalApoyo();
-        aplicar(p, d, dep);
+        aplicar(p, efectivo, dep);
         p.setEstado(ACTIVO);
         p.setRegistro(new Date());
         p.setModificacion(new Date());
@@ -144,24 +253,37 @@ public class GestionPersonalApoyoService {
 
     @Transactional
     public Resultado editarPersonal(Long id, Datos d, Long actorId) {
+        return editarPersonal(id, d, actorId, null);
+    }
+
+    /** Edita con alcance: fuera de tu dependencia, la ficha ni se toca (ver crearPersonal). */
+    @Transactional
+    public Resultado editarPersonal(Long id, Datos d, Long actorId, Long idDependenciaAlcance) {
         PersonalApoyo p = personalApoyoService.findById(id);
         if (p == null || ELIMINADO.equalsIgnoreCase(p.getEstado())) {
             return Resultado.error("Personal no encontrado.");
         }
-        String falta = validarPersonal(d);
+        if (idDependenciaAlcance != null && (p.getDependencia() == null
+                || !idDependenciaAlcance.equals(p.getDependencia().getId()))) {
+            return Resultado.error("Ese registro no es de tu dependencia.");
+        }
+        Long idDep = (idDependenciaAlcance != null) ? idDependenciaAlcance : d.idDependencia();
+        Datos efectivo = new Datos(idDep, d.nombre(), d.paterno(), d.materno(),
+                d.ci(), d.correo(), d.celular(), d.rol(), d.descripcionTarea());
+        String falta = validarPersonal(efectivo);
         if (falta != null) return Resultado.error(falta);
 
-        Optional<PersonalApoyo> existente = personalApoyoService.findByCi(d.ci());
+        Optional<PersonalApoyo> existente = personalApoyoService.findByCi(efectivo.ci());
         if (existente.isPresent() && !existente.get().getId().equals(id)) {
             return Resultado.error("Ya existe otro personal con ese C.I.");
         }
 
-        Dependencia dep = dependenciaService.findById(d.idDependencia());
+        Dependencia dep = dependenciaService.findById(efectivo.idDependencia());
         if (dep == null || ELIMINADO.equalsIgnoreCase(dep.getEstado())) {
             return Resultado.error("Dependencia no encontrada.");
         }
 
-        aplicar(p, d, dep);
+        aplicar(p, efectivo, dep);
         p.setModificacion(new Date());
         p.setModificacionIdUsuario(actorId);
 
@@ -170,9 +292,19 @@ public class GestionPersonalApoyoService {
 
     @Transactional
     public Resultado eliminarPersonal(Long id, Long actorId) {
+        return eliminarPersonal(id, actorId, null);
+    }
+
+    /** Elimina con alcance: fuera de tu dependencia, la ficha ni se toca. */
+    @Transactional
+    public Resultado eliminarPersonal(Long id, Long actorId, Long idDependenciaAlcance) {
         PersonalApoyo p = personalApoyoService.findById(id);
         if (p == null || ELIMINADO.equalsIgnoreCase(p.getEstado())) {
             return Resultado.error("Personal no encontrado.");
+        }
+        if (idDependenciaAlcance != null && (p.getDependencia() == null
+                || !idDependenciaAlcance.equals(p.getDependencia().getId()))) {
+            return Resultado.error("Ese registro no es de tu dependencia.");
         }
 
         p.setEstado(ELIMINADO);
@@ -182,6 +314,68 @@ public class GestionPersonalApoyoService {
     }
 
     // ===== helpers =====
+
+    /**
+     * Guarda o reemplaza la foto de la ficha (la que va en el circulo de la credencial).
+     *
+     * Con alcance igual que editar: fuera de tu dependencia ni se toca.
+     */
+    @Transactional
+    public Resultado guardarFoto(Long id, MultipartFile archivo, Long actorId,
+                                 Long idDependenciaAlcance) {
+        log.info("[APOYO-FOTO] inicio: ficha={}, actor={}, alcance={}, archivo={}", id, actorId,
+                idDependenciaAlcance, archivo == null ? "NULL"
+                        : archivo.getOriginalFilename() + " (" + archivo.getSize() + " bytes, "
+                                + archivo.getContentType() + ")");
+        if (archivo == null || archivo.isEmpty()) {
+            log.warn("[APOYO-FOTO] ficha {}: archivo vacio o ausente", id);
+            return Resultado.error("No llegó ninguna imagen.");
+        }
+        PersonalApoyo p = personalApoyoService.findById(id);
+        if (p == null || ELIMINADO.equalsIgnoreCase(p.getEstado())) {
+            log.warn("[APOYO-FOTO] ficha {} no encontrada o eliminada", id);
+            return Resultado.error("Personal no encontrado.");
+        }
+        if (idDependenciaAlcance != null && (p.getDependencia() == null
+                || !idDependenciaAlcance.equals(p.getDependencia().getId()))) {
+            log.warn("[APOYO-FOTO] ficha {} fuera del alcance {}", id, idDependenciaAlcance);
+            return Resultado.error("Ese registro no es de tu dependencia.");
+        }
+        String ruta;
+        try {
+            ruta = almacen.save(archivo, FileStorageService.Bucket.APOYO,
+                    p.getNombreCompleto());
+            log.info("[APOYO-FOTO] ficha {}: archivo guardado en {}", id, ruta);
+        } catch (java.io.IOException e) {
+            log.warn("[APOYO-FOTO] ficha {}: fallo al guardar en disco: {}", id,
+                    e.getMessage(), e);
+            return Resultado.error("No se pudo guardar la imagen: " + e.getMessage());
+        }
+        // La anterior NO se borra: si la nueva sale mal, la vieja sigue en disco.
+        p.setFoto(ruta);
+        p.setModificacion(new Date());
+        p.setModificacionIdUsuario(actorId);
+        personalApoyoService.save(p);
+        log.info("[APOYO-FOTO] ficha {}: ruta registrada en base", id);
+        return Resultado.exito("Foto guardada.", p);
+    }
+
+    /** Quita la foto. No borra el archivo: solo deja de referenciarlo. */
+    @Transactional
+    public Resultado quitarFoto(Long id, Long actorId, Long idDependenciaAlcance) {
+        PersonalApoyo p = personalApoyoService.findById(id);
+        if (p == null || ELIMINADO.equalsIgnoreCase(p.getEstado())) {
+            return Resultado.error("Personal no encontrado.");
+        }
+        if (idDependenciaAlcance != null && (p.getDependencia() == null
+                || !idDependenciaAlcance.equals(p.getDependencia().getId()))) {
+            return Resultado.error("Ese registro no es de tu dependencia.");
+        }
+        p.setFoto(null);
+        p.setModificacion(new Date());
+        p.setModificacionIdUsuario(actorId);
+        return Resultado.exito("Foto quitada.", personalApoyoService.save(p));
+    }
 
     private String validarDependencia(DependenciaDatos d) {
         if (d.nombre() == null || d.nombre().isBlank()) return "El nombre de la dependencia es obligatorio.";
@@ -194,6 +388,8 @@ public class GestionPersonalApoyoService {
         if (d.paterno() == null || d.paterno().isBlank()) return "El apellido paterno es obligatorio.";
         if (d.ci() == null || d.ci().isBlank()) return "El C.I. es obligatorio.";
         if (d.rol() == null || d.rol().isBlank()) return "El rol es obligatorio (ej. fotógrafo, azafata, logística).";
+        if (d.descripcionTarea() != null && d.descripcionTarea().length() > 200)
+            return "La descripción de la tarea no puede pasar de 200 caracteres.";
         return null;
     }
 
@@ -203,9 +399,13 @@ public class GestionPersonalApoyoService {
         p.setPaterno(trim(d.paterno()));
         p.setMaterno(trim(d.materno()));
         p.setCi(trim(d.ci()));
-        p.setCorreo(trim(d.correo()));
-        p.setCelular(trim(d.celular()));
+        // El formulario ya no pide correo ni celular: si no vienen, se conserva lo que habia
+        // en vez de borrarlo (en altas quedan nulos, que es correcto: nadie los dio).
+        if (d.correo() != null) p.setCorreo(trim(d.correo()));
+        if (d.celular() != null) p.setCelular(trim(d.celular()));
         p.setRol(trim(d.rol()));
+        // Igual que correo/celular: si no viene, se conserva (el alta anterior no la pedia).
+        if (d.descripcionTarea() != null) p.setDescripcionTarea(trim(d.descripcionTarea()));
     }
 
     private String trim(String s) { return s == null ? null : s.trim(); }

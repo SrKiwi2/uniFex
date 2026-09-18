@@ -26,11 +26,15 @@ import lombok.Setter;
 @Setter
 @Getter
 public class Inscripcion extends AuditoriaConfig{
+    public static final int MAX_NUM_COMPROBANTE = 100;
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     private String entidadBancaria;
-    private Long numComprobante;
+    @Column(name = "num_comprobante", length = MAX_NUM_COMPROBANTE)
+    @jakarta.validation.constraints.Size(max = MAX_NUM_COMPROBANTE,
+            message = "El numero de comprobante admite hasta 100 caracteres")
+    private String numComprobante;
     private String imgComprobante;
     private boolean pagoContado;
     private Date fechaInicio;
