@@ -156,6 +156,22 @@ public class CredencialPdfService {
         fondo.setAbsolutePosition(x0, y0);
         lienzo.addImage(fondo);
 
+        pintarContenido(lienzo, fuente, d, c, x0, y0, w, h, urlBase, codigos);
+    }
+
+    /**
+     * QR, textos y foto sobre un fondo ya dibujado.
+     *
+     * Separado del fondo a proposito: en impresion masiva el fondo es una plantilla PDF
+     * reutilizable (Form XObject) que se incrusta UNA vez, y aqui solo se pinta lo que
+     * cambia por persona. Sin esto, cada pagina repetia los ~3 MB de frente+reverso y una
+     * tanda de 800 credenciales tumbaba el servidor con OutOfMemoryError.
+     */
+    private void pintarContenido(PdfContentByte lienzo, BaseFont fuente,
+                                 PlantillaCredencial d, CredencialDTO c,
+                                 float x0, float y0, float w, float h, String urlBase,
+                                 CredencialCodigoService codigos) throws Exception {
+
         // ---- QR ----
         // El eje Y del PDF crece hacia ARRIBA y el de la disposicion hacia abajo (como la
         // imagen), asi que se invierte aqui una sola vez y el resto del codigo no se entera.
@@ -170,7 +186,7 @@ public class CredencialPdfService {
         lienzo.fill();
         lienzo.restoreState();
         BarcodeQRCode qr = new BarcodeQRCode(
-                codigos.urlPublica(urlBase, c.codigo()), 1000, 1000, null);
+                codigos.urlPublica(urlBase, c.codigo()), 400, 400, null);
         Image imgQr = qr.getImage();
         imgQr.scaleAbsolute(lado, lado);
         imgQr.setAbsolutePosition(qrX, qrY);
@@ -365,7 +381,7 @@ public class CredencialPdfService {
          * que ademas se ve al recogerla. Queda el aviso en el registro para poder rehacerla.
          */
         try {
-            Image foto = Image.getInstance(ruta.toAbsolutePath().toString());
+            Image foto = fotoReducida(ruta);
             if (circular) {
                 float escala = Math.max(cajaW / foto.getWidth(), cajaH / foto.getHeight());
                 foto.scaleAbsolute(foto.getWidth() * escala, foto.getHeight() * escala);
@@ -389,6 +405,44 @@ public class CredencialPdfService {
             log.warn("Foto ilegible en la credencial de {} ({}): {}. Se imprime sin ella.",
                     c.nombre(), c.fotoUrl(), e.getMessage());
         }
+    }
+
+    /**
+     * La foto reducida a miniatura JPEG antes de incrustarla.
+     *
+     * Las fotos se suben desde telefonos y suelen traer 3000+ px cuando impresa ocupa ~3 cm
+     * (~90 pt): incrustar el archivo tal cual mete MB por credencial y una tanda completa
+     * agotaba la memoria (OutOfMemoryError). A 360 px sobra resolucion para 3 cm de papel
+     * (~300 ppp) y cada foto pesa decenas de KB en vez de MB.
+     */
+    private static final int FOTO_MAX_PX = 360;
+
+    private Image fotoReducida(Path ruta) throws Exception {
+        BufferedImage original = ImageIO.read(ruta.toFile());
+        if (original == null) throw new java.io.IOException("Formato de imagen no reconocido");
+        int ancho = original.getWidth(), alto = original.getHeight();
+        double escala = Math.min(1.0, FOTO_MAX_PX / (double) Math.max(ancho, alto));
+        BufferedImage lista = original;
+        if (escala < 1.0 || original.getColorModel().hasAlpha()) {
+            int nuevoAncho = Math.max(1, (int) (ancho * escala));
+            int nuevoAlto = Math.max(1, (int) (alto * escala));
+            BufferedImage chica = new BufferedImage(nuevoAncho, nuevoAlto, BufferedImage.TYPE_INT_RGB);
+            Graphics2D g = chica.createGraphics();
+            try {
+                // El JPEG no admite transparencia: se aplana sobre blanco.
+                g.setColor(java.awt.Color.WHITE);
+                g.fillRect(0, 0, nuevoAncho, nuevoAlto);
+                g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
+                        java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                g.drawImage(original, 0, 0, nuevoAncho, nuevoAlto, null);
+            } finally {
+                g.dispose();
+            }
+            lista = chica;
+        }
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        ImageIO.write(lista, "jpg", bos);
+        return Image.getInstance(bos.toByteArray());
     }
 
     private Path rutaFoto(String fotoUrl) {
@@ -451,14 +505,24 @@ public class CredencialPdfService {
             doc.open();
             PdfContentByte lienzo = writer.getDirectContent();
             BaseFont fuente = BaseFont.createFont(BaseFont.HELVETICA_BOLD, BaseFont.CP1252, BaseFont.NOT_EMBEDDED);
+            // Frente y reverso UNA sola vez como plantillas reutilizables: cada pagina solo
+            // guarda la referencia, no los ~3 MB de imagenes. Sin esto, "imprimir todas"
+            // incrustaba frente+reverso+fotos en cada pagina y agotaba la memoria.
+            com.itextpdf.text.pdf.PdfTemplate tplFrente = lienzo.createTemplate(w, h);
+            Image f = Image.getInstance(frente);
+            f.scaleAbsolute(w, h);
+            f.setAbsolutePosition(0, 0);
+            tplFrente.addImage(f);
+            com.itextpdf.text.pdf.PdfTemplate tplReverso = plantillaReverso(lienzo, w, h);
             for (int i = 0; i < credenciales.size(); i += 2) {
                 if (i > 0) doc.newPage();
                 int cantidad = Math.min(2, credenciales.size() - i);
                 for (int posicion = 0; posicion < cantidad; posicion++) {
                     float x = xIzq + posicion * w;
-                    pintarCredencial(lienzo, fuente, frente, plantilla, credenciales.get(i + posicion),
+                    lienzo.addTemplate(tplFrente, x, yAlta);
+                    pintarContenido(lienzo, fuente, plantilla, credenciales.get(i + posicion),
                             x, yAlta, w, h, urlBase, codigos);
-                    dibujarReverso(lienzo, x, yBaja, w, h);
+                    lienzo.addTemplate(tplReverso, x, yBaja);
                     marcasDeCorte(lienzo, x, yBaja, w, 2 * h);
                 }
                 // Guia de corte entre columnas y de doblez por la mitad de cada tira.
@@ -477,32 +541,34 @@ public class CredencialPdfService {
     }
 
     /**
-     * El reverso fijo debajo de su frente, rotado 180° para que quede derecho al doblar.
+     * El reverso fijo como plantilla reutilizable de 10x15, con los pixeles ya girados 180°
+     * para que quede derecho al doblar.
      *
      * El reverso (1183x1535) es mas ancho que el frente (1024x1536): encajarlo entero
      * dejaria franjas blancas y el corte del frente no serviria para el dorso. Se escala
      * en modo cover —lo justo para cubrir los 10x15— y se recorta lo que sobre por los
-     * lados, centrando el logo y el texto. El recorte se hace con clip del lienzo, asi el
-     * PDF sigue trayendo una sola imagen por reverso.
+     * lados, centrando el logo y el texto.
      */
-    private void dibujarReverso(PdfContentByte lienzo,
-                                float x, float y, float w, float h) throws Exception {
+    private com.itextpdf.text.pdf.PdfTemplate plantillaReverso(
+            PdfContentByte lienzo, float w, float h) throws Exception {
         Image base = Image.getInstance(reverso180());
         float escala = Math.max(w / base.getWidth(), h / base.getHeight());
         float ancho = base.getWidth() * escala;
         float alto = base.getHeight() * escala;
         Image fondo = Image.getInstance(base);
         fondo.scaleAbsolute(ancho, alto);
-        fondo.setAbsolutePosition(x + (w - ancho) / 2f, y + (h - alto) / 2f);
-        lienzo.saveState();
+        fondo.setAbsolutePosition((w - ancho) / 2f, (h - alto) / 2f);
+        com.itextpdf.text.pdf.PdfTemplate tpl = lienzo.createTemplate(w, h);
+        tpl.saveState();
         try {
-            lienzo.rectangle(x, y, w, h);
-            lienzo.clip();
-            lienzo.newPath();
-            lienzo.addImage(fondo);
+            tpl.rectangle(0, 0, w, h);
+            tpl.clip();
+            tpl.newPath();
+            tpl.addImage(fondo);
         } finally {
-            lienzo.restoreState();
+            tpl.restoreState();
         }
+        return tpl;
     }
 
     /**
