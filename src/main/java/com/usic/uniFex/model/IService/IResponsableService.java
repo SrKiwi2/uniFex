@@ -9,6 +9,7 @@ import com.usic.uniFex.model.dto.PromotoresListadoDTO;
 import com.usic.uniFex.model.dto.ResponsableDetalleDTO;
 import com.usic.uniFex.model.dto.ResponsableListadoExplodeView;
 import com.usic.uniFex.model.dto.ResponsableListadoView;
+import com.usic.uniFex.model.dto.ResponsableReporteView;
 import com.usic.uniFex.model.entity.Responsable;
 import com.usic.uniFex.model.service.ResponsableDetalleRow;
 
@@ -27,4 +28,6 @@ public interface IResponsableService extends IServiceGenerico<Responsable, Long>
     List<ResponsableListadoExplodeView> listarVistaExplode();
 
     ResponsableDetalleDTO findDetallePorCi(String ci);
+
+    List<ResponsableReporteView> listarParaReporte();
 }

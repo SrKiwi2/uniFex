@@ -12,6 +12,7 @@ import com.usic.uniFex.model.dto.PuestoDTO;
 import com.usic.uniFex.model.dto.ResponsableDetalleDTO;
 import com.usic.uniFex.model.dto.ResponsableListadoExplodeView;
 import com.usic.uniFex.model.dto.ResponsableListadoView;
+import com.usic.uniFex.model.dto.ResponsableReporteView;
 import com.usic.uniFex.model.entity.Responsable;
 import com.usic.uniFex.model.service.ResponsableDetalleRow;
 
@@ -120,5 +121,10 @@ public class ResponsableServiceImpl implements IResponsableService{
             r0.getFoto(),
             puestos
     );
+    }
+
+    @Override
+    public List<ResponsableReporteView> listarParaReporte() {
+        return responsableDao.listarParaReporte();
     }
 }
