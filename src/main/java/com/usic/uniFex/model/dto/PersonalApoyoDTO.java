@@ -14,6 +14,8 @@ public record PersonalApoyoDTO(
         String correo,
         String celular,
         String rol,
+        String descripcionTarea,
+        String foto,
         String nombreCompleto) {
 
     public static PersonalApoyoDTO de(PersonalApoyo p) {
@@ -28,6 +30,15 @@ public record PersonalApoyoDTO(
                 p.getCorreo(),
                 p.getCelular(),
                 p.getRol(),
+                p.getDescripcionTarea(),
+                fotoUrl(p.getFoto()),
                 p.getNombreCompleto());
+    }
+
+    /** La ruta de disco a URL servida en /files/**. */
+    public static String fotoUrl(String ruta) {
+        if (ruta == null || ruta.isBlank()) return null;
+        String r = ruta.trim();
+        return r.startsWith("/files/") ? r : "/files/" + r;
     }
 }

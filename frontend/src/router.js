@@ -72,6 +72,8 @@ const router = createRouter({
         { path: 'notificaciones', component: () => import('./views/Notificaciones.vue'), meta: { titulo: 'Notificaciones', requiereAuth: true, pantalla: 'notificaciones'} },
         { path: 'vendedores', component: () => import('./views/Vendedores.vue'), meta: { titulo: 'Vendedores', requiereAuth: true, pantalla: 'vendedores'} },
         { path: 'credenciales', component: () => import('./views/Credenciales.vue'), meta: { titulo: 'Credenciales', requiereAuth: true, pantalla: 'credenciales' } },
+        { path: 'credenciales-apoyo', component: () => import('./views/CredencialesApoyo.vue'), meta: { titulo: 'Credenciales personal apoyo', requiereAuth: true, pantalla: 'credenciales-apoyo' } },
+        { path: 'impresion-masiva', component: () => import('./views/ImpresionMasiva.vue'), meta: { titulo: 'Impresión Masiva', requiereAuth: true, pantalla: 'impresion-masiva' } },
         { path: 'escaner', component: () => import('./views/Escaner.vue'), meta: { titulo: 'Escanear credencial', requiereAuth: true, pantalla: 'escaner' } },
         { path: 'permisos', component: () => import('./views/Permisos.vue'), meta: { titulo: 'Permisos por rol', requiereAuth: true, pantalla: 'permisos' } },
       ],

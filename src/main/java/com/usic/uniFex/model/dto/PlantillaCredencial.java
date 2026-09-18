@@ -113,7 +113,37 @@ public record PlantillaCredencial(
             null);
 
     /**
-     * Todas las plantillas que se pueden elegir, en el orden en que salen en la pantalla.
+     * Plantilla EXPOSITOR: para credenciales de expositores con la plantilla CREDENCIAL_EXPOSITOR.png.
+     * La plantilla trae un circulo azul a la izquierda (foto), un recuadro blanco arriba a la
+     * derecha (QR), y tarjetas blancas para datos (nombre, entidad, C.I., caseta/zona).
+     * Las cajas estan MEDIDAS sobre la plantilla 1024x1536 (proporcion 2:3 = 10x15 cm):
+     * cada valor va en la franja blanca INFERIOR de su tarjeta (debajo de la barra azul),
+     * con un margen interno para no tocar los bordes redondeados.
+     */
+    public static final PlantillaCredencial EXPOSITOR = new PlantillaCredencial(
+            "EXPOSITOR", "Expositor", "Plantilla para expositores (foto izq, QR der, datos abajo)",
+            "static/assets/CREDENCIAL_EXPOSITOR.png",
+            true,    // imprime nombre y C.I.: sin foto no se emite
+            false,   // alineado a la izquierda, debajo de cada etiqueta impresa
+            true,
+            // Caja blanca del QR: x 480..920, y 88..430. El QR es cuadrado y cabe por el alto
+            // (342 px): lado 302 px con 20 px de zona de silencio arriba/abajo y centrado.
+            new Caja(549.0 / 1024, 108.0 / 1536, 302.0 / 1024, 302.0 / 1536),
+            // Franja blanca bajo la barra azul "NOMBRE COMPLETO": x 113..913, y 678..766.
+            new Caja(125.0 / 1024, 686.0 / 1536, 776.0 / 1024, 72.0 / 1536),
+            // Franja blanca bajo "EMPRESA / SERVICIO": x 112..914, y 844..933.
+            new Caja(124.0 / 1024, 852.0 / 1536, 778.0 / 1024, 73.0 / 1536),
+            // Franja blanca bajo "# CEDULA DE IDENTIDAD": x 112..914, y 1009..1083.
+            new Caja(124.0 / 1024, 1017.0 / 1536, 778.0 / 1024, 58.0 / 1536),
+            // Tarjeta "COD. PUESTO": x 111..501, y 1162..1248.
+            new Caja(123.0 / 1024, 1170.0 / 1536, 366.0 / 1024, 70.0 / 1536),
+            // Tarjeta "ZONA": x 520..913, y 1162..1248.
+            new Caja(532.0 / 1024, 1170.0 / 1536, 369.0 / 1024, 70.0 / 1536),
+            // Interior del aro azul (x 75..415, y 260..600): con margen para no tapar el borde.
+            new Caja(85.0 / 1024, 270.0 / 1536, 320.0 / 1024, 320.0 / 1536)
+    );
+
+    /**
      *
      * <b>Aqui se añade una plantilla nueva, y en ningun otro sitio.</b> El generador, el
      * catalogo del API, los requisitos por plantilla y los botones de la pantalla recorren esta
@@ -159,7 +189,7 @@ public record PlantillaCredencial(
      * lista. La virtual va primera porque es la que se usa a diario.
      */
     public static final List<PlantillaCredencial> CATALOGO =
-            List.of(CREDENCIAL_VIRTUAL, CON_ETIQUETAS, QR_GRANDE);
+            List.of(CREDENCIAL_VIRTUAL, CON_ETIQUETAS, QR_GRANDE, EXPOSITOR);
 
     /** La que se usa cuando quien llama no pide ninguna. */
     public static final PlantillaCredencial POR_DEFECTO = CREDENCIAL_VIRTUAL;

@@ -44,7 +44,9 @@ public class FileStorageService {
         /** Foto o video de fondo de una noche de la cartelera (ver V26 y NochesFexpoService). */
         NOCHES("noches"),
         /** Foto o video de una noticia del carrusel publico (ver V42 y NoticiasService). */
-        NOTICIAS("noticias");
+        NOTICIAS("noticias"),
+        /** Foto del personal de apoyo, para el circulo de su credencial (ver V47). */
+        APOYO("apoyo");
 
         private final String dir;
         Bucket(String dir) { this.dir = dir; }

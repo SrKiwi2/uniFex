@@ -332,6 +332,55 @@ public class CredencialesApiController {
     }
 
     /**
+     * Genera PDF 2-up (2 credenciales por hoja carta, con reverso).
+     *
+     * Cada hoja carta rinde 2 credenciales completas (frente + reverso) al imprimir a doble cara.
+     * Usa la plantilla EXPOSITOR (hoja 10x15 cm proporcion 2:3).
+     *
+     * @param responsables ids concretos; si viene vacio, TODAS las aptas de la edicion activa
+     * @param plantilla    "EXPOSITOR" (por defecto)
+     * @param anchoCm      ancho impreso de cada credencial en cm (por defecto 10)
+     */
+    @PostMapping(value = "/pdf-2up", produces = MediaType.APPLICATION_PDF_VALUE)
+    @PreAuthorize(Roles.USA_CREDENCIALES)
+    public ResponseEntity<byte[]> pdf2up(@RequestBody(required = false) PeticionPdf2up req) {
+        String plantilla = req == null || req.plantilla() == null || req.plantilla().isBlank()
+                ? "EXPOSITOR" : req.plantilla();
+        double anchoCm = req == null || req.anchoCm() == null ? 10.0 : req.anchoCm();
+        List<Long> ids = req == null ? null : req.responsables();
+
+        List<CredencialDTO> elegidas = (ids == null || ids.isEmpty())
+                ? credencialService.listarAptas("EXPOSITOR", alcanceDelUsuario())
+                : credencialService.porResponsables(ids);
+
+        if (elegidas.isEmpty()) {
+            return ResponseEntity.status(409)
+                    .contentType(MediaType.TEXT_PLAIN)
+                    .body("No hay credenciales aptas para imprimir en formato 2-up."
+                            .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+
+        byte[] pdf = pdfService.generarDosPorHoja(
+                elegidas,
+                PlantillaCredencial.EXPOSITOR,
+                req == null || req.anchoCm() == null ? 10.0 : req.anchoCm(),
+                raizPublica(),
+                codigos);
+
+        String nombre = elegidas.size() == 1
+                ? "credencial-2up.pdf"
+                : "credenciales-2up-" + elegidas.size() + ".pdf";
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header("Content-Disposition", "inline; filename=\"" + nombre + "\"")
+                .body(pdf);
+    }
+
+    public record PeticionPdf2up(List<Long> responsables, String plantilla, Double anchoCm) {
+    }
+
+    /**
      * La credencial virtual de un responsable, como IMAGEN para el telefono.
      *
      * Va aparte del PDF a proposito. Esta credencial no se imprime: se manda al telefono del

@@ -8,6 +8,9 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import javax.imageio.ImageIO;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
@@ -53,6 +56,8 @@ public class CredencialPdfService {
     /** Ancho impreso por defecto. Con la proporcion de la plantilla da unos 13 cm de alto. */
     public static final double ANCHO_CM_POR_DEFECTO = 10.0;
     private static final float CM = 72f / 2.54f;   // puntos PostScript por centimetro
+    public static final float OFICIO_ANCHO_CM = 21.6f;
+    public static final float OFICIO_ALTO_CM = 33f;
 
     /**
      * Los bytes de cada plantilla, leidos del jar una sola vez.
@@ -137,6 +142,15 @@ public class CredencialPdfService {
         float x0 = (hoja.getWidth() - w) / 2f;
         float y0 = (hoja.getHeight() - h) / 2f;
 
+        pintarCredencial(lienzo, fuente, plantillaImg, d, c, x0, y0, w, h, urlBase, codigos);
+    }
+
+    /** Un solo trazado para impresion individual y por pares, en medidas finales del papel. */
+    private void pintarCredencial(PdfContentByte lienzo, BaseFont fuente, Image plantillaImg,
+                                  PlantillaCredencial d, CredencialDTO c,
+                                  float x0, float y0, float w, float h, String urlBase,
+                                  CredencialCodigoService codigos) throws Exception {
+
         Image fondo = Image.getInstance(plantillaImg);
         fondo.scaleAbsolute(w, h);
         fondo.setAbsolutePosition(x0, y0);
@@ -148,6 +162,13 @@ public class CredencialPdfService {
         float lado = (float) (d.qr().ancho() * w);
         float qrX = x0 + (float) (d.qr().x() * w);
         float qrY = y0 + h - (float) (d.qr().y() * h) - lado;
+        // Fondo blanco limpio detras del QR: la caja ya trae zona de silencio medida sobre
+        // la plantilla, y asi ningun artefacto del fondo se mete entre los modulos.
+        lienzo.saveState();
+        lienzo.setColorFill(BaseColor.WHITE);
+        lienzo.rectangle(qrX, qrY, lado, lado);
+        lienzo.fill();
+        lienzo.restoreState();
         BarcodeQRCode qr = new BarcodeQRCode(
                 codigos.urlPublica(urlBase, c.codigo()), 1000, 1000, null);
         Image imgQr = qr.getImage();
@@ -156,18 +177,18 @@ public class CredencialPdfService {
         lienzo.addImage(imgQr);
 
         // ---- Datos ----
-        String empresa = c.entidad();
+        String empresa = c.entidad() == null ? "" : c.entidad();
         if (c.rubro() != null && !c.rubro().isBlank()) empresa += "  ·  " + c.rubro();
 
-        texto(lienzo, fuente, d.nombre(), valor(c.nombre(), d), x0, y0, w, h, d.centrado());
-        texto(lienzo, fuente, d.empresa(), valor(empresa, d), x0, y0, w, h, d.centrado());
-            texto(lienzo, fuente, d.ci(), valor(c.ci(), d), x0, y0, w, h, d.centrado());
-            dibujarFoto(lienzo, d.foto(), c, x0, y0, w, h);
-            if (d.zona() != null) {
+        textoDato(lienzo, fuente, d.nombre(), valor(c.nombre(), d), x0, y0, w, h, d);
+        textoDato(lienzo, fuente, d.empresa(), valor(empresa, d), x0, y0, w, h, d);
+        textoDato(lienzo, fuente, d.ci(), valor(c.ci(), d), x0, y0, w, h, d);
+        dibujarFoto(lienzo, d.foto(), c, x0, y0, w, h, "EXPOSITOR".equals(d.id()));
+        if (d.zona() != null) {
             // La plantilla ya trae "COD. PUESTO" y "ZONA" impresos uno al lado del otro: cada
             // valor va en su caja y no hace falta apilarlos.
-            texto(lienzo, fuente, d.codigo(), valor(c.casetas(), d), x0, y0, w, h, d.centrado());
-            texto(lienzo, fuente, d.zona(), valor(c.categoria(), d), x0, y0, w, h, d.centrado());
+            textoDato(lienzo, fuente, d.codigo(), valor(c.casetas(), d), x0, y0, w, h, d);
+            textoDato(lienzo, fuente, d.zona(), valor(c.categoria(), d), x0, y0, w, h, d);
         } else {
             // La caseta con su categoria debajo: el numero solo no dice nada si hay trece zonas.
             codigoConCategoria(lienzo, fuente, d.codigo(), valor(c.casetas(), d),
@@ -274,8 +295,54 @@ public class CredencialPdfService {
         lienzo.endText();
     }
 
+    /** En expositor admite dos lineas antes de reducir o abreviar un valor largo. */
+    private void textoDato(PdfContentByte lienzo, BaseFont fuente, Caja caja, String contenido,
+                           float x0, float y0, float w, float h, PlantillaCredencial plantilla) {
+        if (caja == null || contenido == null || contenido.isBlank()) return;
+        if (!"EXPOSITOR".equals(plantilla.id())) {
+            texto(lienzo, fuente, caja, contenido, x0, y0, w, h, plantilla.centrado());
+            return;
+        }
+        float ancho = (float) caja.ancho() * w;
+        float alto = (float) caja.alto() * h;
+        String limpio = contenido.replaceAll("\\s+", " ").trim();
+        for (float tam = Math.min(12f, alto * .72f); tam >= 6f; tam -= .25f) {
+            var lineas = new java.util.ArrayList<String>();
+            String linea = "";
+            boolean palabraLarga = false;
+            for (String palabra : limpio.split(" ")) {
+                if (fuente.getWidthPoint(palabra, tam) > ancho) { palabraLarga = true; break; }
+                String candidata = linea.isEmpty() ? palabra : linea + " " + palabra;
+                if (!linea.isEmpty() && fuente.getWidthPoint(candidata, tam) > ancho) {
+                    lineas.add(linea);
+                    linea = palabra;
+                } else linea = candidata;
+            }
+            if (palabraLarga) continue;
+            if (!linea.isEmpty()) lineas.add(linea);
+            float ascenso = fuente.getFontDescriptor(BaseFont.ASCENT, tam);
+            float descenso = fuente.getFontDescriptor(BaseFont.DESCENT, tam);
+            float interlineado = tam * 1.1f;
+            float altoTexto = ascenso - descenso + (lineas.size() - 1) * interlineado;
+            if (lineas.size() > 2 || altoTexto > alto) continue;
+            float x = x0 + (float) caja.x() * w;
+            float y = y0 + h - (float) caja.y() * h - alto;
+            float base = y + (alto + altoTexto) / 2 - ascenso;
+            lienzo.beginText();
+            lienzo.setFontAndSize(fuente, tam);
+            lienzo.setColorFill(BaseColor.BLACK);
+            for (String parte : lineas) {
+                lienzo.showTextAligned(Element.ALIGN_LEFT, parte, x, base, 0);
+                base -= interlineado;
+            }
+            lienzo.endText();
+            return;
+        }
+        texto(lienzo, fuente, caja, limpio, x0, y0, w, h, false);
+    }
+
     private void dibujarFoto(PdfContentByte lienzo, Caja caja, CredencialDTO c,
-                             float x0, float y0, float w, float h) throws Exception {
+                             float x0, float y0, float w, float h, boolean circular) throws Exception {
         if (caja == null || c.fotoUrl() == null || c.fotoUrl().isBlank()) return;
         Path ruta = rutaFoto(c.fotoUrl());
         if (ruta == null) return;
@@ -299,6 +366,22 @@ public class CredencialPdfService {
          */
         try {
             Image foto = Image.getInstance(ruta.toAbsolutePath().toString());
+            if (circular) {
+                float escala = Math.max(cajaW / foto.getWidth(), cajaH / foto.getHeight());
+                foto.scaleAbsolute(foto.getWidth() * escala, foto.getHeight() * escala);
+                foto.setAbsolutePosition(x + (cajaW - foto.getScaledWidth()) / 2,
+                        y + (cajaH - foto.getScaledHeight()) / 2);
+                lienzo.saveState();
+                try {
+                    lienzo.ellipse(x, y, x + cajaW, y + cajaH);
+                    lienzo.clip();
+                    lienzo.newPath();
+                    lienzo.addImage(foto);
+                } finally {
+                    lienzo.restoreState();
+                }
+                return;
+            }
             foto.scaleAbsolute(cajaW, cajaH);
             foto.setAbsolutePosition(x, y);
             lienzo.addImage(foto);
@@ -319,6 +402,188 @@ public class CredencialPdfService {
             log.warn("No se pudo resolver la foto {}: {}", fotoUrl, e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Dos credenciales de 10x15 cm por hoja oficio, listas para cortar y doblar.
+     *
+     * <h2>Disposicion: una sola cara, sin doble cara</h2>
+     * La hoja oficio (21,6x33 cm) lleva dos columnas de 10 cm de ancho con 0,8 cm de aire a
+     * los lados. En cada columna el FRENTE va arriba y su REVERSO fijo abajo, pegados por el
+     * borde: 15 + 15 = 30 cm, con 1,5 cm de aire arriba y abajo. El operario solo corta por
+     * la linea vertical del medio y dobla cada tira por la linea punteada: al doblar la mitad
+     * inferior detras de la superior, el reverso queda justo detras de su frente.
+     *
+     * <h2>El reverso va rotado 180°</h2>
+     * Al doblar hacia arriba, lo de abajo termina arriba y espejado: es una rotacion de media
+     * vuelta. Por eso el reverso se imprime girado 180°, para que al doblar quede derecho.
+     * Ocupa el MISMO rectangulo de 10x15 que su frente (recortado centrado, sin deformar,
+     * porque el reverso no tiene la misma proporcion), asi el mismo corte sirve para ambos.
+     *
+     * Las medidas son reales: nunca se agranda o encoge. Imprimir al 100 %, una sola cara.
+     */
+    public byte[] generarDosPorHoja(List<CredencialDTO> credenciales, PlantillaCredencial plantilla,
+                                     double anchoCm, String urlBase, CredencialCodigoService codigos) {
+        if (credenciales == null || credenciales.isEmpty()) {
+            throw new IllegalArgumentException("No hay credenciales que imprimir");
+        }
+        if (!Double.isFinite(anchoCm) || anchoCm <= 0) {
+            throw new IllegalArgumentException("El ancho de la credencial debe ser positivo");
+        }
+        Rectangle hoja = new Rectangle(OFICIO_ANCHO_CM * CM, OFICIO_ALTO_CM * CM);
+        Document doc = new Document(hoja, 0, 0, 0, 0);
+        ByteArrayOutputStream salida = new ByteArrayOutputStream();
+        try {
+            Image frente = Image.getInstance(bytes(plantilla.imagen()));
+            float w = (float) (anchoCm * CM);
+            float h = w * frente.getHeight() / frente.getWidth();
+            if (2 * w > hoja.getWidth() - CM || 2 * h > hoja.getHeight() - CM) {
+                throw new IllegalArgumentException("Dos credenciales de ese tamano no caben en oficio");
+            }
+            // Dos columnas centradas (0,8 cm de aire por lado) y bloque de 30 cm centrado
+            // verticalmente (1,5 cm de aire arriba y abajo). La doblez queda en la mitad.
+            float xIzq = (hoja.getWidth() - 2 * w) / 2;
+            float yBaja = (hoja.getHeight() - 2 * h) / 2;
+            float yAlta = yBaja + h;
+            PdfWriter writer = PdfWriter.getInstance(doc, salida);
+            writer.addViewerPreference(com.itextpdf.text.pdf.PdfName.PRINTSCALING,
+                    com.itextpdf.text.pdf.PdfName.NONE);
+            doc.open();
+            PdfContentByte lienzo = writer.getDirectContent();
+            BaseFont fuente = BaseFont.createFont(BaseFont.HELVETICA_BOLD, BaseFont.CP1252, BaseFont.NOT_EMBEDDED);
+            for (int i = 0; i < credenciales.size(); i += 2) {
+                if (i > 0) doc.newPage();
+                int cantidad = Math.min(2, credenciales.size() - i);
+                for (int posicion = 0; posicion < cantidad; posicion++) {
+                    float x = xIzq + posicion * w;
+                    pintarCredencial(lienzo, fuente, frente, plantilla, credenciales.get(i + posicion),
+                            x, yAlta, w, h, urlBase, codigos);
+                    dibujarReverso(lienzo, x, yBaja, w, h);
+                    marcasDeCorte(lienzo, x, yBaja, w, 2 * h);
+                }
+                // Guia de corte entre columnas y de doblez por la mitad de cada tira.
+                if (cantidad == 2) lineaDeCorte(lienzo, xIzq + w, yBaja, yBaja + 2 * h);
+                lineaDeDoblez(lienzo, fuente, xIzq, xIzq + cantidad * w, yAlta);
+            }
+            doc.close();
+            log.info("Credenciales impresas en oficio: {}, hojas: {}",
+                    credenciales.size(), (credenciales.size() + 1) / 2);
+            return salida.toByteArray();
+        } catch (Exception e) {
+            throw new IllegalStateException("No se pudo generar el PDF por pares: " + e.getMessage(), e);
+        } finally {
+            if (doc.isOpen()) doc.close();
+        }
+    }
+
+    /**
+     * El reverso fijo debajo de su frente, rotado 180° para que quede derecho al doblar.
+     *
+     * El reverso (1183x1535) es mas ancho que el frente (1024x1536): encajarlo entero
+     * dejaria franjas blancas y el corte del frente no serviria para el dorso. Se escala
+     * en modo cover —lo justo para cubrir los 10x15— y se recorta lo que sobre por los
+     * lados, centrando el logo y el texto. El recorte se hace con clip del lienzo, asi el
+     * PDF sigue trayendo una sola imagen por reverso.
+     */
+    private void dibujarReverso(PdfContentByte lienzo,
+                                float x, float y, float w, float h) throws Exception {
+        Image base = Image.getInstance(reverso180());
+        float escala = Math.max(w / base.getWidth(), h / base.getHeight());
+        float ancho = base.getWidth() * escala;
+        float alto = base.getHeight() * escala;
+        Image fondo = Image.getInstance(base);
+        fondo.scaleAbsolute(ancho, alto);
+        fondo.setAbsolutePosition(x + (w - ancho) / 2f, y + (h - alto) / 2f);
+        lienzo.saveState();
+        try {
+            lienzo.rectangle(x, y, w, h);
+            lienzo.clip();
+            lienzo.newPath();
+            lienzo.addImage(fondo);
+        } finally {
+            lienzo.restoreState();
+        }
+    }
+
+    /**
+     * El reverso girado media vuelta, en bytes y cacheado como las plantillas.
+     *
+     * Se gira la IMAGEN y no el dibujo del PDF a proposito: la rotacion de iText gira
+     * sobre la esquina y el desplazamiento resultante depende de la version, mientras que
+     * girar los pixeles deja el posicionamiento igual que el del frente —el centro del
+     * reverso coincide exactamente con el de su frente— y el test lo comprueba.
+     */
+    private byte[] reverso180() {
+        return cache.computeIfAbsent("static/assets/CREDENCIAL_REVERSO.png#180", k -> {
+            try (InputStream in = new ClassPathResource(
+                    "static/assets/CREDENCIAL_REVERSO.png").getInputStream()) {
+                BufferedImage original = ImageIO.read(in);
+                if (original == null) throw new IllegalStateException("No se pudo leer el reverso");
+                BufferedImage girada = new BufferedImage(
+                        original.getWidth(), original.getHeight(), BufferedImage.TYPE_INT_RGB);
+                Graphics2D g = girada.createGraphics();
+                try {
+                    g.rotate(Math.PI, original.getWidth() / 2.0, original.getHeight() / 2.0);
+                    g.drawImage(original, 0, 0, null);
+                } finally {
+                    g.dispose();
+                }
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                ImageIO.write(girada, "png", bos);
+                return bos.toByteArray();
+            } catch (Exception e) {
+                throw new IllegalStateException("No se pudo girar el reverso: " + e.getMessage(), e);
+            }
+        });
+    }
+
+    /** Linea de corte entre las dos columnas: un solo tajo vertical las separa. */
+    private void lineaDeCorte(PdfContentByte lienzo, float x, float y0, float y1) {
+        lienzo.saveState();
+        lienzo.setColorStroke(new BaseColor(150, 150, 150));
+        lienzo.setLineWidth(.5f);
+        lienzo.moveTo(x, y0);
+        lienzo.lineTo(x, y1);
+        lienzo.stroke();
+        lienzo.restoreState();
+    }
+
+    /** Linea de doblez a trazos por la mitad de cada tira, con su rotulo al margen. */
+    private void lineaDeDoblez(PdfContentByte lienzo, BaseFont fuente,
+                               float x0, float x1, float y) {
+        lienzo.saveState();
+        lienzo.setColorStroke(new BaseColor(150, 150, 150));
+        lienzo.setLineWidth(.5f);
+        lienzo.setLineDash(4f, 3f);
+        lienzo.moveTo(x0, y);
+        lienzo.lineTo(x1, y);
+        lienzo.stroke();
+        lienzo.restoreState();
+        lienzo.beginText();
+        lienzo.setFontAndSize(fuente, 7f);
+        lienzo.setColorFill(new BaseColor(150, 150, 150));
+        lienzo.showTextAligned(Element.ALIGN_CENTER, "DOBLAR", x0 - 9f, y, 90);
+        lienzo.endText();
+    }
+
+    private void marcasDeCorte(PdfContentByte lienzo, float x, float y, float w, float h) {
+        float separacion = .06f * CM;
+        float largo = .18f * CM;
+        lienzo.saveState();
+        lienzo.setColorStroke(new BaseColor(150, 150, 150));
+        lienzo.setLineWidth(.3f);
+        for (float bordeX : new float[]{x, x + w}) {
+            float direccion = bordeX == x ? -1 : 1;
+            for (float bordeY : new float[]{y, y + h}) {
+                lienzo.moveTo(bordeX + direccion * separacion, bordeY);
+                lienzo.lineTo(bordeX + direccion * (separacion + largo), bordeY);
+                float vertical = bordeY == y ? -1 : 1;
+                lienzo.moveTo(bordeX, bordeY + vertical * separacion);
+                lienzo.lineTo(bordeX, bordeY + vertical * (separacion + largo));
+            }
+        }
+        lienzo.stroke();
+        lienzo.restoreState();
     }
 
     private byte[] bytes(String recurso) {

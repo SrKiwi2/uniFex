@@ -27,6 +27,8 @@ const TODOS = [
     desc: 'Tus inscripciones registradas y el total vendido.', color: 'var(--acento)' },
   { p: 'credenciales', a: '/credenciales', icono: '🪪', titulo: 'Credenciales',
     desc: 'Preparar y entregar las credenciales de los expositores.', color: '#0d9488' },
+  { p: 'credenciales-apoyo', a: '/credenciales-apoyo', icono: '🎫', titulo: 'Credenciales personal apoyo',
+    desc: 'Credenciales con QR del personal de apoyo, por dependencia.', color: '#7c3aed' },
   { p: 'escaner', a: '/escaner', icono: '📷', titulo: 'Escanear credencial',
     desc: 'Control de entradas y salidas en la puerta.', color: '#ea580c' },
   { p: 'inscripciones', a: '/inscripciones', icono: '📋', titulo: 'Inscripciones',

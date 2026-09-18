@@ -127,4 +127,15 @@ public final class Roles {
 
     public static final String USA_CREDENCIALES =
             "hasAnyRole('SUPER_USUARIO','ADMINISTRADOR','VERIFICADOR','ADMINISTRATIVO')";
+
+    /**
+     * Quien USA el modulo de personal de apoyo: cualquiera autenticado.
+     *
+     * La puerta es solo el login porque el recorte no es por rol sino por DATO (tu
+     * dependencia): un coordinador de carrera no es ni admin ni vendedor, pero debe ver y
+     * registrar a su gente. La autorizacion real esta en cada endpoint —las dependencias
+     * exigen {@link #SOLO_SUPER_USUARIO} y el personal se recorta a la dependencia propia—,
+     * asi que abrir la puerta no abre nada ajeno.
+     */
+    public static final String USA_PERSONAL_APOYO = "isAuthenticated()";
 }
