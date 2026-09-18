@@ -84,4 +84,28 @@ public class PersonalApoyoCredencialApiController {
         if (baseUrlPublica != null && !baseUrlPublica.isBlank()) return baseUrlPublica.trim();
         return ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString();
     }
+
+    @PostMapping("/pdf/duplex")
+    public ResponseEntity<byte[]> pdfDuplex(@RequestBody(required = false) PeticionPdf req) {
+        List<Long> ids = req == null ? null : req.ids();
+        List<PersonalApoyo> fichas = (ids == null || ids.isEmpty())
+                ? apoyo.listarPersonalApoyo()
+                : ids.stream().map(apoyo::findById).toList();
+        List<ApoyoCredencialDTO> lista = fichas.stream()
+                .filter(p -> p != null && !"X".equalsIgnoreCase(p.getEstado()))
+                .map(p -> ApoyoCredencialDTO.de(p, codigos))
+                .toList();
+        if (lista.isEmpty()) {
+            return ResponseEntity.status(409)
+                    .contentType(MediaType.TEXT_PLAIN)
+                    .body("No hay personal de apoyo activo para imprimir."
+                            .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+        byte[] bytes = pdf.generarDuplex4(lista, raizPublica(), codigos);
+        String nombre = "credenciales-apoyo-duplex-" + lista.size() + ".pdf";
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header("Content-Disposition", "inline; filename=\"" + nombre + "\"")
+                .body(bytes);
+    }
 }
