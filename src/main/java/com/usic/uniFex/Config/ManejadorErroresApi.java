@@ -39,14 +39,15 @@ import lombok.extern.slf4j.Slf4j;
 public class ManejadorErroresApi {
 
     /**
-     * Peticion mal formada por el cliente (un {@code ?edicion=abc}, un cuerpo JSON invalido).
-     * Va aparte porque no es un fallo del servidor: devolver 500 aqui mandaria a buscar el
-     * problema en el sitio equivocado.
+     * Peticion mal formada por el cliente (un {@code ?edicion=abc}, un cuerpo JSON invalido, una
+     * subida sin el archivo que se esperaba). Va aparte porque no es un fallo del servidor:
+     * devolver 500 aqui mandaria a buscar el problema en el sitio equivocado.
      */
     @ExceptionHandler({
             MethodArgumentTypeMismatchException.class,
             HttpMessageNotReadableException.class,
             MissingServletRequestParameterException.class,
+            org.springframework.web.multipart.support.MissingServletRequestPartException.class,
             MethodArgumentNotValidException.class,
     })
     public ResponseEntity<Map<String, Object>> peticionInvalida(Exception e, HttpServletRequest peticion) {

@@ -39,6 +39,7 @@ public enum PantallasSistema {
     INTERESADOS("interesados", "Interesados en exponer", "Feria"),
     DIRECCION("direccion", "Tablero de dirección", "Administracion"),
     REPORTES("reportes", "Reportes", "Administracion"),
+    CONTROL_VENTAS("control-ventas", "Control de ventas", "Administracion"),
     REPORTE_RESPONSABLES("reporte-responsables", "Reporte de Responsables", "Acreditacion"),
     NOCHES_FEXPO("noches-fexpo", "Noches de FEXPO", "Feria"),
     NOTICIAS("noticias", "Noticias", "Feria"),

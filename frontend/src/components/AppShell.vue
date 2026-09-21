@@ -79,6 +79,7 @@ const TODOS = [
   // --- Administracion ---
   { a: '/direccion', p: 'direccion', g: 'Administracion', icono: '📈', txt: 'Tablero de dirección' },
   { a: '/reportes', p: 'reportes', g: 'Administracion', icono: '📊', txt: 'Reportes' },
+  { a: '/control-ventas', p: 'control-ventas', g: 'Administracion', icono: '💰', txt: 'Control de ventas' },
   { a: '/seguimiento', p: 'seguimiento', g: 'Administracion', icono: '📡', txt: 'Seguimiento en vivo' },
   { a: '/vendedores', p: 'vendedores', g: 'Administracion', icono: '👥', txt: 'Vendedores' },
   { a: '/anuncios', p: 'anuncios', g: 'Administracion', icono: '📣', txt: 'Anuncios' },

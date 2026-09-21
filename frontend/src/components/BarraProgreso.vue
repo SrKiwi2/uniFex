@@ -21,6 +21,8 @@ const props = defineProps({
   items: { type: Array, default: () => [] },
   /** Texto para el caso vacío: "Sin datos" a secas parece un fallo de carga. */
   vacio: { type: String, default: 'Sin datos todavía.' },
+  /** Cómo se escriben las cifras "valor de total" (p. ej. en Bs). Por defecto, tal cual. */
+  formato: { type: Function, default: (v) => v },
 });
 
 const filas = computed(() => props.items.map((i) => {
@@ -44,7 +46,7 @@ const uno = (n) => Number(n || 0).toLocaleString('es-BO', { maximumFractionDigit
              barra en vez de obligar a leer un eje. -->
         <span class="cifra">
           <strong>{{ uno(f.pct) }}%</strong>
-          <span class="muted"> · {{ f.valor }} de {{ f.total }}</span>
+          <span class="muted"> · {{ formato(f.valor) }} de {{ formato(f.total) }}</span>
         </span>
       </div>
       <!-- role=progressbar: un lector de pantalla no ve el ancho del div. -->

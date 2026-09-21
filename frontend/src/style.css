@@ -212,6 +212,8 @@ a { color: var(--acento); }
 .badge-ok { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
 .badge-muted { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
 .badge-danger { background: var(--danger-suave); color: var(--danger); }
+/* A medias (pago parcial): el ámbar de "en trámite", que ya significa "falta algo". */
+.badge-parcial { background: color-mix(in srgb, var(--tramite) 16%, transparent); color: var(--tramite); }
 
 /* Clases de estado de caseta (mapa + leyenda) */
 .libre { background: var(--libre); color: #fff; }
