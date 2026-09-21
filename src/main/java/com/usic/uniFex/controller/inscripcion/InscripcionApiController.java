@@ -39,6 +39,7 @@ import com.usic.uniFex.model.service.ResponsableFotoService;
 import com.usic.uniFex.model.service.RegistroVentaService;
 import com.usic.uniFex.model.service.ResponsableExtraService;
 import com.usic.uniFex.model.service.VendedorAsignacionService;
+import com.usic.uniFex.security.AccesoPantallas;
 import com.usic.uniFex.security.JwtUser;
 import com.usic.uniFex.security.Roles;
 
@@ -71,26 +72,39 @@ public class InscripcionApiController {
     private final VendedorAsignacionService vendedorAsignacion;
 
     /**
-     * Listado de inscripciones. Solo administracion.
+     * Listado de inscripciones.
+     *
+     * Lo ven los roles de {@link Roles#VE_INSCRIPCIONES} (todas) y cualquier usuario con la
+     * pantalla "Inscripciones" asignada por rol o por usuario (V49) — este, SOLO las que
+     * registro el: la lista completa lleva los datos de los clientes de sus compañeros.
      *
      * {@code ?canceladas=true} devuelve el historico (baja logica) con el motivo y
      * quien/cuando las cancelo; por defecto, las activas.
      */
     @GetMapping
-    @PreAuthorize(Roles.VE_INSCRIPCIONES)
+    @PreAuthorize(Roles.VE_INSCRIPCIONES_O_PANTALLA)
     public List<InscripcionListadoDTO> listar(
             @RequestParam(defaultValue = "false") boolean canceladas) {
-        return inscripcionService.listarParaTabla(canceladas);
+        return inscripcionService.listarParaTabla(canceladas,
+                AccesoPantallas.soloDe(Roles.AUTORIDADES_VEN_TODAS_LAS_INSCRIPCIONES));
     }
 
     /**
      * Detalle completo de una inscripcion: datos de la venta, responsables, casetas con
      * su costo, datos de cancelacion y la traza de auditoria del ciclo de vida
-     * (quien/cuando/desde donde). Solo administracion.
+     * (quien/cuando/desde donde).
+     *
+     * Mismo recorte que el listado: quien entra por la pantalla solo abre sus ventas. Una
+     * ajena responde 404 y no 403, para no confirmar que ese id existe.
      */
     @GetMapping("/{id}")
-    @PreAuthorize(Roles.VE_INSCRIPCIONES)
+    @PreAuthorize(Roles.VE_INSCRIPCIONES_O_PANTALLA)
     public ResponseEntity<InscripcionDetalleDTO> detalle(@PathVariable Long id) {
+        Long soloDe = AccesoPantallas.soloDe(Roles.AUTORIDADES_VEN_TODAS_LAS_INSCRIPCIONES);
+        if (soloDe != null) {
+            Inscripcion i = inscripcionService.findById(id);
+            if (i == null || !soloDe.equals(i.getRegistroIdUsuario())) return ResponseEntity.notFound().build();
+        }
         InscripcionDetalleDTO d = inscripcionService.detalleParaTabla(id);
         return d == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(d);
     }

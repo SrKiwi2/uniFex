@@ -4,6 +4,7 @@ import { apiFetch } from '../api';
 import { toast } from '../ui/toast';
 import { alerta } from '../ui/alerta';
 import { usePermisosStore } from '../stores/permisos';
+import PermisosUsuario from '../components/PermisosUsuario.vue';
 
 /*
  * Que ve cada rol.
@@ -17,6 +18,8 @@ import { usePermisosStore } from '../stores/permisos';
  */
 
 const propio = usePermisosStore();
+/* Por rol = la matriz; por usuario = lo que se le da a una persona ademas de su rol (V49). */
+const modo = ref('rol');
 
 const cargando = ref(true);
 const guardando = ref(false);
@@ -125,12 +128,24 @@ onMounted(cargar);
 <template>
   <div class="permisos">
     <p class="aviso">
-      <strong>Esto decide qué se VE:</strong> el menú y a qué pantallas se entra. No sustituye a
-      los permisos del servidor — quitar una casilla esconde el enlace, pero lo que impide de
-      verdad una acción es la comprobación que hace el sistema al pedirla.
+      <strong>Esto decide qué se VE:</strong> el menú y a qué pantallas se entra. Un usuario ve
+      lo de su <strong>rol</strong> más lo que se le dé a <strong>él</strong>.
+      En <strong>Inscripciones, Credenciales y Control de ventas</strong> también da acceso a los
+      datos: quien no es administración ve solo <em>sus</em> ventas. En el resto, el servidor sigue
+      exigiendo el rol correspondiente — quitar una casilla esconde el enlace, pero lo que impide
+      de verdad una acción es la comprobación que hace el sistema al pedirla.
     </p>
 
+    <nav class="modos" role="tablist">
+      <button class="modo" :class="{ activo: modo === 'rol' }" role="tab" :aria-selected="modo === 'rol'"
+              @click="modo = 'rol'">Por rol</button>
+      <button class="modo" :class="{ activo: modo === 'usuario' }" role="tab" :aria-selected="modo === 'usuario'"
+              @click="modo = 'usuario'">Por usuario</button>
+    </nav>
+
     <div v-if="cargando" class="vacio">Cargando permisos…</div>
+
+    <PermisosUsuario v-else-if="modo === 'usuario'" :catalogo="catalogo" />
 
     <template v-else>
       <div class="tabla-scroll">
@@ -194,6 +209,13 @@ onMounted(cargar);
   font-size: 0.86rem; line-height: 1.5;
 }
 .vacio { padding: 2.5rem; text-align: center; color: var(--muted); }
+.modos { display: flex; gap: 0.3rem; border-bottom: 1px solid var(--border); }
+.modo {
+  font: inherit; font-weight: 700; font-size: 0.92rem; cursor: pointer; background: transparent;
+  color: var(--muted); border: 0; border-bottom: 2px solid transparent; padding: 0.5rem 0.9rem;
+}
+.modo:hover { color: var(--text); }
+.modo.activo { color: var(--acento); border-bottom-color: var(--acento); }
 
 .tabla-scroll { overflow-x: auto; }
 .matriz { border-collapse: collapse; width: 100%; font-size: 0.88rem; }

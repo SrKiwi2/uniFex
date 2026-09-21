@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useAuthStore } from '../stores/auth';
-import { apiFetch } from '../api';
+import { apiFetch, jsonOError, MENSAJE_SIN_PERMISO } from '../api';
 import { descargarPdf, descargarCredencialVirtual } from '../ui/descargas';
 import { mostrarCarga, ocultarCarga } from '../ui/cargando';
 import { toast } from '../ui/toast';
@@ -41,7 +41,9 @@ import UiModal from '../components/UiModal.vue';
  * decirlo en pantalla, que ahorra el "¿por que no me sale fulano?".
  */
 const auth = useAuthStore();
-const soloMias = computed(() => auth.esVendedor);
+/* No solo el vendedor: cualquiera que no sea administracion ni verificador —p. ej. un usuario
+   al que se le dio esta pantalla— recibe del servidor solo lo suyo, y la pantalla lo dice. */
+const soloMias = computed(() => !auth.veTodasLasCredenciales);
 
 /*
  * El vendedor solo ve la CREDENCIAL VIRTUAL.
@@ -52,7 +54,7 @@ const soloMias = computed(() => auth.esVendedor);
  * vista previa sobre hoja carta es ofrecerle decisiones que no le tocan, justo cuando tiene al
  * expositor delante.
  */
-const soloVirtual = computed(() => auth.esVendedor);
+const soloVirtual = computed(() => !auth.veTodasLasCredenciales);
 const ID_VIRTUAL = 'CREDENCIAL_VIRTUAL';
 
 /** Las credenciales de esta inscripcion que YA se pueden emitir en virtual. */
@@ -170,6 +172,8 @@ const anchoCm = ref(10);
  */
 const plantillas = ref([]);
 const plantillasRotas = ref(false);
+/** Por qué no se pudo cargar la lista (p. ej. el rol no tiene permiso en el servidor). */
+const errorCarga = ref('');
 
 const plantillaActual = computed(() =>
   plantillas.value.find((p) => p.id === plantilla.value) || null);
@@ -187,8 +191,7 @@ const nombreDePlantilla = (id) =>
 async function cargarPlantillas() {
   try {
     const r = await apiFetch('/api/app/credenciales/plantillas');
-    if (!r.ok) throw new Error('No se pudo cargar la lista de plantillas');
-    plantillas.value = await r.json();
+    plantillas.value = await jsonOError(r, 'No se pudo cargar la lista de plantillas');
     // Si la que estaba elegida ya no existe, se cae en la primera antes de que alguien
     // imprima contra un id que el servidor va a rechazar.
     if (plantillas.value.length && !plantillas.value.some((p) => p.id === plantilla.value)) {
@@ -196,7 +199,8 @@ async function cargarPlantillas() {
     }
   } catch (e) {
     plantillasRotas.value = true;
-    toast(e.message, 'error');
+    // Sin permiso ya lo explica la lista: dos avisos iguales seguidos solo confunden.
+    if (e.message !== MENSAJE_SIN_PERMISO) toast(e.message, 'error');
   }
 }
 
@@ -204,9 +208,11 @@ async function cargar() {
   cargando.value = true;
   try {
     const r = await apiFetch('/api/app/credenciales');
-    if (!r.ok) throw new Error('No se pudo cargar la lista');
-    credenciales.value = await r.json();
+    // jsonOError: un 403 dice que es cosa del ROL, no un "no se pudo cargar" que parece avería.
+    credenciales.value = await jsonOError(r, 'No se pudo cargar la lista');
+    errorCarga.value = '';
   } catch (e) {
+    errorCarga.value = e.message;
     toast(e.message, 'error');
   } finally {
     cargando.value = false;
@@ -518,6 +524,7 @@ onMounted(() => {
     </div>
 
     <div v-if="cargando" class="vacio">Cargando credenciales…</div>
+    <div v-else-if="errorCarga" class="vacio" role="alert">{{ errorCarga }}</div>
     <!-- Vacio por buscar no es lo mismo que vacio de verdad, y "lista" depende de la plantilla:
          decir "hace falta la foto" con el QR grande elegido manda a buscar algo que no se pide. -->
     <div v-else-if="!visibles.length" class="vacio">

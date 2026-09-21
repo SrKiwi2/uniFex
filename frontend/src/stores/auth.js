@@ -94,6 +94,20 @@ export const useAuthStore = defineStore('auth', {
      * Igual que arriba: aqui solo se pinta, el permiso real lo comprueba el servidor.
      */
     esVendedor: (s) => normalizar(s.rol) === 'ADMINISTRATIVO',
+    /**
+     * Quien ve TODAS las ventas en Inscripciones. Cualquier otro con la pantalla (por rol o por
+     * usuario) ve solo las suyas. Espejo de Roles.AUTORIDADES_VEN_TODAS_LAS_INSCRIPCIONES: si
+     * cambia una, cambia la otra. Solo decide los textos; el recorte lo hace el servidor.
+     */
+    veTodasLasInscripciones: (s) => ['SUPER_USUARIO', 'ADMINISTRADOR', 'VERIFICADOR', 'ASESORIA']
+      .includes(normalizar(s.rol)),
+    /**
+     * Quien prepara la acreditación de TODA la feria. Cualquier otro con la pantalla —un
+     * vendedor, o un usuario al que se le dio— acredita solo lo suyo. Espejo de
+     * CredencialesApiController.alcanceDelUsuario.
+     */
+    veTodasLasCredenciales: (s) => ['SUPER_USUARIO', 'ADMINISTRADOR', 'VERIFICADOR']
+      .includes(normalizar(s.rol)),
   },
   actions: {
     async login(usuario, contrasena) {

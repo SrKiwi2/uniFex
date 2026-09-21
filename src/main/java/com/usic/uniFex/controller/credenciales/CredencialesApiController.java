@@ -79,7 +79,7 @@ public class CredencialesApiController {
      * imagen de verdad.
      */
     @GetMapping("/plantillas")
-    @PreAuthorize(Roles.USA_CREDENCIALES)
+    @PreAuthorize(Roles.USA_CREDENCIALES_O_PANTALLA)
     public List<Map<String, Object>> plantillas() {
         return PlantillaCredencial.CATALOGO.stream().map(p -> {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -164,7 +164,7 @@ public class CredencialesApiController {
      * justo el trabajo pendiente. Una lista que solo enseñara las aptas escondería eso.
      */
     @GetMapping
-    @PreAuthorize(Roles.USA_CREDENCIALES)
+    @PreAuthorize(Roles.USA_CREDENCIALES_O_PANTALLA)
     public List<Map<String, Object>> listar() {
         Long soloMias = alcanceDelUsuario();
         // El historial se trae de una vez y se cruza en memoria: una consulta por credencial
@@ -246,7 +246,7 @@ public class CredencialesApiController {
     }
 
     @PostMapping("/pdf")
-    @PreAuthorize(Roles.USA_CREDENCIALES)
+    @PreAuthorize(Roles.USA_CREDENCIALES_O_PANTALLA)
     public ResponseEntity<byte[]> pdf(@RequestBody(required = false) PeticionPdf req) {
         String pedida = req == null ? null : req.plantilla();
         // Una plantilla que no existe se rechaza en vez de caer en la de por defecto. Cuando
@@ -342,7 +342,7 @@ public class CredencialesApiController {
      * @param anchoCm      ancho impreso de cada credencial en cm (por defecto 10)
      */
     @PostMapping(value = "/pdf-2up", produces = MediaType.APPLICATION_PDF_VALUE)
-    @PreAuthorize(Roles.USA_CREDENCIALES)
+    @PreAuthorize(Roles.USA_CREDENCIALES_O_PANTALLA)
     public ResponseEntity<byte[]> pdf2up(@RequestBody(required = false) PeticionPdf2up req) {
         String plantilla = req == null || req.plantilla() == null || req.plantilla().isBlank()
                 ? "EXPOSITOR" : req.plantilla();
@@ -395,7 +395,7 @@ public class CredencialesApiController {
      * ENTREGO una credencial, no en que soporte.
      */
     @GetMapping("/{responsableId}/virtual")
-    @PreAuthorize(Roles.USA_CREDENCIALES)
+    @PreAuthorize(Roles.USA_CREDENCIALES_O_PANTALLA)
     public ResponseEntity<byte[]> virtual(@PathVariable Long responsableId,
                                            @RequestParam(value = "forzar", defaultValue = "false") boolean forzar) {
         Long soloMias = alcanceDelUsuario();
@@ -434,7 +434,7 @@ public class CredencialesApiController {
      * Si trae ids, se envia solo esa seleccion. Un vendedor queda limitado a sus propias ventas.
      */
     @PostMapping("/whatsapp")
-    @PreAuthorize(Roles.USA_CREDENCIALES)
+    @PreAuthorize(Roles.USA_CREDENCIALES_O_PANTALLA)
     public ResponseEntity<Map<String, Object>> whatsapp(@RequestBody(required = false) PeticionWhatsApp req) {
         log.info("[WHATSAPP-REENVIO] Peticion recibida inscripcion={} responsables={}",
                 req == null ? null : req.inscripcionId(), req == null ? null : req.responsables());
@@ -517,7 +517,7 @@ public class CredencialesApiController {
 
     /** Quien imprimio esta credencial, cuando, con que plantilla y que faltaba entonces. */
     @GetMapping("/{responsableId}/impresiones")
-    @PreAuthorize(Roles.USA_CREDENCIALES)
+    @PreAuthorize(Roles.USA_CREDENCIALES_O_PANTALLA)
     public List<Map<String, Object>> impresiones(@PathVariable Long responsableId) {
         Long soloMias = alcanceDelUsuario();
         if (soloMias != null && !credencialService.esDeUsuario(responsableId, soloMias)) {
@@ -554,9 +554,10 @@ public class CredencialesApiController {
     /**
      * Hasta donde llega este usuario: {@code null} = toda la feria, o su id = solo sus ventas.
      *
-     * Administracion y VERIFICADOR preparan la acreditacion de todos. Un ADMINISTRATIVO
-     * acredita a los expositores que el vendio, y nada mas: la lista completa lleva nombres,
-     * C.I. y telefonos de los clientes de sus compañeros.
+     * Administracion y VERIFICADOR preparan la acreditacion de todos. Cualquier otro —un
+     * ADMINISTRATIVO, o un usuario al que se le dio la pantalla (V49)— acredita a los
+     * expositores que el vendio, y nada mas: la lista completa lleva nombres, C.I. y telefonos
+     * de los clientes de sus compañeros.
      */
     private Long alcanceDelUsuario() {
         return (esAdministracion() || esVerificador()) ? null : usuarioActual();

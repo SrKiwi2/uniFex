@@ -74,9 +74,47 @@ public class PermisoApiController {
         }
     }
 
+    // ------------------------------------------------------------------ por usuario (V49)
+
+    /** Los usuarios, para elegir a quien darle pantallas aparte de su rol. */
+    @GetMapping("/usuarios")
+    @PreAuthorize(Roles.GESTIONA_USUARIOS)
+    public List<Map<String, Object>> usuarios() {
+        return permisos.usuarios();
+    }
+
+    /** Lo que ve un usuario: lo de su rol y lo que se le dio a el. */
+    @GetMapping("/usuario/{usuarioId}")
+    @PreAuthorize(Roles.GESTIONA_USUARIOS)
+    public ResponseEntity<Map<String, Object>> deUsuario(@PathVariable Long usuarioId) {
+        try {
+            return ResponseEntity.ok(permisos.deUsuario(usuarioId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(Map.of("ok", false, "mensaje", e.getMessage()));
+        }
+    }
+
+    public record SeleccionUsuario(List<String> pantallas) {
+    }
+
+    /** Guarda las pantallas propias de un usuario (las que tiene aparte de su rol). */
+    @PutMapping("/usuario/{usuarioId}")
+    @PreAuthorize(Roles.GESTIONA_USUARIOS)
+    public ResponseEntity<Map<String, Object>> guardarDeUsuario(@PathVariable Long usuarioId,
+                                                                @RequestBody(required = false) SeleccionUsuario req) {
+        try {
+            List<String> guardadas = permisos.guardarDeUsuario(usuarioId,
+                    req == null ? null : req.pantallas(), usuarioActual());
+            return ResponseEntity.ok(Map.of("ok", true, "pantallas", guardadas,
+                    "mensaje", "Permisos del usuario guardados"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("ok", false, "mensaje", e.getMessage()));
+        }
+    }
+
     /**
-     * Las pantallas del que esta dentro. Sin rol de por medio: es lo que la SPA necesita para
-     * armar el menu y decidir a que rutas deja entrar.
+     * Las pantallas del que esta dentro —las de su rol mas las suyas propias—. Es lo que la SPA
+     * necesita para armar el menu y decidir a que rutas deja entrar.
      */
     @GetMapping("/mias")
     public Map<String, Object> mias() {

@@ -92,9 +92,20 @@ public class InscripcionServiceImpl implements IInscripcionService{
      */
     @Override
     public List<InscripcionListadoDTO> listarParaTabla(boolean canceladas) {
+        return listarParaTabla(canceladas, null);
+    }
+
+    /**
+     * @param soloDeUsuario null = todas; si no, solo las que registro ese usuario. Se recorta
+     *                      sobre la entidad y no sobre el DTO, que no lleva el id del vendedor.
+     */
+    @Override
+    public List<InscripcionListadoDTO> listarParaTabla(boolean canceladas, Long soloDeUsuario) {
         List<Inscripcion> ins = canceladas ? inscripcionDao.findAllCanceladas()
                 : inscripcionDao.findAllConTodo();
-        return ins.stream().map(this::aListado).collect(Collectors.toList());
+        return ins.stream()
+                .filter(i -> soloDeUsuario == null || soloDeUsuario.equals(i.getRegistroIdUsuario()))
+                .map(this::aListado).collect(Collectors.toList());
     }
 
     /**

@@ -19,7 +19,7 @@
  * dijera un monto por rendir y la tabla otro, aunque fuera un segundo, nadie sabría a cuál creer.
  */
 import { ref, computed, watch, onMounted } from 'vue';
-import { apiFetch } from '../api';
+import { apiFetch, jsonOError } from '../api';
 import { toast } from '../ui/toast';
 import { descargarArchivo, nombreSeguro } from '../ui/descargas';
 import TableroVentas from '../components/control-ventas/TableroVentas.vue';
@@ -31,7 +31,7 @@ const cargando = ref(true);
 const recargando = ref(false);
 const error = ref('');
 
-const opciones = ref({ vendedores: [], categorias: [], puedeAdjuntar: false });
+const opciones = ref({ vendedores: [], categorias: [], puedeAdjuntar: false, soloPropias: false });
 const tablero = ref(null);
 const ventas = ref([]);
 
@@ -48,9 +48,9 @@ function parametros(extra = {}) {
 }
 
 async function leer(ruta) {
-  const r = await apiFetch(ruta);
-  if (!r.ok) throw new Error('No se pudo cargar el control de ventas');
-  return r.json();
+  // Un rol sin permiso en el servidor (p. ej. uno creado a mano) recibe 403: se explica, no
+  // se disfraza de avería.
+  return jsonOError(await apiFetch(ruta), 'No se pudo cargar el control de ventas');
 }
 
 /*
@@ -219,6 +219,12 @@ const totalCategorias = computed(() => categorias.value.reduce((t, c) => ({
         </button>
       </div>
     </section>
+
+    <!-- Quien entra con la pantalla asignada sin ser de dirección ve solo lo suyo: el servidor
+         le fuerza el filtro de vendedor. Se dice para que no crea que faltan ventas. -->
+    <p v-if="opciones.soloPropias" class="card aviso-alcance">
+      Estás viendo <strong>tu propia rendición de cuentas</strong>: solo las ventas que registraste tú.
+    </p>
 
     <nav class="pestanas" role="tablist">
       <button v-for="p in [
@@ -470,6 +476,7 @@ const totalCategorias = computed(() => categorias.value.reduce((t, c) => ({
 .busqueda { flex: 1 1 16rem; }
 .acciones-filtro { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-left: auto; }
 
+.aviso-alcance { margin: 0; padding: 0.7rem 1rem; font-size: 0.88rem; border-left: 3px solid var(--acento); }
 .pestanas { display: flex; gap: 0.3rem; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
 .pestana {
   font: inherit; font-weight: 700; font-size: 0.92rem; cursor: pointer; background: transparent;

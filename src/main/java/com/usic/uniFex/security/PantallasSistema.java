@@ -51,7 +51,7 @@ public enum PantallasSistema {
     USUARIOS("usuarios", "Usuarios", "Administracion"),
     ROLES("roles", "Roles", "Administracion"),
     MANTENIMIENTO("mantenimiento", "Mantenimiento", "Administracion"),
-    PERMISOS("permisos", "Permisos por rol", "Administracion"),
+    PERMISOS("permisos", "Permisos", "Administracion"),
     PERSONAS("personas", "Personas", "Administracion"),
     PERSONAL_APOYO("personal-apoyo", "Personal de apoyo", "Administracion"),
     NOTIFICACIONES("notificaciones", "Notificaciones", "Mi trabajo");

@@ -102,6 +102,17 @@ public final class Roles {
             "hasAnyRole('SUPER_USUARIO','ADMINISTRADOR','VERIFICADOR','ASESORIA')";
 
     /**
+     * Inscripciones para quien tiene su rol O la pantalla asignada (por rol o por usuario, V49).
+     * Los que entran por la pantalla ven solo sus ventas: ver {@link AccesoPantallas}.
+     */
+    public static final String VE_INSCRIPCIONES_O_PANTALLA =
+            VE_INSCRIPCIONES + " or @acceso.puede('inscripciones')";
+
+    /** Los que ven TODAS las inscripciones. Debe coincidir con {@link #VE_INSCRIPCIONES}. */
+    public static final java.util.List<String> AUTORIDADES_VEN_TODAS_LAS_INSCRIPCIONES = java.util.List.of(
+            "ROLE_SUPER_USUARIO", "ROLE_ADMINISTRADOR", "ROLE_VERIFICADOR", "ROLE_ASESORIA");
+
+    /**
      * Quien CONSULTA los numeros de la feria: reportes y analisis de direccion.
      *
      * Incluye ASESORIA, que existe para esto y solo para esto —"ve listados y reportes de la
@@ -116,6 +127,17 @@ public final class Roles {
             "hasAnyRole('SUPER_USUARIO','ADMINISTRADOR','ASESORIA')";
 
     /**
+     * Control de ventas para quien tiene un rol de reportes O la pantalla asignada. Los que
+     * entran por la pantalla ven solo su propia rendicion: ver {@link AccesoPantallas}.
+     */
+    public static final String VE_CONTROL_VENTAS =
+            VE_REPORTES + " or @acceso.puede('control-ventas')";
+
+    /** Los que ven los numeros de TODA la feria. Debe coincidir con {@link #VE_REPORTES}. */
+    public static final java.util.List<String> AUTORIDADES_VEN_REPORTES = java.util.List.of(
+            "ROLE_SUPER_USUARIO", "ROLE_ADMINISTRADOR", "ROLE_ASESORIA");
+
+    /**
      * Quien controla la puerta: escanea credenciales y anota entradas y salidas.
      *
      * CONTROL es el rol que existe para esto. Administracion entra tambien porque durante el
@@ -127,6 +149,14 @@ public final class Roles {
 
     public static final String USA_CREDENCIALES =
             "hasAnyRole('SUPER_USUARIO','ADMINISTRADOR','VERIFICADOR','ADMINISTRATIVO')";
+
+    /**
+     * Credenciales para quien tiene su rol O la pantalla asignada (por rol o por usuario, V49).
+     * El recorte a "solo las de sus ventas" ya lo hace el controlador para todo el que no es
+     * administracion ni verificador, entre por donde entre.
+     */
+    public static final String USA_CREDENCIALES_O_PANTALLA =
+            USA_CREDENCIALES + " or @acceso.puede('credenciales')";
 
     /**
      * Quien USA el modulo de personal de apoyo: cualquiera autenticado.

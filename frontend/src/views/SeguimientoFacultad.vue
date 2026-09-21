@@ -207,7 +207,7 @@ function listar(codigos) {
          Decirlo aquí evita el "se la asigné y no le sale". -->
     <p class="muted chico aviso-permiso">
       Si a alguien no le aparece el módulo en el menú, márcale la pantalla
-      <strong>«Seguimiento por facultad»</strong> a su rol, en «Permisos por rol».
+      <strong>«Seguimiento por facultad»</strong> a su rol, en «Permisos».
     </p>
     <div class="tabla-scroll">
       <table class="tabla">

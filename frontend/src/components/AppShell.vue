@@ -87,7 +87,7 @@ const TODOS = [
   { a: '/responsables-extra', p: 'responsables-extra', g: 'Acreditacion', icono: '🧾', txt: 'Responsables extra' },
   { a: '/usuarios', p: 'usuarios', g: 'Administracion', icono: '👤', txt: 'Usuarios' },
   { a: '/roles', p: 'roles', g: 'Administracion', icono: '🛡️', txt: 'Roles' },
-  { a: '/permisos', p: 'permisos', g: 'Administracion', icono: '🔐', txt: 'Permisos por rol' },
+  { a: '/permisos', p: 'permisos', g: 'Administracion', icono: '🔐', txt: 'Permisos' },
   { a: '/personas', p: 'personas', g: 'Administracion', icono: '🪪', txt: 'Personas' },
   { a: '/personal-apoyo', p: 'personal-apoyo', g: 'Administracion', icono: '👥', txt: 'Personal de apoyo' },
   { a: '/mantenimiento', p: 'mantenimiento', g: 'Administracion', icono: '⚙️', txt: 'Mantenimiento' },

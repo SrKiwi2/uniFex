@@ -1,15 +1,26 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { apiFetch } from '../api';
+import { apiFetch, jsonOError } from '../api';
 import { url } from '../config';
 import { toast } from '../ui/toast';
 import { usePuestosStore } from '../stores/puestos.js';
+import { useAuthStore } from '../stores/auth';
 import UiModal from '../components/UiModal.vue';
 
 const tienda = usePuestosStore();
+/*
+ * Quien entra con la pantalla asignada (por rol o por usuario) sin ser de los que ven todo
+ * recibe del servidor SOLO sus ventas. Aqui solo se dice en pantalla y se esconde lo que es de
+ * administracion —cancelar directo, la cola de solicitudes—, que el servidor le negaria igual.
+ */
+const auth = useAuthStore();
+const esAdmin = computed(() => auth.puedeEditarPlano);
+const soloMias = computed(() => !auth.veTodasLasInscripciones);
 const pestaña = ref('activas');   // 'activas' | 'canceladas' | 'solicitudes'
 const conteos = ref({ activas: 0, canceladas: 0 });
 const inscripciones = ref([]);
+/** Por qué no se pudo cargar (p. ej. el rol no tiene permiso en el servidor). Se ve en la página. */
+const errorCarga = ref('');
 const cargando = ref(true);
 const filtro = ref('');
 const expandida = ref(null);      // id de la fila desplegada
@@ -55,13 +66,18 @@ const totales = computed(() => filtradas.value.reduce((acc, i) => {
 async function cargar() {
   cargando.value = true;
   try {
+    // jsonOError y no r.json() a secas: con un 403 el cuerpo es {ok, mensaje}, y recorrerlo
+    // como lista rompia la vista con "is not iterable".
     const [activas, canceladas] = await Promise.all([
-      apiFetch('/api/app/inscripciones').then((r) => r.json()),
-      apiFetch('/api/app/inscripciones?canceladas=true').then((r) => r.json()),
+      apiFetch('/api/app/inscripciones').then((r) => jsonOError(r, 'No se pudieron cargar las inscripciones')),
+      apiFetch('/api/app/inscripciones?canceladas=true').then((r) => jsonOError(r, 'No se pudieron cargar las inscripciones')),
     ]);
     conteos.value = { activas: activas.length, canceladas: canceladas.length };
     inscripciones.value = pestaña.value === 'activas' ? activas : canceladas;
+    errorCarga.value = '';
   } catch (e) {
+    inscripciones.value = [];
+    errorCarga.value = e.message;
     toast(e.message, 'error');
   } finally {
     cargando.value = false;
@@ -86,12 +102,16 @@ async function cargarSolicitudes() {
   cargandoSolicitudes.value = true;
   try {
     const [pend, res] = await Promise.all([
-      apiFetch('/api/app/solicitudes-cancelacion/pendientes').then((r) => r.json()),
-      apiFetch('/api/app/solicitudes-cancelacion/resueltas').then((r) => r.json()),
+      apiFetch('/api/app/solicitudes-cancelacion/pendientes').then((r) => jsonOError(r, 'No se pudieron cargar las solicitudes')),
+      apiFetch('/api/app/solicitudes-cancelacion/resueltas').then((r) => jsonOError(r, 'No se pudieron cargar las solicitudes')),
     ]);
     solicitudes.value = pend || [];
     resueltas.value = res || [];
+    errorCarga.value = '';
   } catch (e) {
+    solicitudes.value = [];
+    resueltas.value = [];
+    errorCarga.value = e.message;
     toast(e.message, 'error');
   } finally {
     cargandoSolicitudes.value = false;
@@ -230,11 +250,19 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
             @click="cambiarPestaña('canceladas')">
       Canceladas <span class="cuenta cuenta-roja">{{ conteos.canceladas }}</span>
     </button>
-    <button class="pestana" :class="{ activa: pestaña === 'solicitudes' }" role="tab"
+    <button v-if="esAdmin" class="pestana" :class="{ activa: pestaña === 'solicitudes' }" role="tab"
             @click="cambiarPestaña('solicitudes')">
       Solicitudes <span class="cuenta cuenta-aviso">{{ solicitudes.length }}</span>
     </button>
   </div>
+
+  <!-- Fijo en la página y no solo un aviso que se va: con la tabla vacía, sin esto parecería
+       que no hay ventas. -->
+  <p v-if="errorCarga" class="card aviso-carga" role="alert">{{ errorCarga }}</p>
+  <p v-else-if="soloMias" class="card aviso-alcance">
+    Se muestran solo <strong>las ventas que registraste tú</strong>. Para pedir la cancelación de
+    una, usa «Mis ventas».
+  </p>
 
   <template v-if="pestaña !== 'solicitudes'">
   <div class="fila entre encabezado">
@@ -278,7 +306,7 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
             <td>{{ fecha(i.fecha) }}</td>
             <td class="der"><strong>{{ bs(i.total) }}</strong></td>
             <td class="acciones">
-              <button v-if="!i.motivoCancelacion" class="btn btn-peligro btn-sm"
+              <button v-if="esAdmin && !i.motivoCancelacion" class="btn btn-peligro btn-sm"
                       title="Cancelar la venta y liberar sus casetas"
                       @click.stop="abrirCancelar(i)">Cancelar</button>
             </td>
@@ -485,6 +513,15 @@ onUnmounted(() => { if (quitarOyente) quitarOyente(); });
 </template>
 
 <style scoped>
+.aviso-alcance {
+  margin: 0 0 0.8rem; padding: 0.7rem 1rem; font-size: 0.88rem; line-height: 1.45;
+  border-left: 3px solid var(--acento);
+}
+.aviso-carga {
+  margin: 0 0 0.8rem; padding: 0.8rem 1rem; font-size: 0.9rem; line-height: 1.45;
+  border-left: 3px solid var(--danger); color: var(--text);
+}
+
 /* ---- lo adjuntado, que es lo que viene a mirar quien acredita ---- */
 .resp { display: flex; align-items: flex-start; gap: 0.6rem; margin-bottom: 0.5rem; }
 .foto-resp {

@@ -17,6 +17,9 @@ import com.usic.uniFex.model.entity.Inscripcion;
 public interface IInscripcionService extends IServiceGenerico<Inscripcion, Long> {
     List<InscripcionListadoDTO> listarParaTabla();
     List<InscripcionListadoDTO> listarParaTabla(boolean canceladas);
+
+    /** Como {@link #listarParaTabla(boolean)}, solo las que registro ese usuario si no es null. */
+    List<InscripcionListadoDTO> listarParaTabla(boolean canceladas, Long soloDeUsuario);
     InscripcionDetalleDTO detalleParaTabla(Long id);
     List<ResumenCategoriaView> resumenPorCategoria();
     List<ResumenEntidadView> resumenPorEntidad();

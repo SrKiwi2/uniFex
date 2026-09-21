@@ -16,7 +16,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Que pantallas ve cada rol.
+ * Que pantallas ve cada rol y cada usuario.
+ *
+ * Lo que ve un usuario = las pantallas de su ROL + las que se le dieron a EL (V49). Asi se
+ * habilita una pantalla a una persona concreta sin cambiarle el rol ni abrirsela a todo su rol.
  *
  * <h2>La regla que impide quedarse fuera</h2>
  * {@code SUPER USUARIO} ve TODAS las pantallas siempre, sin pasar por la tabla y sin que se
@@ -24,10 +27,13 @@ import lombok.extern.slf4j.Slf4j;
  * Si se pudiera desmarcar, bastaria un descuido para dejar el sistema sin nadie capaz de
  * entrar a corregirlo — y no habria forma de arreglarlo desde la interfaz.
  *
- * <h2>Esto NO autoriza</h2>
- * Decide el menu y la entrada a las rutas de la SPA. Cada endpoint del servidor sigue
- * protegido por {@code @PreAuthorize} con {@link com.usic.uniFex.security.Roles}. Marcar una
- * casilla aqui no abre ninguna puerta en el backend.
+ * <h2>Que autoriza y que no</h2>
+ * Decide el menu y la entrada a las rutas de la SPA. En la mayoria de pantallas el servidor
+ * sigue exigiendo su rol ({@link com.usic.uniFex.security.Roles}). En las de consulta y trabajo
+ * con lo propio —Inscripciones, Credenciales, Control de ventas— tener la pantalla tambien da
+ * acceso a sus datos, recortados a las ventas del propio usuario si no es administracion (ver
+ * {@link com.usic.uniFex.security.AccesoPantallas}). Lo que modifica el plano o los usuarios
+ * sigue siendo solo por rol: una casilla no puede ser lo unico que proteja eso.
  */
 @Service
 @RequiredArgsConstructor
@@ -116,6 +122,75 @@ public class PermisoPantallaService {
                     "Cambiaron tus opciones", "Se actualizo lo que puedes ver en el menu.",
                     null, null);
         }
+        return validas;
+    }
+
+    // ------------------------------------------------------------------ por usuario (V49)
+
+    /** Los usuarios para elegir en "Permisos por usuario", con cuantas pantallas propias tienen. */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> usuarios() {
+        List<Map<String, Object>> r = new ArrayList<>();
+        for (Object[] f : dao.listarUsuarios()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("usuarioId", ((Number) f[0]).longValue());
+            m.put("username", f[1]);
+            m.put("nombre", f[2]);
+            m.put("rol", f[3]);
+            m.put("estado", f[4]);
+            m.put("propias", f[5] == null ? 0 : ((Number) f[5]).intValue());
+            m.put("loVeTodo", loVeTodo((String) f[3]));
+            r.add(m);
+        }
+        return r;
+    }
+
+    /** Lo que ve un usuario, separado en lo que le da su rol y lo que se le dio a el. */
+    @Transactional(readOnly = true)
+    public Map<String, Object> deUsuario(Long usuarioId) {
+        Object[] u = dao.usuario(usuarioId);
+        if (u == null) throw new IllegalArgumentException("El usuario no existe");
+        String rol = (String) u[3];
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("usuarioId", usuarioId);
+        m.put("username", u[1]);
+        m.put("nombre", u[2]);
+        m.put("rol", rol);
+        m.put("loVeTodo", loVeTodo(rol));
+        m.put("delRol", loVeTodo(rol) ? todasLasClaves() : dao.pantallasDelRolDeUsuario(usuarioId));
+        m.put("propias", dao.pantallasPropiasDeUsuario(usuarioId));
+        return m;
+    }
+
+    /**
+     * Guarda las pantallas PROPIAS de un usuario (las que tiene aparte de su rol).
+     *
+     * No se guardan las que ya le da su rol: repetirlas haria que quitarselas al rol no se las
+     * quitara a el, y nadie sabria por que sigue viendolas.
+     *
+     * @return las claves realmente guardadas
+     */
+    @Transactional
+    public List<String> guardarDeUsuario(Long usuarioId, List<String> pantallas, Long adminId) {
+        Object[] u = dao.usuario(usuarioId);
+        if (u == null) throw new IllegalArgumentException("El usuario no existe");
+        String rol = (String) u[3];
+        if (loVeTodo(rol)) {
+            throw new IllegalArgumentException("Un SUPER USUARIO ya ve todas las pantallas.");
+        }
+        List<String> delRol = dao.pantallasDelRolDeUsuario(usuarioId);
+        List<String> validas = (pantallas == null ? List.<String>of() : pantallas).stream()
+                .map(p -> p == null ? "" : p.trim())
+                .filter(PantallasSistema::existe)
+                .filter(p -> !delRol.contains(p))
+                .distinct()
+                .toList();
+        dao.reemplazarDeUsuario(usuarioId, validas, adminId);
+        log.info("Pantallas propias del usuario {} ({}): {} (cambiado por el usuario {})",
+                usuarioId, u[1], validas, adminId);
+        // Mismo motivo que al cambiar un rol: sin aviso, el menu no cambia hasta reabrir la app.
+        notificaciones.notificar(usuarioId, NotificacionService.TIPO_PERMISOS,
+                "Cambiaron tus opciones", "Se actualizo lo que puedes ver en el menu.", null, null);
         return validas;
     }
 }
